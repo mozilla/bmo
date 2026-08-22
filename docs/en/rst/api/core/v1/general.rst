@@ -110,6 +110,19 @@ any request, and you will be authenticated as that user if the key is correct an
 You can set up an API key by using the :ref:`API Keys tab <api-keys>` in the
 Preferences pages.
 
+Send only one authentication method with each request. BMO does not combine
+credentials or choose the strongest method when more than one is supplied. In
+particular, legacy ``Bugzilla_login`` and ``Bugzilla_password`` credentials take
+precedence over an API key. Once BMO selects those credentials, it does not fall
+back to the API key if password authentication fails.
+
+If the account has the :guilabel:`Require API key authentication for API
+requests` preference enabled, a request containing both valid username/password
+credentials and a valid API key fails with an ``API key authentication is
+required`` error because BMO selected the username/password credentials first.
+Remove the username/password credentials and send only the API key; do not
+disable the preference.
+
 **WARNING**: It should be noted that additional authentication methods exist, but they are **not recommended** for use and are likely to be deprecated in future versions of BMO, due to security concerns.  These additional methods include the following:
 
  - api key via ``Bugzilla_api_key`` or simply ``api_key`` in query parameters.
