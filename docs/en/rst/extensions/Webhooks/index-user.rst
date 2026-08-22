@@ -346,15 +346,18 @@ Errors and retries
 
 If an endpoint does not return an HTTP 2xx response, or if delivery fails for
 another reason, Bugzilla puts the message in the webhook's queue. After each
-failed queued attempt, it schedules the next attempt using increasing delays:
+failed queued attempt, it schedules the next attempt using a backoff counter
+shared by the webhook's queued messages. Starting the delivery daemon or
+re-enabling the webhook resets this counter. From a reset state, delays are
 5 seconds after the first failure, then 25, 125, and 625 seconds. After later
-failures, the delay is 15 minutes. The delivery daemon polls every 30 seconds,
-so an attempt can occur later than its scheduled time.
+failures, the delay is 15 minutes. A successful delivery does not reset the
+counter, so a later failure can start with a longer delay. The delivery daemon
+polls every 30 seconds, so an attempt can occur later than its scheduled time.
 
-If a message remains stuck, later messages for that webhook are stored in a
-queue in the order they were triggered. Bugzilla delivers them in that order
-after the first message in the queue succeeds.
+If a message remains stuck, later messages for that webhook are queued until
+the first message succeeds.
 
-An administrator can configure an error limit. When a webhook reaches that
-limit, Bugzilla disables it and emails its owner. The owner can re-enable it
-from the :guilabel:`Webhooks` preferences tab after fixing the problem.
+Administrators can configure a per-message attempt limit and an exempt group.
+Unless the exemption applies, Bugzilla disables the webhook and emails its
+owner when a queued message reaches the limit. The owner can re-enable it from
+the :guilabel:`Webhooks` preferences tab after fixing the problem.
