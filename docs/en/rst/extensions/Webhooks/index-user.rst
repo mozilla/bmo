@@ -94,10 +94,11 @@ is authorized to see them; their payloads are also reduced to IDs and privacy
 status. The receiving system must use the REST API with suitable credentials
 to retrieve additional details.
 
-Webhooks are delivered in the same order as the events that triggered them.
-Bug creation and modification events each produce a separate request. The
-``changes`` field is sent only for modification events and contains every
-change made to the bug.
+Webhooks are generally delivered in event timestamp order, but the relative
+order of events with the same timestamp is not guaranteed. Bug creation and
+modification events each produce a separate request. The ``changes`` field is
+sent only for modification events and contains every change made to the event
+target, such as the bug or attachment.
 
 The payloads below are representative. Bug objects can also contain custom
 fields configured for their product and component.
