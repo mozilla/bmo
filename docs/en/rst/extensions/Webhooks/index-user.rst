@@ -97,8 +97,10 @@ to retrieve additional details.
 Webhooks are generally delivered in event timestamp order, but the relative
 order of events with the same timestamp is not guaranteed. Bug creation and
 modification events each produce a separate request. The ``changes`` field is
-sent only for modification events and contains every change made to the event
-target, such as the bug or attachment.
+sent for ordinary public modification events and describes changes made to the
+event target, such as the bug or attachment. Private modification payloads omit
+this field. A public-to-private transition reports only the synthetic
+``is_private`` change.
 
 The payloads below are representative. Bug objects can also contain custom
 fields configured for their product and component.
@@ -354,8 +356,9 @@ failures, the delay is 15 minutes. A successful delivery does not reset the
 counter, so a later failure can start with a longer delay. The delivery daemon
 polls every 30 seconds, so an attempt can occur later than its scheduled time.
 
-If a message remains stuck, later messages for that webhook are queued until
-the first message succeeds.
+If a message remains stuck, later messages for that webhook remain queued until
+the blocking message succeeds, is manually deleted, or is discarded because
+the webhook owner is no longer authorized to receive it.
 
 Administrators can configure a per-message attempt limit and an exempt group.
 Unless the exemption applies, Bugzilla disables the webhook and emails its
