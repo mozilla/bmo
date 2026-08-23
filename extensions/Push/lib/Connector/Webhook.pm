@@ -62,7 +62,7 @@ sub should_send {
   return 0 unless Bugzilla->params->{webhooks_enabled};
 
   my $webhook = Bugzilla::Extension::Webhooks::Webhook->new($self->{webhook_id});
-  my %events  = map { $_ => 1 } split(',', $webhook->event);
+  my %events  = map { $_ => 1 } split(/,/, $webhook->event);
   my $product   = $webhook->product_name;
   my $component = $webhook->component_name;
 
