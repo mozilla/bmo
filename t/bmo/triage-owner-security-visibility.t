@@ -52,6 +52,11 @@ plan skip_all => 'mozilla-employee-confidential group required'
 my $admin = Bugzilla::User->check({id => 1});
 Bugzilla->set_user($admin);
 
+# The helpers below grant and revoke group membership through set_groups(),
+# which requires the acting user to have bless rights on the group.
+plan skip_all => 'admin cannot bless ' . $confidential->name
+  unless $admin->can_bless($confidential->id);
+
 my ($product) = grep { @{$_->versions} } Bugzilla::Product->get_all;
 plan skip_all => 'Need a product with at least one version' unless $product;
 
@@ -59,22 +64,32 @@ plan skip_all => 'Need a product with at least one version' unless $product;
 # Helpers
 ###############################################################################
 
+# set_groups() checks Bugzilla->user->can_bless(), which caches its group list
+# on the user object. The fixtures create a group after that cache would have
+# been filled, so re-read the admin before each change.
+sub as_admin {
+  $admin = reload($admin);
+  Bugzilla->set_user($admin);
+}
+
+# set_groups() stashes the change and update() applies it, writes the audit and
+# profiles_activity rows, and invalidates the memcached group list. The admin
+# group is granted bless on every group at creation time, so the admin may make
+# both of these changes.
 sub add_to_group {
   my ($user, $group) = @_;
-  $dbh->do(
-    'INSERT IGNORE INTO user_group_map (user_id, group_id, isbless, grant_type)
-     VALUES (?, ?, 0, 0)', undef, $user->id, $group->id
-  );
-  Bugzilla->memcached->clear_config({key => 'user_groups.' . $user->id});
+  as_admin();
+  my $target = reload($user);
+  $target->set_groups({add => [$group->name]});
+  $target->update();
 }
 
 sub remove_from_group {
   my ($user, $group) = @_;
-  $dbh->do(
-    'DELETE FROM user_group_map WHERE user_id = ? AND group_id = ? AND isbless = 0',
-    undef, $user->id, $group->id
-  );
-  Bugzilla->memcached->clear_config({key => 'user_groups.' . $user->id});
+  as_admin();
+  my $target = reload($user);
+  $target->set_groups({remove => [$group->name]});
+  $target->update();
 }
 
 sub test_user {
@@ -137,8 +152,7 @@ $dbh->do(
 
 # The admin needs the group to be able to file the restricted bug.
 add_to_group($admin, $sec_group);
-$admin = reload($admin);
-Bugzilla->set_user($admin);
+as_admin();
 
 my $owner_member    = test_user("triage-member-$pid\@triage.test");
 my $owner_nonmember = test_user("triage-nonmember-$pid\@triage.test");

@@ -1572,7 +1572,7 @@ sub visible_bugs {
 
     # Triage owners can see all bugs in their component, but only if they are
     # also a member of the mozilla-employee-confidential group.
-    my $use_triage_owner = $self->in_group('mozilla-employee-confidential');
+    my $use_triage_owner = $self->is_employee_confidential;
     while (my $row = $sth->fetchrow_arrayref) {
       my (
         $bug_id,        $reporter,     $owner,
@@ -2589,6 +2589,16 @@ sub is_insider {
   return $self->{'is_insider'};
 }
 
+sub is_employee_confidential {
+  my $self = shift;
+
+  if (!defined $self->{'is_employee_confidential'}) {
+    $self->{'is_employee_confidential'}
+      = $self->in_group('mozilla-employee-confidential') ? 1 : 0;
+  }
+  return $self->{'is_employee_confidential'};
+}
+
 sub is_global_watcher {
   my $self = shift;
 
@@ -3490,6 +3500,10 @@ for flag mail.
 
 Returns true if the user can access private comments and attachments,
 i.e. if the 'insidergroup' parameter is set and the user belongs to this group.
+
+=item C<is_employee_confidential>
+
+Returns true if the user belongs to the 'mozilla-employee-confidential' group.
 
 =item C<is_global_watcher>
 
