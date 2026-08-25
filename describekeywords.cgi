@@ -46,7 +46,7 @@ my $can_see_security = Bugzilla->user->in_group('core-security-release');
 my $keywords         = Bugzilla::Keyword->get_all_with_bug_count();
 foreach my $keyword (@$keywords) {
   $keyword->{'bug_count'} = 0
-    if $keyword->name =~ /^(?:sec|csec|wsec|opsec)-/ && !$can_see_security;
+    if $keyword->is_security_keyword && !$can_see_security;
 }
 
 $vars->{'keywords'}        = $keywords;

@@ -43,6 +43,14 @@ use constant UPDATE_COLUMNS => qw(
   is_active
 );
 
+# Keyword families that classify security vulnerabilities. Bug counts for these
+# keywords are hidden from users who cannot see security bugs (bug 2056990).
+#
+# Note that C<csectype> must be listed separately from C<csec>: the alternation
+# is anchored on the trailing hyphen, so C<csec> only matches C<csec-*> and
+# never C<csectype-*>.
+use constant SECURITY_KEYWORD_REGEX => qr/^(?:sec|csec|csectype|wsec|opsec)-/;
+
 ###############################
 ####      Accessors      ######
 ###############################
@@ -59,6 +67,11 @@ sub bug_count {
   return $self->{'bug_count'};
 }
 
+sub is_security_keyword {
+  my ($self) = @_;
+  return $self->name =~ SECURITY_KEYWORD_REGEX ? 1 : 0;
+}
+
 ###############################
 ####       Mutators       #####
 ###############################
@@ -72,14 +85,34 @@ sub set_is_active   { $_[0]->set('is_active',   $_[1]); }
 ###############################
 
 sub get_all_with_bug_count {
-  my $class    = shift;
-  my $dbh      = Bugzilla->dbh;
+  my $class = shift;
+  my $dbh   = Bugzilla->dbh;
+  my $user  = Bugzilla->user;
+
+  # Only count bugs that are visible to the current user based on group
+  # membership, so the counts don't leak the number of security-restricted
+  # bugs (e.g. the sec-* and csectype-* keyword families) to users who can't
+  # otherwise see them. A bug is hidden if it belongs to any group the user
+  # is not a member of; we detect that with a LEFT JOIN and only count the
+  # keyword rows that have no such group (bug_group_map.bug_id IS NULL).
+  #
+  # The reporter/assignee/qa/cc visibility exceptions (see
+  # Bugzilla::User->visible_bugs) are intentionally not applied here: ignoring
+  # them can only make a count lower than the user's true visibility, never
+  # higher, so no restricted data can leak. Using a conditional COUNT (rather
+  # than a WHERE clause) keeps keywords whose bugs are all restricted in the
+  # result set with a count of 0, instead of dropping them entirely.
   my $keywords = $dbh->selectall_arrayref(
     'SELECT ' . join(', ', $class->_get_db_columns) . ',
-                                       COUNT(keywords.bug_id) AS bug_count
+                COUNT(CASE WHEN bug_group_map.bug_id IS NULL
+                           THEN keywords.bug_id END) AS bug_count
                                   FROM keyworddefs
                              LEFT JOIN keywords
-                                    ON keyworddefs.id = keywords.keywordid '
+                                    ON keyworddefs.id = keywords.keywordid
+                             LEFT JOIN bug_group_map
+                                    ON keywords.bug_id = bug_group_map.bug_id
+                                   AND bug_group_map.group_id NOT IN ('
+      . $user->groups_as_string . ') '
       . $dbh->sql_group_by(
       'keyworddefs.id', 'keyworddefs.name,
                                                       keyworddefs.description'
@@ -175,6 +208,17 @@ implements.
  Params:      none
  Returns:     A reference to an array of Keyword objects, or an empty
               arrayref if there are no keywords.
+
+=item C<is_security_keyword()>
+
+ Description: Indicates if the keyword belongs to one of the security
+              vulnerability keyword families (C<sec-*>, C<csec-*>,
+              C<csectype-*>, C<wsec-*> and C<opsec-*>). Callers use this to
+              decide whether the keyword's bug count may be shown to the
+              current user. See C<SECURITY_KEYWORD_REGEX>.
+ Params:      none
+ Returns:     a boolean value that is true if the keyword is a security
+              keyword.
 
 =item C<is_active>
 
