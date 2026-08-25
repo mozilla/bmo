@@ -1458,6 +1458,20 @@ sub _standard_joins {
       extra => ['security_cc.who = ' . $user->id],
     };
     push @joins, $security_cc_join;
+
+    # Triage owners can see all bugs in their component, but only if they are
+    # also a member of the mozilla-employee-confidential group.
+    if ($user->is_employee_confidential) {
+      my $security_triage_join = {
+        table => 'components',
+        as    => 'security_triage',
+        from  => 'bugs.component_id',
+        to    => 'id',
+        join  => 'LEFT',
+        extra => ['security_triage.triage_owner_id = ' . $user->id],
+      };
+      push @joins, $security_triage_join;
+    }
   }
 
   return @joins;
@@ -1537,6 +1551,12 @@ sub _standard_where {
     );
     if (Bugzilla->params->{'useqacontact'}) {
       push @involved, ("bugs.qa_contact = $userid");
+    }
+
+    # This must stay in sync with the security_triage join in _standard_joins,
+    # which is only present for confidential-group members.
+    if ($self->_user->is_employee_confidential) {
+      push @involved, ('security_triage.triage_owner_id IS NOT NULL');
     }
     $term .= ' OR (' . join(') OR (', @involved) . ')';
   }

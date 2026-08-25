@@ -54,6 +54,11 @@ sub prompt { }
 # throws errors if code is invalid
 sub check { }
 
+# throws errors if the event does not carry proof of a successful verification.
+# only meaningful for providers which verify out-of-band (ie. can_verify_inline
+# is false), where the proof is recorded on the event by a separate request.
+sub verify_event { }
+
 # if true verification can happen inline (during enrollment/pref changes)
 # if false then the mfa provider requires an intermediate verification page
 sub can_verify_inline {0}
@@ -85,6 +90,12 @@ sub verify_token {
 
   # return event data
   my $event = get_token_extra_data($token);
+
+  # Verification performed out-of-band (Duo) records its result on the event
+  # rather than throwing from check().  The provider's own callback runs this
+  # before that result exists and passes provider_callback to opt out; every
+  # other caller must be gated here.
+  $self->verify_event($event) if $event && !$options->{provider_callback};
 
   unless ($options->{no_delete}) {
     delete_token($token);

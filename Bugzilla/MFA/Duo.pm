@@ -20,6 +20,25 @@ sub can_verify_inline {
   return 0;
 }
 
+# Duo verification happens in a separate request handled by
+# Bugzilla::App::Controller::MFA::Duo, which sets duo_verified on the event
+# once the authorization code has been exchanged.  Without it the mfa token
+# only proves the prompt was issued, not that the user passed Duo.
+sub verify_event {
+  my ($self, $event) = @_;
+  return if $event->{duo_verified};
+  ThrowUserError('duo_user_error', {reason => 'Invalid Duo Security MFA Code'});
+}
+
+# Duo users have no way to enter a recovery code -- there is no Duo
+# verification form, prompt() redirects straight to Duo.  Recovery is handled
+# by Duo itself (bypass codes, self-service device management).
+sub generate_recovery_codes {
+  my ($self) = @_;
+  ThrowUserError('duo_user_error',
+    {reason => 'Recovery codes are not available when using Duo Security.'});
+}
+
 sub enroll {
   my ($self, $params) = @_;
 

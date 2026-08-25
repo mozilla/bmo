@@ -32,7 +32,7 @@ jobs:
           docker cp push_data:/app/version.json build_info/version.json
           docker rm push_data
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Build Info
           path: build_info

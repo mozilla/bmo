@@ -513,11 +513,6 @@ sub mfa_event_from_token {
   # verify
   my $event = $user->mfa_provider->verify_token($token);
 
-  # If we got this far and MFA is Duo, we should be verified
-  if ($user->mfa eq 'Duo' && !$event->{duo_verified}) {
-    ThrowUserError('duo_user_error', {reason => 'Invalid Duo Security MFA Code'});
-  }
-
   return ($user, $event);
 }
 

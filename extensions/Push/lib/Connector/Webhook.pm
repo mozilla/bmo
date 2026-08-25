@@ -62,7 +62,7 @@ sub should_send {
   return 0 unless Bugzilla->params->{webhooks_enabled};
 
   my $webhook = Bugzilla::Extension::Webhooks::Webhook->new($self->{webhook_id});
-  my $event   = $webhook->event;
+  my %events  = map { $_ => 1 } split(/,/, $webhook->event);
   my $product   = $webhook->product_name;
   my $component = $webhook->component_name;
 
@@ -76,18 +76,18 @@ sub should_send {
   if (($product eq $bug_data->{product} || $product eq 'Any')
     && ($component eq $bug_data->{component} || $component eq 'Any'))
   {
-    if ( ($event =~ /create/ && $message->routing_key eq 'bug.create')
-      || ($event =~ /change/ && $message->routing_key =~ /^bug\.modify/)
-      || ($event =~ /comment/    && $message->routing_key eq 'comment.create')
-      || ($event =~ /attachment_change/ && $message->routing_key =~ /^attachment[.]modify/)
-      || ($event =~ /attachment/ && $message->routing_key eq 'attachment.create'))
+    if ( ($events{create} && $message->routing_key eq 'bug.create')
+      || ($events{change} && $message->routing_key =~ /^bug\.modify/)
+      || ($events{comment} && $message->routing_key eq 'comment.create')
+      || ($events{attachment_change} && $message->routing_key =~ /^attachment[.]modify/)
+      || ($events{attachment} && $message->routing_key eq 'attachment.create'))
     {
       return 1;
     }
   }
 
   # check if the bug was removed from a product/component we care about
-  if ($event =~ /change/ && $message->routing_key =~ /\Qbug.modify\E/) {
+  if ($events{change} && $message->routing_key =~ /\Qbug.modify\E/) {
     my $removed_product = "";
     my $removed_component = "";
     if (exists $payload->{event}->{changes}) {

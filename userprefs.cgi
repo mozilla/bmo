@@ -750,7 +750,12 @@ sub SaveMFA {
     ThrowUserError('password_incorrect');
   }
 
-  my $mfa = $cgi->param('mfa') // $user->mfa;
+  # The provider performs the verification, so it has to be the user's real
+  # one.  The request parameter is only meaningful while enrolling -- the
+  # prefs UI emits it solely in the not-yet-enrolled branch -- and honouring
+  # it afterwards would let the caller name a provider whose checks are
+  # no-ops (anything but TOTP/Duo falls through to MFA::Dummy).
+  my $mfa = $user->mfa || $cgi->param('mfa');
   my $provider = Bugzilla::MFA->new_from($user, $mfa) // return;
 
   my $reason;
@@ -759,6 +764,10 @@ sub SaveMFA {
     $reason = 'Two-factor enrollment';
   }
   elsif ($action eq 'recovery') {
+    if ($mfa eq 'Duo') {
+      ThrowUserError('duo_user_error',
+        {reason => 'Recovery codes are not available when using Duo Security.'});
+    }
     $reason = 'Recovery code generation';
   }
   elsif ($action eq 'disable') {
@@ -825,14 +834,9 @@ sub SaveMFAupdate {
 sub SaveMFAcallback {
   my $mfa_token = shift;
   my $user      = Bugzilla->user;
-  my $mfa       = Bugzilla->cgi->param('mfa');
+  my $mfa       = $user->mfa || Bugzilla->cgi->param('mfa');
   my $provider  = Bugzilla::MFA->new_from($user, $mfa) // return;
   my $event     = $provider->verify_token($mfa_token);
-
-  # Must have passed the Duo verification to proceed to update
-  if ($mfa eq 'Duo' && !$event->{duo_verified}) {
-    ThrowUserError('duo_user_error', {reason => 'Invalid Duo Security MFA Code'});
-  }
 
   SaveMFAupdate($event->{action}, $mfa);
 }

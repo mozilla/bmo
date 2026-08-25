@@ -300,6 +300,13 @@ sub should_rate_limit {
     $memcached->add($key, 0, $rate_seconds + 1);
     my $tokens = $memcached->get_multi(@keys);
     my $cas    = $memcached->gets($key);
+
+    # gets() returns undef when memcached is unreachable (or the key expired
+    # between the add and the gets).  Don't let $cas->[1]++ autovivify an
+    # arrayref holding an undef cas id, which would then be passed to cas().
+    # Fail open: no working memcached means no rate limiting.
+    return 0 unless ref $cas eq 'ARRAY' && defined $cas->[0];
+
     $tokens->{$key} = $cas->[1]++;
     return 1 if sum(values %$tokens) >= $rate_max;
     DEBUG("key: $key seconds: $rate_seconds cas: " . @$cas);

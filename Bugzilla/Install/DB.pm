@@ -847,6 +847,9 @@ sub update_table_definitions {
   # Bug 1806896 - xavier.lhour@gmail.com
   _migrate_flag_state_activity();
 
+  # Bug 2060356 - dkl@mozilla.com
+  _remove_duo_recovery_codes();
+
   ################################################################
   # New --TABLE-- changes should go *** A B O V E *** this point #
   ################################################################
@@ -4536,6 +4539,19 @@ sub _migrate_flag_state_activity {
   );
 
   $dbh->bz_drop_table('flag_state_activity');
+}
+
+sub _remove_duo_recovery_codes {
+  my $dbh = Bugzilla->dbh;
+
+  # Duo users were able to generate recovery codes but never had a form in
+  # which to enter one, so these rows are unusable secrets. Recovery for Duo
+  # is handled by Duo Security itself.
+  $dbh->do(
+    "DELETE FROM profile_mfa
+      WHERE name LIKE 'recovery.%'
+            AND user_id IN (SELECT userid FROM profiles WHERE mfa = 'Duo')"
+  );
 }
 
 1;
