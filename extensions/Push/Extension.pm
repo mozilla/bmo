@@ -165,6 +165,105 @@ sub _object_modified {
   }
 
   $self->_push_object('modify', $object, $change_set, $changes_data);
+
+  # Dependency/regression relationship edits on one bug also affect the
+  # corresponding field on related bugs; emit synthetic modify events so
+  # webhook consumers receive both sides of the relationship change.
+  $self->_emit_counterpart_bug_modify_events(
+    $object,
+    $changes,
+    $args->{'timestamp'},
+    $change_set,
+  );
+}
+
+sub _emit_counterpart_bug_modify_events {
+  my ($self, $source_bug, $changes, $timestamp, $change_set) = @_;
+
+  return unless $source_bug && $source_bug->isa('Bugzilla::Bug');
+  return unless $changes && scalar keys %$changes;
+
+  my $counterpart_changes = _counterpart_bug_changes($source_bug, $changes);
+  my @related_bug_ids = sort { $a <=> $b } keys %$counterpart_changes;
+  return unless @related_bug_ids;
+
+  my $related_bugs = Bugzilla::Bug->new_from_list(\@related_bug_ids);
+  my %related_bug_map = map { $_->id => $_ } grep { !$_->{error} } @$related_bugs;
+
+  foreach my $related_bug_id (@related_bug_ids) {
+    my $related_bug = $related_bug_map{$related_bug_id};
+    next if !$related_bug;
+
+    # Do not emit counterpart payloads for private target bugs because
+    # connectors may not uniformly apply per-consumer visibility checks.
+    next unless is_public($related_bug);
+
+    my $related_changes_data = {
+      timestamp => $timestamp,
+      changes   => $counterpart_changes->{$related_bug_id},
+      indirect_change => {
+        type          => 'related',
+        source_bug_id => $source_bug->id,
+      },
+    };
+    $self->_push_object('modify', $related_bug, $change_set, $related_changes_data);
+  }
+}
+
+sub _counterpart_bug_changes {
+  my ($source_bug, $changes) = @_;
+
+  my %field_map = (
+    blocked      => 'dependson',
+    dependson    => 'blocked',
+    regresses    => 'regressed_by',
+    regressed_by => 'regresses',
+  );
+
+  my %result;
+  foreach my $source_field (sort keys %field_map) {
+    next unless exists $changes->{$source_field};
+
+    my $counterpart_field = $field_map{$source_field};
+    my ($old_value, $new_value) = @{$changes->{$source_field}};
+    my $old_ids = _parse_related_bug_ids($old_value);
+    my $new_ids = _parse_related_bug_ids($new_value);
+
+    my %all_ids = map { $_ => 1 } (keys %$old_ids, keys %$new_ids);
+    foreach my $related_bug_id (sort { $a <=> $b } keys %all_ids) {
+      my $in_old = exists $old_ids->{$related_bug_id};
+      my $in_new = exists $new_ids->{$related_bug_id};
+      next if $in_old == $in_new;
+
+      push @{$result{$related_bug_id}}, {
+        field   => $counterpart_field,
+        removed => $in_old ? $source_bug->id : '',
+        added   => $in_new ? $source_bug->id : '',
+      };
+    }
+  }
+
+  return \%result;
+}
+
+sub _parse_related_bug_ids {
+  my ($raw_value) = @_;
+
+  my $value = '';
+  if (ref $raw_value eq 'ARRAY') {
+    $value = join(',', @$raw_value);
+  }
+  elsif (defined $raw_value) {
+    $value = $raw_value;
+  }
+
+  my %ids;
+  foreach my $id (split(/[\s,]+/, $value)) {
+    next unless $id =~ /^\d+$/;
+    $ids{$id} = 1;
+  }
+
+  return \%ids;
 }
 
 sub _get_object_from_args {
@@ -290,6 +389,9 @@ sub _push_object {
   $rh_event->{'action'}      = $message_type;
   $rh_event->{'target'}      = $name;
   $rh_event->{'change_set'}  = $change_set;
+  if (exists $changes->{'indirect_change'}) {
+    $rh_event->{'indirect_change'} = $changes->{'indirect_change'};
+  }
   $rh_event->{'routing_key'} = "$name.$message_type";
   if (exists $rh_event->{'changes'}) {
     $rh_event->{'routing_key'}
@@ -321,6 +423,24 @@ sub _push_object {
 #
 # update/create hooks
 #
+
+sub bug_before_create {
+  my ($self, $args) = @_;
+  return unless $self->_enabled;
+
+  my $params = $args->{params} || return;
+  my $stash  = $args->{stash}  || return;
+
+  my %relation_values;
+  foreach my $field (qw(blocked dependson regresses regressed_by)) {
+    my $value = $params->{$field};
+    next unless ref $value eq 'ARRAY' && @$value;
+    $relation_values{$field} = [@$value];
+  }
+
+  return unless keys %relation_values;
+  $stash->{push_creation_relation_values} = \%relation_values;
+}
 
 sub object_end_of_create {
   my ($self, $args) = @_;
@@ -364,6 +484,29 @@ sub bug_end_of_create {
   my ($self, $args) = @_;
   return unless $self->_enabled;
   $self->_object_created($args);
+
+  my $bug = $args->{bug};
+  return unless $bug && $bug->isa('Bugzilla::Bug');
+
+  my $stash = $args->{stash};
+  return unless ref $stash eq 'HASH';
+  return unless exists $stash->{push_creation_relation_values};
+
+  my $creation_relation_values = $stash->{push_creation_relation_values};
+
+  my %creation_relation_changes;
+  foreach my $field (qw(blocked dependson regresses regressed_by)) {
+    my $related_ids = $creation_relation_values->{$field} || [];
+    next unless @$related_ids;
+    $creation_relation_changes{$field} = ['', join(', ', @$related_ids)];
+  }
+
+  $self->_emit_counterpart_bug_modify_events(
+    $bug,
+    \%creation_relation_changes,
+    $args->{timestamp},
+    change_set_id(),
+  );
 }
 
 sub bug_end_of_update {

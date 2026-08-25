@@ -167,6 +167,22 @@ sub send {
       delete $payload->{event}->{changes};
     }
 
+    my $indirect_change = $payload->{event}->{indirect_change};
+    if (ref $indirect_change eq 'HASH' && exists $indirect_change->{source_bug_id}) {
+      my $source_bug_id = $indirect_change->{source_bug_id};
+      if (!$webhook->user->can_see_bug($source_bug_id)) {
+        delete $indirect_change->{source_bug_id};
+      }
+    }
+
+    _redact_indirect_relationship_change_bug_ids($webhook->user, $payload->{event});
+    if (ref $indirect_change eq 'HASH'
+      && ($indirect_change->{type} || '') eq 'related'
+      && !exists $payload->{event}->{changes})
+    {
+      return PUSH_RESULT_BLOCKED;
+    }
+
     delete $payload->{$target};
     $payload->{bug} = $bug_data;
 
@@ -207,6 +223,44 @@ sub _boolean {
 sub _integer {
   my ($value) = @_;
   return defined($value) ? $value + 0 : undef;
+}
+
+sub _redact_indirect_relationship_change_bug_ids {
+  my ($owner, $event) = @_;
+  return unless $owner;
+  return unless $event;
+  return unless ref $event->{indirect_change} eq 'HASH';
+  return unless $event->{indirect_change}->{type} eq 'related';
+  return unless ref $event->{changes} eq 'ARRAY';
+
+  my @filtered_changes;
+  foreach my $change (@{$event->{changes}}) {
+    if (ref $change ne 'HASH') {
+      push @filtered_changes, $change;
+      next;
+    }
+
+    my %filtered = %$change;
+    foreach my $key (qw(removed added)) {
+      next unless defined $filtered{$key};
+      if ($filtered{$key} =~ /^\d+$/ && !$owner->can_see_bug($filtered{$key})) {
+        $filtered{$key} = '';
+      }
+    }
+
+    my $removed = defined $filtered{removed} ? $filtered{removed} : '';
+    my $added   = defined $filtered{added} ? $filtered{added} : '';
+    next if $removed eq '' && $added eq '';
+
+    push @filtered_changes, \%filtered;
+  }
+
+  if (@filtered_changes) {
+    $event->{changes} = \@filtered_changes;
+  }
+  else {
+    delete $event->{changes};
+  }
 }
 
 sub _owner_can_see {
