@@ -16,7 +16,9 @@ use Bugzilla::User;
 use Bugzilla::Constants;
 use Bugzilla::Util;
 use Bugzilla::Bug;
+use Bugzilla::Attachment;
 use Bugzilla::Comment;
+use Bugzilla::FlagType;
 use Bugzilla::Logging;
 use Bugzilla::Mailer;
 use Bugzilla::Hook;
@@ -199,6 +201,50 @@ sub Send {
     }
   }
 
+  # Bug 1883428: someone a flag was requested of, or who requested a flag
+  # that's now been granted/denied, becomes a recipient even without any
+  # other role on the bug. Flag-type cc_list addresses (admin-configured,
+  # bypasses per-user opt-in) are added the same way notify() used to.
+  my @flag_events
+    = $params->{dep_only}
+    ? ()
+    : _get_flag_mail_events($bug, $start, $end, \%user_cache);
+
+  foreach my $event (@flag_events) {
+    # notify() used to skip addressees who couldn't see a private
+    # attachment; _flag_event_visible_to() matches that so a non-insider
+    # doesn't get added as a recipient purely to be told about a flag on an
+    # attachment they can't see (and can't be shown to them in the mail
+    # body either).
+    if ($event->{action} eq 'requested') {
+      my $requestee_id = $event->{requestee_id};
+      my $requestee
+        = $user_cache{$requestee_id} ||= Bugzilla::User->new({id => $requestee_id, cache => 1});
+      $event->{requestee} = $requestee;
+      $recipients{$requestee_id}->{+REL_FLAG_REQUESTEE} = BIT_DIRECT
+        if _flag_event_visible_to($event, $requestee);
+    }
+    elsif ($event->{action} eq 'answered') {
+      my $requester_id = $event->{requester_id};
+      my $requester
+        = $user_cache{$requester_id} ||= Bugzilla::User->new({id => $requester_id, cache => 1});
+      $event->{requester} = $requester;
+
+      # Don't add the requester as a recipient for clearing their own
+      # request (e.g. cancelling a needinfo they asked for themselves) --
+      # old notify() gated on setter != requester for the same reason.
+      $recipients{$requester_id}->{+REL_FLAG_REQUESTER} = BIT_DIRECT
+        if $event->{setter}->id != $requester_id
+        && _flag_event_visible_to($event, $requester);
+    }
+  }
+
+  my ($flag_type_cc, $flag_type_cc_raw)
+    = _get_flag_type_cc($bug, \@flag_events, \%user_cache);
+  foreach my $user_id (keys %$flag_type_cc) {
+    $recipients{$user_id}->{+REL_FLAG_TYPE_CC} = BIT_DIRECT;
+  }
+
   # Make sure %user_cache has every user in it so far referenced
   foreach my $user_id (keys %recipients) {
     $user_cache{$user_id} ||= new Bugzilla::User({id => $user_id, cache => 1});
@@ -227,10 +273,29 @@ sub Send {
 
     # Mark these people as having the role of the person they are watching
     foreach my $watch (@$userwatchers) {
+      my $role_inherited = 0;
       while (my ($role, $bits) = each %{$recipients{$watch->[1]}}) {
-        $recipients{$watch->[0]}->{$role} |= BIT_WATCHING if $bits & BIT_DIRECT;
+
+        # Flag roles are addressed to a specific person (someone asked
+        # them, or they asked and got answered) -- watching that person's
+        # other bug activity isn't the same thing, and without this the
+        # watcher got a content-free mail (empty reason line, no flag
+        # section, since the per-recipient flag_events filter only
+        # matches the actual requestee/requester's own user id).
+        next
+          if $role == REL_FLAG_REQUESTEE
+          || $role == REL_FLAG_REQUESTER
+          || $role == REL_FLAG_TYPE_CC;
+        next unless $bits & BIT_DIRECT;
+        $recipients{$watch->[0]}->{$role} |= BIT_WATCHING;
+        $role_inherited = 1;
       }
-      push(@{$watching{$watch->[0]}}, $watch->[1]);
+
+      # Skip %watching too when nothing was inherited (e.g. the watched
+      # user's only role was a flag role) -- otherwise this watcher gets a
+      # spurious "X-Bugzilla-Watch-Reason: None <login>" header for a
+      # relationship that contributed nothing to the mail.
+      push(@{$watching{$watch->[0]}}, $watch->[1]) if $role_inherited;
     }
   }
 
@@ -272,11 +337,29 @@ sub Send {
       # Go through each role the user has and see if they want mail in
       # that role.
       foreach my $relationship (keys %{$recipients{$user_id}}) {
-        if ($user->wants_bug_mail(
-          $bug, $relationship, $start ? \@diffs : [],
-          $comments, $params->{dep_only}, $changer
-        ))
-        {
+        my $wants_mail;
+        if ($relationship == REL_FLAG_REQUESTEE) {
+
+          # Same opt-in flag "requested of me" has always used, not the
+          # normal per-field wants_bug_mail() logic (flags aren't a diffed
+          # bug field from this recipient's point of view).
+          $wants_mail = $user->wants_mail([EVT_FLAG_REQUESTED], REL_ANY);
+        }
+        elsif ($relationship == REL_FLAG_REQUESTER) {
+          $wants_mail = $user->wants_mail([EVT_REQUESTED_FLAG], REL_ANY);
+        }
+        elsif ($relationship == REL_FLAG_TYPE_CC) {
+
+          # Admin-configured list; always notified, like notify() did.
+          $wants_mail = 1;
+        }
+        else {
+          $wants_mail = $user->wants_bug_mail(
+            $bug, $relationship, $start ? \@diffs : [],
+            $comments, $params->{dep_only}, $changer
+          );
+        }
+        if ($wants_mail) {
           $rels_which_want{$relationship} = $recipients{$user_id}->{$relationship};
         }
       }
@@ -330,6 +413,25 @@ sub Send {
           $blocker_short_desc = $blocker_entry->{short_desc} if $blocker_entry;
         }
 
+        # Flag events relevant to this recipient: they were asked, or they
+        # asked and someone else answered (no need to tell people about
+        # their own actions), or they're on the flag type's cc_list for
+        # this event. A recipient who isn't an insider doesn't get told
+        # about a flag on a private attachment even if they qualify for
+        # the mail some other way (e.g. they're on the CC list).
+        my $user_cc_events = $flag_type_cc->{$user_id} || [];
+        my @user_flag_events = grep {
+          my $event = $_;
+          _flag_event_visible_to($event, $user)
+            && (
+            ($event->{action} eq 'requested' && $event->{requestee_id} == $user_id)
+            || ($event->{action} eq 'answered'
+              && $event->{requester_id} == $user_id
+              && $event->{setter}->id != $user_id)
+            || (grep { $_ == $event } @$user_cc_events)
+            )
+        } @flag_events;
+
         my $sent_mail = sendMail({
           to                 => $user,
           bug                => $bug,
@@ -342,11 +444,14 @@ sub Send {
           referenced_bugs    => $referenced_bugs,
           dep_only           => $params->{dep_only},
           blocker_short_desc => $blocker_short_desc,
+          flag_events        => \@user_flag_events,
         });
         push(@sent, $user->login) if $sent_mail;
       }
     }
   }
+
+  _send_flag_type_cc_raw_mail($bug, $flag_type_cc_raw, $date);
 
   # When sending bugmail about a blocker being reopened or resolved,
   # we say nothing about changes in the bug being blocked, so we must
@@ -373,6 +478,7 @@ sub sendMail {
   my $referenced_bugs    = $params->{referenced_bugs};
   my $dep_only           = $params->{dep_only};
   my $blocker_short_desc = $params->{blocker_short_desc};
+  my $flag_events        = $params->{flag_events} || [];
   my $attach_id;
 
   # Only display changes the user is allowed see.
@@ -424,7 +530,7 @@ sub sendMail {
     @send_comments = grep { !$_->is_private } @send_comments;
   }
 
-  if (!scalar(@display_diffs) && !scalar(@send_comments)) {
+  if (!scalar(@display_diffs) && !scalar(@send_comments) && !scalar(@$flag_events)) {
 
     # Whoops, no differences!
     return 0;
@@ -482,6 +588,7 @@ sub sendMail {
     referenced_bugs    => $referenced_bugs,
     bugmailtype        => $bugmailtype,
     blocker_short_desc => $blocker_short_desc,
+    flag_events        => $flag_events,
   };
 
   if (Bugzilla->get_param_with_override('use_mailer_queue')) {
@@ -521,6 +628,27 @@ sub enqueue {
   foreach my $reference (@{$vars->{referenced_bugs}}) {
     $reference->{bug} = _flatten_object($reference->{bug});
   }
+
+  # Bug 1883428: flag_events carries live FlagType/Attachment/User objects
+  # (the setter is a shared %user_cache entry the recipient loop has
+  # already populated with lazily-built fields) -- flatten them the same
+  # way, dropping the attachment object (dequeue() re-fetches it by id so
+  # it can also re-check visibility at send time).
+  $vars->{flag_events} = [
+    map {
+      {
+        action        => $_->{action},
+        attachment_id => $_->{attachment_id},
+        requestee_id  => $_->{requestee_id},
+        requester_id  => $_->{requester_id},
+        status        => $_->{status},
+        type          => _flatten_object($_->{type}),
+        setter        => _flatten_object($_->{setter}),
+        requestee     => _flatten_object($_->{requestee}),
+        requester     => _flatten_object($_->{requester}),
+      }
+    } @{$vars->{flag_events}}
+  ];
   Bugzilla->job_queue->insert('bug_mail', {vars => $vars});
 }
 
@@ -559,6 +687,27 @@ sub dequeue {
       . ' — timetracker access revoked between enqueue and dequeue');
     return;
   }
+
+  # Inflate flag_events, then re-check attachment visibility at send time
+  # (TOCTOU, bug 1883428) -- the enqueue-time private-attachment gate may
+  # be stale if the attachment was made private, or the recipient lost
+  # insider access, between enqueue and dequeue.
+  $vars->{flag_events} = [
+    map {
+      +{
+        %$_,
+        type       => Bugzilla::FlagType->new_from_hash($_->{type}),
+        setter     => Bugzilla::User->new_from_hash($_->{setter}),
+        requestee  => $_->{requestee} ? Bugzilla::User->new_from_hash($_->{requestee}) : undef,
+        requester  => $_->{requester} ? Bugzilla::User->new_from_hash($_->{requester}) : undef,
+        attachment => $_->{attachment_id}
+          ? Bugzilla::Attachment->new({id => $_->{attachment_id}, cache => 1})
+          : undef,
+      }
+    } @{$vars->{flag_events}}
+  ];
+  $vars->{flag_events}
+    = [grep { _flag_event_visible_to($_, $vars->{to_user}) } @{$vars->{flag_events}}];
 
   $vars->{changer} = Bugzilla::User->new_from_hash($vars->{changer});
   $vars->{new_comments}
@@ -699,6 +848,156 @@ sub _generate_bugmail {
   Bugzilla::Hook::process('bugmail_generate', {vars => $vars, email => $email});
 
   return $email;
+}
+
+# True if $user is allowed to see $event's attachment, i.e. it isn't
+# private or $user is an insider. Flag events with no attachment are always
+# visible. Used everywhere a flag event's exposure to a specific user is
+# decided: adding recipients, filtering an already-built recipient's
+# flag_events, and the dequeue-time TOCTOU re-check (bug 1883428).
+sub _flag_event_visible_to {
+  my ($event, $user) = @_;
+  return !$event->{attachment} || !$event->{attachment}->isprivate || ($user && $user->is_insider);
+}
+
+# Find flags that were requested of, or answered by, someone during this
+# window, so sendMail() can add a note at the top of the mail for that
+# person even if they hold no other role on the bug (bug 1883428).
+sub _get_flag_mail_events {
+  my ($bug, $start, $end, $user_cache) = @_;
+  my $dbh = Bugzilla->dbh;
+
+  my @args = ($bug->id);
+  my $when_restriction = '';
+  if ($start) {
+    $when_restriction = ' AND flag_when > ? AND flag_when <= ?';
+    push @args, ($start, $end);
+  }
+
+  my $rows = $dbh->selectall_arrayref(
+    "SELECT id, flag_id, flag_when, type_id, status, setter_id, requestee_id,
+            attachment_id
+       FROM flag_activity
+      WHERE bug_id = ?$when_restriction
+   ORDER BY flag_when, id", {Slice => {}}, @args
+  );
+
+  my @events;
+  foreach my $row (@$rows) {
+    $user_cache->{$row->{setter_id}}
+      ||= Bugzilla::User->new({id => $row->{setter_id}, cache => 1});
+
+    if ($row->{status} eq '?' && $row->{requestee_id}) {
+      push @events,
+        {
+        action        => 'requested',
+        type          => Bugzilla::FlagType->new({id => $row->{type_id}, cache => 1}),
+        attachment_id => $row->{attachment_id},
+        attachment    => $row->{attachment_id}
+        ? Bugzilla::Attachment->new({id => $row->{attachment_id}, cache => 1})
+        : undef,
+        requestee_id => $row->{requestee_id},
+        setter       => $user_cache->{$row->{setter_id}},
+        };
+    }
+    elsif ($row->{status} eq '+' || $row->{status} eq '-' || $row->{status} eq 'X') {
+
+      # 'X' is a flag cleared without +/- (e.g. needinfo auto-cleared when
+      # the requestee replies) -- notify.() treated that the same as an
+      # explicit answer, so we do too.
+      #
+      # flags.setter_id gets overwritten to whoever granted/denied/cleared the
+      # flag, so the requester has to be found by looking back at this
+      # flag's activity. Only treat it as an answer if the immediately
+      # preceding row was still '?' -- old notify() gated on that too, so
+      # e.g. an already-answered flag later cleared by an attachment being
+      # obsoleted (also logged as status 'X') doesn't re-notify the
+      # original requester. Break ties on id, not just flag_when: a '?'
+      # and its answer can land in the same second.
+      my ($prev_status, $requester_id) = $dbh->selectrow_array(
+        "SELECT status, setter_id FROM flag_activity
+          WHERE flag_id = ? AND (flag_when < ? OR (flag_when = ? AND id < ?))
+       ORDER BY flag_when DESC, id DESC LIMIT 1", undef, $row->{flag_id},
+        $row->{flag_when}, $row->{flag_when}, $row->{id}
+      );
+      next unless $requester_id && $prev_status && $prev_status eq '?';
+
+      push @events,
+        {
+        action        => 'answered',
+        type          => Bugzilla::FlagType->new({id => $row->{type_id}, cache => 1}),
+        attachment_id => $row->{attachment_id},
+        attachment    => $row->{attachment_id}
+        ? Bugzilla::Attachment->new({id => $row->{attachment_id}, cache => 1})
+        : undef,
+        requester_id => $requester_id,
+        status       => $row->{status},
+        setter       => $user_cache->{$row->{setter_id}},
+        };
+    }
+  }
+  return @events;
+}
+
+# A flag type's cc_list is an admin-configured list of addresses notified
+# on any status change of that type, independent of role on the bug --
+# this is the same computation notify() used to do per flag change.
+# Returns (\%account_recipients keyed by user id, \%raw_addresses keyed by
+# email for addresses with no Bugzilla account, each valued with the
+# flag_events relevant to that address).
+sub _get_flag_type_cc {
+  my ($bug, $flag_events, $user_cache) = @_;
+  my @bug_in_groups = grep { $_->{ison} || $_->{mandatory} } @{$bug->groups};
+
+  my (%account_recipients, %raw_addresses);
+  foreach my $event (@$flag_events) {
+    my $cc_list = $event->{type}->cc_list;
+    next unless $cc_list;
+
+    # Reuse the attachment already loaded by _get_flag_mail_events rather
+    # than re-fetching: flag_activity is a historical log, so the
+    # attachment it points at can have since been deleted, and re-fetching
+    # by id would return undef and die on ->isprivate.
+    my $attachment_is_private
+      = $event->{attachment} ? $event->{attachment}->isprivate : 0;
+
+    foreach my $cc (split(/[, ]+/, $cc_list)) {
+      my $ccuser = Bugzilla::User->new({name => $cc, cache => 1});
+      next if @bug_in_groups && (!$ccuser || !$ccuser->can_see_bug($bug->id));
+      next if $attachment_is_private && (!$ccuser || !$ccuser->is_insider);
+
+      if ($ccuser) {
+        push @{$account_recipients{$ccuser->id}}, $event;
+        $user_cache->{$ccuser->id} ||= $ccuser;
+      }
+      else {
+        push @{$raw_addresses{$cc}}, $event;
+      }
+    }
+  }
+  return (\%account_recipients, \%raw_addresses);
+}
+
+# cc_list can list addresses with no Bugzilla account. The normal recipient
+# pipeline above is keyed on user id throughout (wants_bug_mail, language
+# prefs, mailer-queue enqueue/dequeue...), so these get a minimal, separate
+# notice instead of going through it.
+sub _send_flag_type_cc_raw_mail {
+  my ($bug, $raw_addresses, $date) = @_;
+  return unless %$raw_addresses;
+
+  my $lang     = Bugzilla::User->new()->setting('lang');
+  my $template = Bugzilla->template_inner($lang);
+
+  foreach my $to (keys %$raw_addresses) {
+    my $message;
+    $template->process(
+      "email/bugmail-flagtype-cc.txt.tmpl",
+      {to => $to, bug => $bug, date => $date, flag_events => $raw_addresses->{$to}},
+      \$message
+    ) || ThrowTemplateError($template->error());
+    MessageToMTA($message);
+  }
 }
 
 sub _get_diffs {

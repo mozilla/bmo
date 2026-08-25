@@ -1,0 +1,18 @@
+[%# This Source Code Form is subject to the terms of the Mozilla Public
+  # License, v. 2.0. If a copy of the MPL was not distributed with this
+  # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+  #
+  # This Source Code Form is "Incompatible With Secondary Licenses", as
+  # defined by the Mozilla Public License, v. 2.0.
+  #%]
+
+[% RETURN UNLESS event.action == 'requested' && event.type.name == 'needinfo' %]
+<br>
+[% IF event.requestee_id == bug.reporter.id %]
+Since you reported this [% terms.bug %], the person asking needs your input to understand it.
+Responding to the question will enable developers to take further action on this [% terms.bug %].
+[% ELSE %]
+Please respond as soon as possible so developers may take action on this [% terms.bug %].
+[% END %]
+If you have questions about responding to needinfo requests, please see the
+<a href="https://wiki.mozilla.org/BMO/UserGuide#Needinfo_Flag">needinfo user guide</a>.

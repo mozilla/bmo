@@ -25,6 +25,20 @@
 
 [% isnew = bug.lastdiffed ? 0 : 1 %]
 
+[% FOREACH event = flag_events %]
+[% IF event.action == 'requested' %]
+[% IF event.type.name == 'needinfo' %]
+[%+ event.setter.identity %] needs more information from you to work on this [% terms.bug %].
+[% ELSE %]
+[%+ event.setter.identity %] has requested [% event.type.name %][% " for attachment ${event.attachment_id}" IF event.attachment_id %] from you on this [% terms.bug %].
+[% END %]
+[% ELSIF event.action == 'answered' %]
+[% status_word = event.status == '+' ? 'granted' : event.status == '-' ? 'denied' : 'cleared' %]
+Your request for [% event.type.name %][% " on attachment ${event.attachment_id}" IF event.attachment_id %] has been [% status_word %] by [% event.setter.identity %].
+[% END %]
+[%+ Hook.process('flag_event', 'email/bugmail.txt.tmpl') %]
+
+[% END %]
 [%+ PROCESS generate_diffs -%]
 
 [% FOREACH comment = new_comments %]

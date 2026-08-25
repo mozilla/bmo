@@ -1,0 +1,37 @@
+[%# The contents of this file are subject to the Mozilla Public
+  # License Version 1.1 (the "License"); you may not use this file
+  # except in compliance with the License. You may obtain a copy of
+  # the License at http://www.mozilla.org/MPL/
+  #
+  # Software distributed under the License is distributed on an "AS
+  # IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+  # implied. See the License for the specific language governing
+  # rights and limitations under the License.
+  #%]
+
+[%# ponytail: minimal fallback for flag type cc_list addresses with no
+  # Bugzilla account -- the normal bugmail pipeline is keyed on user id
+  # throughout and has no path to a raw address. Revisit if this needs to
+  # carry more than a one-line-per-event summary (diffs, comments, HTML). %]
+
+[% PROCESS global/variables.none.tmpl %]
+
+From: [% Param('mailfrom') %]
+To: [% to %]
+Subject: [[% terms.Bug %] [%+ bug.id %]] [% bug.short_desc %]
+Date: [% date %]
+X-Bugzilla-Type: request
+[%+ INCLUDE "email/header-common.txt.tmpl" %]
+
+[%+ urlbase %]show_bug.cgi?id=[% bug.id %]
+
+[% FOREACH event = flag_events %]
+[% IF event.action == 'requested' %]
+[%+ event.setter.identity %] requested [% event.type.name %][% " for attachment ${event.attachment_id}" IF event.attachment_id %].
+[% ELSIF event.action == 'answered' %]
+[% status_word = event.status == '+' ? 'granted' : event.status == '-' ? 'denied' : 'cleared' %]
+[%+ event.setter.identity %] [% status_word %] [% event.type.name %][% " for attachment ${event.attachment_id}" IF event.attachment_id %].
+[% END %]
+[% END %]
+
+@@body-headers@@
