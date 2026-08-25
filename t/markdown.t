@@ -98,4 +98,67 @@ is($ahref->attr('href'), 'https://searchfox.org/mozilla-central/rev/76fe4bb38534
 
 is($parser->render_html('<foo>'), "<p>&lt;foo&gt;</p>\n", "literal tags work");
 
+# Bug 2060932: collapsible sections via <details>/<summary>.
+is(
+  $parser->render_html('<details><summary>Text to click</summary>'
+    . 'Text hidden by default</details>'),
+  '<details><summary>Text to click</summary>'
+    . "<p>Text hidden by default</p></details>\n",
+  'Disclosure tags on a single line'
+);
+
+my $details_block = <<'MARKDOWN';
+<details>
+<summary>Click **me**</summary>
+
+Hidden content
+
+</details>
+MARKDOWN
+
+is(
+  $parser->render_html($details_block),
+  "<details><summary>Click <strong>me</strong></summary>\n"
+    . "<p>Hidden content</p>\n</details>\n",
+  'Disclosure tags as their own blocks, with markdown in the summary'
+);
+
+is(
+  $parser->render_html("<DETAILS><SUMMARY>Up</SUMMARY>hidden</DETAILS>"),
+  "<details><summary>Up</summary><p>hidden</p></details>\n",
+  'Disclosure tags are case insensitive'
+);
+
+is(
+  $parser->render_html("```\n<details><summary>x</summary>y</details>\n```"),
+  "<pre><code>&lt;details&gt;&lt;summary&gt;x&lt;/summary&gt;"
+    . "y&lt;/details&gt;\n</code></pre>\n",
+  'Disclosure tags in a code block stay literal'
+);
+
+is(
+  $parser->render_html('Use `<details>` to fold.'),
+  "<p>Use <code>&lt;details&gt;</code> to fold.</p>\n",
+  'Disclosure tags in a code span stay literal'
+);
+
+like(
+  $parser->render_html('<details open onclick="x">nope'),
+  qr{&lt;details open onclick=&quot;x&quot;&gt;nope},
+  'Only the bare disclosure tags are recognized'
+);
+
+is(
+  $parser->render_html("\x{E000}\x{E002}nope\x{E003}\x{E001}"),
+  "<p>nope</p>\n",
+  'The internal disclosure markers cannot be forged in a comment'
+);
+
+# An unbalanced tag must not leak an unclosed element into the page.
+like(
+  $parser->render_html("<details>\n<summary>oops</summary>\n\nrest\n"),
+  qr{</details>\z},
+  'An unclosed disclosure section is closed for us'
+);
+
 done_testing;
