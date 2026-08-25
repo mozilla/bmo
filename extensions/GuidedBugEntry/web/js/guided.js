@@ -586,7 +586,7 @@ var bugForm = {
     this.resetSubmitButton();
     if (document.getElementById('component_select').length == 0)
       this.onProductUpdated();
-    this.onFileChange();
+    this.initAttachmentSection();
     this._mandatoryFields.forEach((id) => {
       document.getElementById(id).classList.remove('missing');
     });
@@ -794,23 +794,50 @@ var bugForm = {
     document.getElementById('version').value = version;
   },
 
-  onFileChange: function() {
-    // toggle ui enabled when a file is uploaded or cleared
-    var elFile = document.getElementById('data');
-    var elReset = document.getElementById('reset_data');
-    var elDescription = document.getElementById('data_description');
-    var filename = bugForm._getFilename();
-    elReset.disabled = !filename;
-    elDescription.value = filename || '';
-    elDescription.disabled = !filename;
-    document.getElementById('reset_data').classList.toggle('hidden', !filename);
-    document.getElementById('data_description_tr').classList.toggle('hidden', !filename);
-  },
+  initAttachmentSection: function() {
+    // Hide expert parts of the attachment form for guided
+    var elements = [...document.querySelectorAll('.expert_fields')];
+    for (var i = 0; i < elements.length; i++) {
+        elements[i].classList.add('bz_tui_hidden');
+    }
 
-  onFileClear: function() {
-    document.getElementById('data').value = '';
-    this.onFileChange();
-    return false;
+    const $form = document.querySelector('#bugform');
+    const $attachNewFile = document.querySelector('#attach-new-file');
+    const $attachFileContentOuter = document.querySelector('#attach-file-content-outer');
+    const $attachNoFile = document.querySelector('#attach-no-file');
+    const $attachFileActionOuter = document.querySelector('#attach-file-action-outer');
+
+    const updatedRequiredFields = (required) => {
+      $attachFileContentOuter.querySelectorAll('[aria-required]').forEach(($input) => {
+        $input.setAttribute('aria-required', required);
+      });
+    };
+
+    $attachNewFile.addEventListener('click', () => {
+      $attachFileActionOuter.hidden = true;
+      $attachFileContentOuter.hidden = false;
+      updatedRequiredFields(true);
+    });
+
+    $attachNoFile.addEventListener('click', () => {
+      $attachFileActionOuter.hidden = false;
+      $attachFileContentOuter.hidden = true;
+
+      // Reset all the input values under Attachment
+      $form.attach_text.value = '';
+      $form.description.value = '';
+      $form.ispatch.checked = false;
+      $form.hide_preview.checked = false;
+      $form.contenttypemethod.checked = true;
+      $form.contenttypeselection.selectedIndex = 0;
+      $form.contenttypeentry.value = '';
+      document.querySelectorAll('#attachment_flags select').forEach(($select) => {
+        $select.selectedIndex = 0;
+      });
+      updatedRequiredFields(false);
+    });
+
+    updatedRequiredFields(false);
   },
 
   _getFilename: function() {

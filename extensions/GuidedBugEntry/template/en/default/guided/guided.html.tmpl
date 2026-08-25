@@ -11,15 +11,18 @@
 [% js_urls = [ 'extensions/GuidedBugEntry/web/js/products.js',
                'extensions/GuidedBugEntry/web/js/guided.js',
                'extensions/ProdCompSearch/web/js/prod_comp_search.js',
-               'js/field.js', 'js/TUI.js', 'js/data-table.js', 'js/bug.js' ] %]
+               'js/field.js', 'js/TUI.js', 'js/data-table.js',
+               'js/bug.js', 'js/attachment.js' ] %]
 
 [% PROCESS global/header.html.tmpl
    title = "Enter A Bug"
    generate_api_token = 1
    javascript_urls = js_urls
-   style_urls = [ 
+   style_urls = [
+     'skins/standard/global.css',
      'extensions/GuidedBugEntry/web/style/guided.css',
-     'skins/standard/index.css'
+     'skins/standard/index.css',
+     'skins/standard/attachment.css'
    ]
 %]
 
@@ -349,7 +352,7 @@ Product: <b><span id="dupes_product_name">?</span></b>:
 
 [% INCLUDE page_title %]
 
-<form method="post" action="[% basepath FILTER none %]post_bug.cgi" enctype="multipart/form-data" onsubmit="return bugForm.validate()">
+<form method="post" id="bugform" action="[% basepath FILTER none %]post_bug.cgi" enctype="multipart/form-data" onsubmit="return bugForm.validate()">
 <input type="hidden" name="filed_via" value="guided_form">
 <input type="hidden" name="token" value="[% token FILTER html %]">
 <input type="hidden" name="product" id="product" value="">
@@ -499,24 +502,20 @@ explain how to write effective [% terms.bug %] reports.</li>
 </tr>
 
 <tr>
-  <td class="label">Attach a file:</td>
-  <td colspan="2">
-    <input type="file" name="data" id="data" size="50" onchange="bugForm.onFileChange()">
-    <input type="hidden" name="contenttypemethod" value="autodetect">
-    <button id="reset_data" onclick="return bugForm.onFileClear()" disabled>Clear</button>
-  </td>
-  <td valign="top">
-  [% PROCESS help id="file_help" %]
-  <div id="file_help" class="help" role="tooltip" hidden>
-  If a file helps explain the issue better, such as a screenshot, please
-  attach one here.
-  </div>
-  </td>
-</tr>
-<tr id="data_description_tr">
-  <td class="label">File Description:</td>
-  <td colspan="2"><input type="text" name="description" id="data_description" class="textInput" disabled></td>
-  <td>&nbsp;</td>
+  <td colspan="3">
+    <div id="attach-file-action-outer">
+      <button type="button" id="attach-new-file" class="secondary">Attach New File</button>
+    </div>
+    <div id="attach-file-content-outer" hidden>
+      <button type="button" id="attach-no-file" class="secondary">Don’t Attach File</button>
+      <table class="attachment_entry responsive">
+        [% PROCESS attachment/createformcontents.html.tmpl
+            flag_types = product.flag_types.attachment
+            any_flags_requesteeble = 1
+            flag_table_id ="attachment_flags" %]
+      </table>
+    </div>
+</td>
 </tr>
 
 <tr>
