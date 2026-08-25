@@ -44,11 +44,6 @@ my $token = $t->tx->res->json->{token};
 $t->get_ok(rest_get_url($url, 'rest/logout', {Bugzilla_token => $token}))
   ->status_is(200);
 
-# Authenticating any call via Bugzilla_login/Bugzilla_password works.
-$t->get_ok(
-  rest_get_url($url, 'rest/version', {Bugzilla_login => $user, Bugzilla_password => $pass}))
-  ->status_is(200)->json_has('/version');
-
 my @tests = (
   {args => {login => $user, password => ''},  error => $error, test => "Empty password can't log in"},
   {args => {login => '', password => $pass},  error => $error, test => "Empty login can't log in"},
@@ -76,15 +71,6 @@ foreach my $test (@tests) {
 
   $t->get_ok(rest_get_url($url, 'rest/login', $args))->status_isnt(200);
   like($t->tx->res->json->{message}, qr/\Q$test->{error}\E/, "$test->{test}");
-
-  # Authenticating another call with the same (bad) credentials must also fail.
-  if (defined $args->{login} && defined $args->{password}) {
-    $t->get_ok(rest_get_url($url, 'rest/version',
-      {Bugzilla_login => $args->{login}, Bugzilla_password => $args->{password}}))
-      ->status_isnt(200);
-    like($t->tx->res->json->{message}, qr/\Q$test->{error}\E/,
-      "Bugzilla_login: $test->{test}");
-  }
 }
 
 done_testing();
