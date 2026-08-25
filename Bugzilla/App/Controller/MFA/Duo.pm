@@ -63,8 +63,10 @@ sub callback {
 
   # Retrieve the event data from the mfa token
   my $provider = Bugzilla::MFA->new_from($user, 'Duo');
-  my $event
-    = $provider->verify_token($mfa_cookie, {no_redirect => 1, no_delete => 1});
+  # provider_callback skips the duo_verified gate: we are the request that is
+  # about to establish it.
+  my $event = $provider->verify_token($mfa_cookie,
+    {no_redirect => 1, no_delete => 1, provider_callback => 1});
   if (!$event) {
     return $self->code_error('duo_client_error',
       {reason => ERR_INVALID_MFA_COOKIE});

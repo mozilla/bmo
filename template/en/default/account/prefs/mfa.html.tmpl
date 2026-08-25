@@ -87,10 +87,14 @@
           [% INCLUDE "mfa/protected.html.tmpl" %]
         </div>
       [% END %]
-      <div>
-        <button type="button" id="mfa-recovery">Generate Printable Recovery Codes</button>
-        [% INCLUDE "mfa/protected.html.tmpl" %]
-      </div>
+      [%# Duo has no verification form, so a recovery code could never be
+        # entered. Recovery is handled by Duo Security itself. %]
+      [% IF user.mfa != 'Duo' %]
+        <div>
+          <button type="button" id="mfa-recovery">Generate Printable Recovery Codes</button>
+          [% INCLUDE "mfa/protected.html.tmpl" %]
+        </div>
+      [% END %]
     </div>
 
     <p class="mfa-api-blurb">
