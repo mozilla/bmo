@@ -1015,12 +1015,12 @@
 
   [% ELSIF error == "illegal_series_creation" %]
     [% admindocslinks = {'groups.html' => 'Group security'} %]
-    [% docslinks = {'reporting.html' => 'Reporting'} %]
+    [% docslinks = {'using/reports-and-charts.html' => 'Reporting'} %]
     You are not authorized to create series.
 
   [% ELSIF error == "illegal_series_edit" %]
     [% admindocslinks = {'groups.html' => 'Group security'} %]
-    [% docslinks = {'reporting.html' => 'Reporting'} %]
+    [% docslinks = {'using/reports-and-charts.html' => 'Reporting'} %]
     You are not authorized to edit this series. To do this, you must either
     be its creator, or an administrator.
 
@@ -1037,7 +1037,7 @@
     The error was: [% dberror FILTER html %].
 
   [% ELSIF error == "insufficient_data_points" %]
-    [% docslinks = {'reporting.html' => 'Reporting'} %]
+    [% docslinks = {'using/reports-and-charts.html' => 'Reporting'} %]
     We don't have enough data points to make a graph (yet).
 
   [% ELSIF error == "invalid_attach_id" %]
@@ -1366,17 +1366,17 @@
 
   [% ELSIF error == "missing_datasets" %]
     [% title = "No Datasets Selected" %]
-    [% docslinks = {'reporting.html' => 'Reporting'} %]
+    [% docslinks = {'using/reports-and-charts.html' => 'Reporting'} %]
     You must specify one or more datasets to plot.
 
   [% ELSIF error == "missing_frequency" %]
     [% title = "Missing Frequency" %]
-    [% docslinks = {'reporting.html' => 'Reporting'} %]
+    [% docslinks = {'using/reports-and-charts.html' => 'Reporting'} %]
     You did not specify a valid frequency for this series.
 
   [% ELSIF error == "missing_name" %]
     [% title = "Missing Name" %]
-    [% docslinks = {'reporting.html' => 'Reporting'} %]
+    [% docslinks = {'using/reports-and-charts.html' => 'Reporting'} %]
     You did not specify a name for this series.
 
   [% ELSIF error == "missing_query" %]
@@ -1439,7 +1439,7 @@
 
   [% ELSIF error == "no_axes_defined" %]
     [% title = "No Axes Defined" %]
-    [% docslinks = {'reporting.html' => 'Reporting'} %]
+    [% docslinks = {'using/reports-and-charts.html' => 'Reporting'} %]
     You didn't define any axes to plot.
 
   [% ELSIF error == "no_bugs_chosen" %]
@@ -1781,7 +1781,7 @@
 
   [% ELSIF error == "series_already_exists" %]
     [% title = "Series Already Exists" %]
-    [% docslinks = {'reporting.html' => 'Reporting'} %]
+    [% docslinks = {'using/reports-and-charts.html' => 'Reporting'} %]
       A series named <em>[% series.category FILTER html %] /
       [%+ series.subcategory FILTER html %] /
       [%+ series.name FILTER html %]</em>
