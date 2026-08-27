@@ -32,7 +32,8 @@ $sel->title_is('User Preferences');
 $sel->click_ok('mfa-select-duo');
 $sel->type_ok('mfa-duo-user', $config->{admin_user_login});
 $sel->type_ok('mfa-password', $config->{admin_user_passwd});
-$sel->click_ok('update');
+$sel->driver->find_element('//form[@name="userprefsform"]')->submit;
+$sel->wait_for_page_to_load(WAIT_TIME);
 $sel->click_ok('//a[contains(text(),"Redirect Back")]',
   'Click Duo Security verification');
 $sel->title_is('User Preferences');
@@ -40,10 +41,54 @@ $sel->is_text_present_ok(
   'The changes to your two-factor authentication have been saved',
   'Duo successfully enabled');
 
+ok(
+  !$sel->is_element_present('mfa-recovery'),
+  'Recovery code generation is not offered for Duo'
+);
+
+# A forged recovery request must fail before opening the Duo prompt.
+$sel->driver->execute_script(
+  q{document.getElementById('mfa-auth-container').style.display = 'block';}
+);
+$sel->type_ok('mfa-password', $config->{admin_user_passwd});
+$sel->driver->execute_script(q{
+  const source = document.forms.userprefsform;
+  const form = document.createElement('form');
+  form.method = 'post';
+  form.action = source.action;
+
+  [
+    ['tab', 'mfa'],
+    ['token', source.elements.token.value],
+    ['dosave', '1'],
+    ['mfa_action', 'recovery'],
+    ['mfa', 'TOTP'],
+    ['password', source.elements.password.value],
+  ].forEach(([name, value]) => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+});
+sleep(2);
+$sel->wait_for_page_to_load(WAIT_TIME);
+$sel->title_is('Duo Security Error');
+$sel->is_text_present_ok(
+  'Recovery codes are not available when using Duo Security',
+  'Forged Duo recovery request rejected'
+);
+
 # Disable Duo for the admin user
+$sel->open_ok('/userprefs.cgi?tab=mfa');
 $sel->click_ok('mfa-disable');
 $sel->type_ok('mfa-password', $config->{admin_user_passwd});
-$sel->click_ok('update');
+$sel->driver->find_element('//form[@name="userprefsform"]')->submit;
+$sel->wait_for_page_to_load(WAIT_TIME);
 $sel->click_ok('//a[contains(text(),"Redirect Back")]',
   'Click Duo Security verification');
 $sel->title_is('User Preferences');
