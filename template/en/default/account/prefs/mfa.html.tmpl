@@ -6,7 +6,7 @@
   # defined by the Mozilla Public License, v. 2.0.
   #%]
 
-[% SET MFA_HOWTO = docs_urlbase _ "using/two-factor-authentication.html" %]
+[% SET MFA_HOWTO = docs_urlbase _ "using/two-factor-authentication.md" %]
 [% tab_footer = BLOCK %]
   <form action="[% basepath FILTER none %]token.cgi" method="post" id="forgot-form">
     <input type="hidden" name="loginname" value="[% user.login FILTER html %]">

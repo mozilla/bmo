@@ -1,0 +1,221 @@
+# General
+
+This is the standard REST API for external programs that want to interact with
+Bugzilla. It provides a REST interface to various Bugzilla functions.
+
+## Basic Information
+
+**Data Format**
+
+The REST API only supports JSON input, and either JSON or JSONP output. So
+objects sent and received must be in JSON format.
+
+If you need JSONP output, you must set the `Accept: application/javascript`
+HTTP header and add a `callback` parameter to name your callback.
+
+Parameters may also be passed in as part of the query string for non-GET
+requests and will override any matching parameters in the request body.
+
+Example request which returns the current version of Bugzilla:
+
+``` http
+GET /rest/version HTTP/1.1
+Host: bugzilla.example.com
+```
+
+Example response:
+
+``` http
+HTTP/1.1 200 OK
+Vary: Accept
+Content-Type: application/json
+
+{
+  "version" : "4.2.9+"
+}
+```
+
+**Errors**
+
+When an error occurs over REST, an object is returned with the key `error` set
+to `true`.
+
+The error contents look similar to:
+
+``` js
+{
+  "error": true,
+  "message": "Some message here",
+  "code": 123
+}
+```
+
+When BMO's request parser exceeds a message-size or body-buffer limit, the
+REST API returns `413 Request Entity Too Large` with error code `58` and
+the message `The request is too large.` rather than processing the truncated
+body. These limits depend on the server configuration. Reduce the payload size
+or split it into smaller requests where the API method supports batching.
+
+<a id="rest-query-string-limit"></a>
+
+BMO's Varnish front end rejects request targets longer than 8 KiB, including
+the path and query string, with a plain-text `414 URI Too Long` response
+instead of the JSON error object described above. This limit accommodates
+roughly 1,000 seven-digit bug IDs in the `id` parameter for `GET /rest/bug`,
+depending on the other parameters. Keep request targets below the limit and
+split large queries into multiple requests.
+
+## Common Data Types
+
+The Bugzilla API uses the following various types of parameters:
+
+| type | description |
+|----|----|
+| int | Integer. |
+| double | A floating-point number. |
+| string | A string. |
+| email | A string representing an email address. This value, when returned, may be filtered based on if the user is logged in or not. |
+| date | A specific date. Example format: `YYYY-MM-DD`. |
+| datetime | A date/time. Timezone should be in UTC unless otherwise noted. Example format: `YYYY-MM-DDTHH24:MI:SSZ`. |
+| boolean | `true` or `false`. |
+| base64 | A base64-encoded string. This is the only way to transfer binary data via the API. |
+| array | An array. There may be mixed types in an array. `[` and `]` are used to represent the beginning and end of arrays. |
+| object | A mapping of keys to values. Called a "hash", "dict", or "map" in some other programming languages. The keys are strings, and the values can be any type. `{` and `}` are used to represent the beginning and end of objects. |
+
+Parameters that are required will be displayed in **bold** in the parameters
+table for each API method.
+
+## Authentication
+
+Some methods do not require you to log in. An example of this is [Get
+Bug](bug.md#get-bug). However, authenticating yourself allows you to
+see non-public information, for example, a bug that is not publicly visible.
+
+To authenticate yourself, you will need to use API keys:
+
+**API Keys**
+
+You can specify 'X-BUGZILLA-API-KEY' header with the API key as a value to any
+request, and you will be authenticated as that user if the key is correct and
+has not been revoked.
+
+You can set up an API key by using the [API Keys tab](../../../using/preferences.md#api-keys) in the
+Preferences pages.
+
+Send only one authentication method with each request. BMO does not combine
+credentials or choose the strongest method when more than one is supplied.
+
+Most resources have been migrated off the legacy authentication path onto BMO's
+native REST framework, which accepts a cookie, an `X-Bugzilla-API-Key`
+header, or an OAuth2 bearer token (plus the deprecated `Bugzilla_api_key`
+and `api_key` query parameters described in the warning below, kept only as
+a stopgap for undiscovered callers). Legacy `Bugzilla_login` and
+`Bugzilla_password` credentials are **not** accepted on these resources, even
+though the old WebService dispatcher underneath BMO still supports them for
+resources not yet migrated (currently `Bug` and `Bugzilla`). On those
+not-yet-migrated resources, if a request supplies both
+`Bugzilla_login`/`Bugzilla_password` and an API key, BMO does not combine
+them or choose the strongest method: the legacy credentials take precedence,
+and BMO does not fall back to the API key if password authentication fails.
+
+If the account has the **Require API key authentication for API requests**
+preference enabled, a request to one of those not-yet-migrated resources
+containing both valid username/password credentials and a valid API key fails
+with an `API key authentication is required` error because BMO selected the
+username/password credentials first. Remove the username/password credentials
+and send only the API key; do not disable the preference.
+
+**WARNING**: It should be noted that additional authentication methods exist,
+but they are **not recommended** for use and are likely to be deprecated in
+future versions of BMO, due to security concerns. These additional methods
+include the following:
+
+> - api key via `Bugzilla_api_key` or simply `api_key` in query parameters.
+
+## Useful Parameters
+
+Many calls take common arguments. These are documented below and linked from
+the individual calls where these parameters are used.
+
+<a id="rest-include-fields"></a>
+
+**Including Fields**
+
+Many calls return an array of objects with various fields in the objects. (For
+example, [Get Bug](bug.md#get-bug) returns a list of `bugs` that have
+fields like `id`, `summary`, `creation_time`, etc.)
+
+These parameters allow you to limit what fields are present in the objects, to
+improve performance or save some bandwidth.
+
+`include_fields`: The (case-sensitive) names of fields in the response data.
+Only the fields specified in the object will be returned, the rest will not be
+included. Fields should be comma delimited.
+
+Invalid field names are ignored.
+
+Example request to [Get User](user.md#get-user):
+
+``` text
+GET /rest/user/1?include_fields=id,name
+```
+
+would return something like:
+
+``` js
+{
+  "users" : [
+    {
+      "id" : 1,
+      "name" : "user@domain.com"
+    }
+  ]
+}
+```
+
+**Excluding Fields**
+
+`exclude_fields`: The (case-sensitive) names of fields in the return value. The
+fields specified will not be included in the returned objects. Fields should be
+comma delimited.
+
+Invalid field names are ignored.
+
+Specifying fields here overrides `include_fields`, so if you specify a field in
+both, it will be excluded, not included.
+
+Example request to [Get User](user.md#get-user):
+
+``` js
+GET /rest/user/1?exclude_fields=name
+```
+
+would return something like:
+
+``` js
+{
+  "users" : [
+    {
+      "id" : 1,
+      "real_name" : "John Smith"
+    }
+  ]
+}
+```
+
+Some calls support specifying "subfields". If a call states that it supports
+"subfield" restrictions, you can restrict what information is returned within
+the first field. For example, if you call [Get
+Product](product.md#get-product) with an `include_fields` of
+`components.name`, then only the component name would be returned (and nothing
+else). You can include the main field, and exclude a subfield.
+
+There are several shortcut identifiers to ask for only certain groups of fields
+to be returned or excluded:
+
+| value | description |
+|----|----|
+| `_all` | All possible fields are returned if this is specified in `include_fields`. |
+| `_default` | Default fields are returned if `include_fields` is empty or this is specified. This is useful if you want the default fields in addition to a field that is not normally returned. |
+| `_extra` | Extra fields are not returned by default and need to be manually specified in `include_fields` either by exact field name, or adding `_extra`. |
+| `_custom` | Custom fields are normally returned by default unless this is added to `exclude_fields`. Also you can use it in `include_fields` if for example you want specific field names plus all custom fields. Custom fields are normally only relevant to bug objects. |

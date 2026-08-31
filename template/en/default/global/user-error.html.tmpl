@@ -517,6 +517,12 @@
     You can't make [% terms.abug %] block itself, depend on itself, regress
     itself, or regressed by itself.
 
+  [% ELSIF error == "docs_page_not_found" %]
+    [% title = "Documentation Page Not Found" %]
+    The documentation page you requested does not exist. You can browse the
+    documentation from the
+    <a href="[% docs_urlbase FILTER html %]index.md">documentation home page</a>.
+
   [% ELSIF error == "dupe_id_required" %]
     [% title = "Duplicate $terms.Bug Id Required" %]
     You must specify [% terms.abug %] id to mark this [% terms.bug %]

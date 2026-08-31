@@ -17,6 +17,5 @@
     },
     "search.exclude": {
         "**/local": true
-    },
-    "esbonio.sphinx.confDir": "${workspaceFolder}/docs/en/rst/conf.py"
+    }
 }

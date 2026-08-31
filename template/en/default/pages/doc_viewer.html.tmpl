@@ -1,0 +1,32 @@
+[%# This Source Code Form is subject to the terms of the Mozilla Public
+  # License, v. 2.0. If a copy of the MPL was not distributed with this
+  # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+  #
+  # This Source Code Form is "Incompatible With Secondary Licenses", as
+  # defined by the Mozilla Public License, v. 2.0.
+  #%]
+
+[%# Displays a page of the Markdown documentation (docs/en/md), rendered
+  # to HTML by Bugzilla::App::Controller::Docs. doc_html is generated
+  # server-side from trusted repository content, so it is emitted unfiltered.
+  #%]
+
+[% PROCESS global/variables.none.tmpl %]
+
+[% INCLUDE global/header.html.tmpl
+  title      = doc_title
+  style_urls = ['skins/standard/docs.css']
+%]
+
+<div class="docs-page">
+  [% IF doc_path != 'md/index.md' %]
+    <nav class="docs-breadcrumb">
+      <a href="[% docs_urlbase FILTER html %]index.md">Documentation Home</a>
+    </nav>
+  [% END %]
+  <div class="docs-content[% ' docs-index' IF doc_path == 'md/index.md' %]">
+    [% doc_html FILTER none %]
+  </div>
+</div>
+
+[% INCLUDE global/footer.html.tmpl %]

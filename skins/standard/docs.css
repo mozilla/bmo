@@ -1,0 +1,161 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This Source Code Form is "Incompatible With Secondary Licenses", as
+ * defined by the Mozilla Public License, v. 2.0. */
+
+/* Styles for the in-app documentation viewer (pages/doc_viewer.html.tmpl) */
+
+.docs-page {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 16px 24px 32px;
+}
+
+.docs-breadcrumb {
+  margin-bottom: 8px;
+  font-size: var(--font-size-small);
+}
+
+.docs-content {
+  font-size: var(--font-size-x-large);
+  line-height: var(--line-height-comfortable);
+}
+
+.docs-content h1,
+.docs-content h2,
+.docs-content h3,
+.docs-content h4,
+.docs-content h5,
+.docs-content h6 {
+  margin: 1.5em 0 0.5em;
+  line-height: var(--line-height-default);
+}
+
+.docs-content h1 {
+  margin-top: 0.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--primary-region-border-color);
+}
+
+.docs-content h2 {
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--primary-region-border-color);
+}
+
+.docs-content p,
+.docs-content ul,
+.docs-content ol {
+  margin: 0.75em 0;
+}
+
+.docs-content li > p {
+  margin: 0.25em 0;
+}
+
+.docs-content code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background-color: var(--secondary-region-background-color);
+  font-family: var(--font-family-monospace);
+  font-size: 0.9em;
+}
+
+.docs-content pre {
+  padding: 12px 16px;
+  border: 1px solid var(--primary-region-border-color);
+  border-radius: var(--primary-region-border-radius, 4px);
+  background-color: var(--secondary-region-background-color);
+  overflow-x: auto;
+}
+
+.docs-content pre code {
+  padding: 0;
+  background-color: transparent;
+}
+
+.docs-content table {
+  margin: 1em 0;
+  border-collapse: collapse;
+}
+
+.docs-content th,
+.docs-content td {
+  padding: 6px 12px;
+  border: 1px solid var(--grid-border-color);
+  vertical-align: top;
+}
+
+.docs-content th {
+  background-color: var(--grid-header-background-color);
+  text-align: left;
+}
+
+.docs-content tr:nth-child(even) td {
+  background-color: var(--grid-background-color);
+}
+
+.docs-content img {
+  max-width: 100%;
+}
+
+/* The documentation home page is a table of contents; render its lists
+ * without bullets. */
+.docs-index ul {
+  padding-left: 0;
+  list-style: none;
+}
+
+.docs-index ul ul {
+  padding-left: 1.5em;
+}
+
+.docs-index li {
+  margin: 0.25em 0;
+}
+
+.docs-content blockquote {
+  margin: 1em 0;
+  padding: 4px 16px;
+  border-left: 4px solid var(--primary-region-border-color);
+  color: var(--secondary-label-color);
+}
+
+/* GFM alerts: > [!NOTE], > [!WARNING], etc. */
+.docs-content .docs-alert {
+  color: var(--primary-text-color);
+}
+
+.docs-content .docs-alert .docs-alert-title {
+  margin: 0.5em 0;
+  font-weight: bold;
+}
+
+.docs-content .docs-alert-note,
+.docs-content .docs-alert-tip {
+  border-left-color: var(--accent-color-blue-2, #0969da);
+}
+
+.docs-content .docs-alert-note .docs-alert-title,
+.docs-content .docs-alert-tip .docs-alert-title {
+  color: var(--accent-color-blue-2, #0969da);
+}
+
+.docs-content .docs-alert-important {
+  border-left-color: var(--accent-color-purple-1, #8250df);
+}
+
+.docs-content .docs-alert-important .docs-alert-title {
+  color: var(--accent-color-purple-1, #8250df);
+}
+
+.docs-content .docs-alert-warning,
+.docs-content .docs-alert-caution {
+  border-left-color: var(--accent-color-red-1, #cf222e);
+}
+
+.docs-content .docs-alert-warning .docs-alert-title,
+.docs-content .docs-alert-caution .docs-alert-title {
+  color: var(--accent-color-red-1, #cf222e);
+}

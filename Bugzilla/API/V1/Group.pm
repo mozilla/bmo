@@ -322,5 +322,5 @@ information about Groups.
 =head1 DESCRIPTION
 
 This part of the Bugzilla API allows you to create Groups and get
-information about them. See L<docs/en/rst/api/core/v1/group.rst> for the
+information about them. See L<docs/en/md/api/core/v1/group.md> for the
 public REST documentation.

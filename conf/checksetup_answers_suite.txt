@@ -10,7 +10,6 @@ $answer{'default_bug_type'}     = '--';
 $answer{'defaultpriority'}      = '--';
 $answer{'defaultseverity'}      = 'normal';
 $answer{'diffpath'}             = '/usr/bin';
-$answer{'docs_urlbase'}         = 'https://bmo.readthedocs.io/en/latest/';
 $answer{'index_html'}           = 0;
 $answer{'insidergroup'}         = 'admin';
 $answer{'interdiffbin'}         = '/usr/bin/interdiff';
