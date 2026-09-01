@@ -42,7 +42,9 @@ sub evaluate_change {
 
   # Only enforce on a save that touches one of the two fields, so bugs
   # already in this state don't block unrelated edits.
-  return if !exists $changes->{keywords} && !exists $changes->{target_milestone};
+  return if !exists $changes->{keywords}
+    && !exists $changes->{target_milestone}
+    && !exists $changes->{product};
 
   _check_milestone($args->{bug});
 }
