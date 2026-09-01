@@ -17,6 +17,7 @@ use Bugzilla::Constants;
 use Bugzilla::Logging;
 
 use Bugzilla::Extension::MozChangeField::Pre::CanConfirm;
+use Bugzilla::Extension::MozChangeField::Pre::CheckinNeededTB;
 use Bugzilla::Extension::MozChangeField::Pre::CommentClosedBugs;
 use Bugzilla::Extension::MozChangeField::Pre::CustomField;
 use Bugzilla::Extension::MozChangeField::Pre::Graveyard;
@@ -25,6 +26,7 @@ use Bugzilla::Extension::MozChangeField::Pre::TypePriSevEditbugs;
 
 my @pre_instances = (
   Bugzilla::Extension::MozChangeField::Pre::CanConfirm->new,
+  Bugzilla::Extension::MozChangeField::Pre::CheckinNeededTB->new,
   Bugzilla::Extension::MozChangeField::Pre::CommentClosedBugs->new,
   Bugzilla::Extension::MozChangeField::Pre::CustomField->new,
   Bugzilla::Extension::MozChangeField::Pre::Graveyard->new,
@@ -49,6 +51,15 @@ my @post_instances = (
 );
 
 our $VERSION = '0.1';
+
+sub bug_start_of_set_all {
+  my ($self, $args) = @_;
+
+  foreach my $instance (@pre_instances) {
+    next if !$instance->can('evaluate_set_all');
+    $instance->evaluate_set_all($args);
+  }
+}
 
 sub bug_check_can_change_field {
   my ($self, $args) = @_;

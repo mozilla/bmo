@@ -14,4 +14,9 @@
   [% title = "Invalid Change" %]
   You need "editbugs" permissions to alter the '[% field FILTER html %]' field.
 
+[% ELSIF error == "mozchangefield_checkin_needed_tb_requires_milestone" %]
+  [% title = "Target Milestone Required" %]
+  A target milestone must be selected when adding the
+  <b>checkin-needed-tb</b> keyword.
+
 [% END %]
