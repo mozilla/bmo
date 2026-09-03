@@ -40,9 +40,10 @@ sub evaluate_change {
   my ($self, $args) = @_;
   my $changes = $args->{changes};
 
-  # Only enforce on a save that touches one of the two fields, so bugs
+  # Only enforce on a save that touches one of three fields, so bugs
   # already in this state don't block unrelated edits.
-  return if !exists $changes->{keywords}
+  return
+       if !exists $changes->{keywords}
     && !exists $changes->{target_milestone}
     && !exists $changes->{product};
 
