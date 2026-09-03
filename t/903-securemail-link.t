@@ -2,6 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+package main;
+
 use strict;
 use warnings;
 use 5.10.1;
@@ -11,11 +13,11 @@ use Test::More;
 use Email::MIME;
 
 BEGIN {
-  package Bugzilla::Extension::SecureMail;
-  sub NAME { 1 }
+  *Bugzilla::Extension::SecureMail::NAME = sub { 1 };
 }
 
-require './extensions/SecureMail/Extension.pm';
+my $extension = './extensions/SecureMail/Extension.pm';
+require $extension;
 
 my $email = Email::MIME->create(
   attributes => {content_type => 'multipart/alternative'},
