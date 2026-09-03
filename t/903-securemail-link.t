@@ -64,4 +64,16 @@ is($encrypted_parts[0]->content_type, 'application/pgp-encrypted',
 is($encrypted_parts[1]->content_type, 'application/octet-stream',
   'second PGP/MIME part is encrypted data');
 
+my $unwrapped_email = Email::MIME->create(
+  attributes => {content_type => 'multipart/alternative'},
+  parts      => [],
+);
+$unwrapped_email->parts_set([$control_part, $data_part]);
+Bugzilla::Extension::SecureMail::_set_pgp_content_type($unwrapped_email);
+my ($boundary) = $unwrapped_email->header('Content-Type') =~ /boundary="([^"]+)"/;
+is($boundary, $unwrapped_email->{ct}{attributes}{boundary},
+  'unwrapped PGP/MIME header declares its own generated boundary');
+like($unwrapped_email->as_string, qr/--\Q$boundary\E/,
+  'unwrapped PGP/MIME body uses its declared boundary');
+
 done_testing;

@@ -508,11 +508,7 @@ sub _make_secure {
         attributes => {content_type => 'multipart/encrypted'},
         parts      => \@new_parts,
       );
-      my $new_boundary = $encrypted_part->{ct}{attributes}{boundary};
-      $encrypted_part->header_set("Content-Type",
-            "multipart/encrypted; "
-          . "protocol=\"application/pgp-encrypted\"; "
-          . "boundary=\"$new_boundary\"");
+      _set_pgp_content_type($encrypted_part);
 
       if ($sanitize_subject && $bug_id) {
         _wrap_pgp_bugmail($email, $encrypted_part, _bug_url($bug_id));
@@ -521,10 +517,7 @@ sub _make_secure {
         # Preserve the original top-level PGP/MIME structure for all other
         # encrypted mail, such as private-comment notifications.
         $email->parts_set(\@new_parts);
-        $email->header_set("Content-Type",
-              "multipart/encrypted; "
-            . "protocol=\"application/pgp-encrypted\"; "
-            . "boundary=\"$new_boundary\"");
+        _set_pgp_content_type($email);
       }
     }
     else {
@@ -650,6 +643,15 @@ sub _wrap_pgp_bugmail {
   );
   $email->parts_set([$link_part, $encrypted_part]);
   $email->content_type_set('multipart/mixed');
+}
+
+sub _set_pgp_content_type {
+  my ($email) = @_;
+  my $boundary = $email->{ct}{attributes}{boundary};
+  $email->header_set("Content-Type",
+        "multipart/encrypted; "
+      . "protocol=\"application/pgp-encrypted\"; "
+      . "boundary=\"$boundary\"");
 }
 
 # Insert the subject into the part's body, as the subject of the message will
