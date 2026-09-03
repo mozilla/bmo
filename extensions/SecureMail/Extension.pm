@@ -499,15 +499,33 @@ sub _make_secure {
           body => _tct_encrypt($tct, $to_encrypt, $bug_id)
         ),
       );
-      $email->parts_set(\@new_parts);
-      my $new_boundary = $email->{ct}{attributes}{boundary};
-
-      # Redo the old content type header with the new boundaries
-      # and other information needed for PGP
-      $email->header_set("Content-Type",
+      # Keep the PGP/MIME payload as a standards-compliant two-part
+      # multipart/encrypted message. For fully secure bugmail, wrap it in a
+      # multipart/mixed message with a plaintext link so clients which do not
+      # expose the OpenPGP armour comment (notably Gmail) provide a usable
+      # route back to the bug.
+      my $encrypted_part = Email::MIME->create(
+        attributes => {content_type => 'multipart/encrypted'},
+        parts      => \@new_parts,
+      );
+      my $new_boundary = $encrypted_part->{ct}{attributes}{boundary};
+      $encrypted_part->header_set("Content-Type",
             "multipart/encrypted; "
           . "protocol=\"application/pgp-encrypted\"; "
           . "boundary=\"$new_boundary\"");
+
+      if ($sanitize_subject && $bug_id) {
+        _wrap_pgp_bugmail($email, $encrypted_part, _bug_url($bug_id));
+      }
+      else {
+        # Preserve the original top-level PGP/MIME structure for all other
+        # encrypted mail, such as private-comment notifications.
+        $email->parts_set(\@new_parts);
+        $email->header_set("Content-Type",
+              "multipart/encrypted; "
+            . "protocol=\"application/pgp-encrypted\"; "
+            . "boundary=\"$new_boundary\"");
+      }
     }
     else {
       _fix_encoding($email);
@@ -597,8 +615,7 @@ sub _make_secure {
 sub _tct_encrypt {
   my ($tct, $text, $bug_id) = @_;
 
-  my $comment = Bugzilla->localconfig->urlbase
-    . ($bug_id ? 'show_bug.cgi?id=' . $bug_id : '');
+  my $comment = _bug_url($bug_id);
   my $encrypted;
   my $ok = eval { $encrypted = $tct->encrypt($text, $comment)->get; 1 };
   if (!$ok) {
@@ -612,6 +629,27 @@ sub _tct_encrypt {
   }
 
   return $encrypted;
+}
+
+sub _bug_url {
+  my ($bug_id) = @_;
+  return Bugzilla->localconfig->urlbase
+    . ($bug_id ? 'show_bug.cgi?id=' . $bug_id : '');
+}
+
+sub _wrap_pgp_bugmail {
+  my ($email, $encrypted_part, $bug_url) = @_;
+
+  my $link_part = Email::MIME->create(
+    attributes => {
+      content_type => 'text/plain',
+      charset      => 'UTF-8',
+      encoding     => 'quoted-printable',
+    },
+    body_str => "View this bug: $bug_url\n",
+  );
+  $email->parts_set([$link_part, $encrypted_part]);
+  $email->content_type_set('multipart/mixed');
 }
 
 # Insert the subject into the part's body, as the subject of the message will

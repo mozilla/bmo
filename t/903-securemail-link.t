@@ -1,0 +1,67 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+use strict;
+use warnings;
+use 5.10.1;
+use lib qw(. lib local/lib/perl5 extensions/SecureMail/lib);
+
+use Test::More;
+use Email::MIME;
+
+BEGIN {
+  package Bugzilla::Extension::SecureMail;
+  sub NAME { 1 }
+}
+
+require './extensions/SecureMail/Extension.pm';
+
+my $email = Email::MIME->create(
+  attributes => {content_type => 'multipart/alternative'},
+  parts      => [],
+);
+my $control_part = Email::MIME->create(
+  attributes => {
+    content_type => 'application/pgp-encrypted',
+    encoding     => '7bit',
+  },
+  body => "Version: 1\n",
+);
+my $data_part = Email::MIME->create(
+  attributes => {
+    content_type => 'application/octet-stream',
+    encoding     => '7bit',
+  },
+  body => 'encrypted data',
+);
+my $encrypted_part = Email::MIME->create(
+  attributes => {content_type => 'multipart/encrypted'},
+  parts      => [$control_part, $data_part],
+);
+
+Bugzilla::Extension::SecureMail::_wrap_pgp_bugmail(
+  $email,
+  $encrypted_part,
+  'https://bugzilla.example/show_bug.cgi?id=123',
+);
+
+like($email->content_type, qr{\Amultipart/mixed(?:;|\z)},
+  'outer message is multipart/mixed');
+my @outer_parts = $email->parts;
+is(scalar @outer_parts, 2, 'outer message contains the link and encrypted message');
+like($outer_parts[0]->content_type, qr{\Atext/plain(?:;|\z)},
+  'first part is plaintext');
+like($outer_parts[0]->body_str,
+  qr{\AView this bug: https://bugzilla\.example/show_bug\.cgi\?id=123\r?\n\z},
+  'plaintext part contains the bug URL');
+like($outer_parts[1]->content_type, qr{\Amultipart/encrypted(?:;|\z)},
+  'second part is the PGP/MIME message');
+my @encrypted_parts = $outer_parts[1]->parts;
+is(scalar @encrypted_parts, 2, 'PGP/MIME message retains its two required parts');
+is($encrypted_parts[0]->content_type, 'application/pgp-encrypted',
+  'first PGP/MIME part is the control information');
+is($encrypted_parts[1]->content_type, 'application/octet-stream',
+  'second PGP/MIME part is encrypted data');
+
+done_testing;
