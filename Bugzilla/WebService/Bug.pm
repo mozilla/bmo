@@ -364,11 +364,14 @@ sub comments {
   # request would run one aggregation query per bug.
   $self->_preload_comment_edit_info([map { @{$_->[1]} } @bug_comments]);
 
+  my $want_collapsed = _wants_collapsed_comments($params);
+
   foreach my $bug_comment (@bug_comments) {
     my ($bug, $comments) = @$bug_comment;
     my @result;
     foreach my $comment (@$comments) {
       next if $comment->is_private && !$user->is_insider;
+      next if $comment->collapsed && !$want_collapsed;
       push(@result, $self->_translate_comment($comment, $params));
     }
     $bugs{$bug->id}{'comments'} = \@result;
@@ -475,6 +478,18 @@ sub _preload_bugs_comment_edit_info {
   $self->_preload_comment_edit_info([map { @{$_->comments} } @$bugs]);
 }
 
+# Comments that Bugzilla::Comment::collapsed flags (tagged with one of the
+# 'collapsed_comment_tags' tags, or authored by treeherder) are hidden behind a
+# click in the web UI, so they are left out of the API response too unless the
+# caller asks for them with
+# include_fields=_collapsed_comments. Like the other underscore-prefixed
+# include_fields values, it does not imply _default, so callers that want the
+# usual fields as well need include_fields=_default,_collapsed_comments.
+sub _wants_collapsed_comments {
+  my ($params) = @_;
+  return grep { $_ eq '_collapsed_comments' } @{$params->{include_fields} || []};
+}
+
 # Helper for Bug.comments
 sub _translate_comment {
   my ($self, $comment, $filters, $types, $prefix) = @_;
@@ -512,6 +527,7 @@ sub _translate_comment {
   # Don't load comment tags unless enabled
   if (Bugzilla->params->{'comment_taggers_group'}) {
     $comment_hash->{tags} = [map { $self->type('string', $_) } @{$comment->tags}];
+    $comment_hash->{collapsed} = $self->type('boolean', $comment->collapsed);
   }
 
   return filter($filters, $comment_hash, $types, $prefix);
@@ -1676,8 +1692,10 @@ sub _bug_to_hash {
     my $comments
       = $bug->comments({order => 'oldest_to_newest', after => $params->{new_since}});
     $self->_preload_comment_edit_info($comments);
+    my $want_collapsed = _wants_collapsed_comments($params);
     foreach my $comment (@$comments) {
       next if $comment->is_private && !$user->is_insider;
+      next if $comment->collapsed && !$want_collapsed;
       push(@result,
            $self->_translate_comment($comment, $params, ['extra'], 'comments'));
     }
@@ -2773,6 +2791,20 @@ than this time. This only affects comments returned from the C<ids>
 argument. You will always be returned all comments you request in the
 C<comment_ids> argument, even if they are older than this date.
 
+=item C<_collapsed_comments>
+
+Comments that are collapsed in the web UI -- those tagged with one of the tags
+listed in the C<collapsed_comment_tags> parameter (C<spam>, C<abusive>, etc), and
+those authored by treeherder -- are left out of the comments returned for C<ids>
+entirely. Passing
+C<_collapsed_comments> in C<include_fields> includes them in the response.
+
+As with the other underscore-prefixed C<include_fields> values, it does not
+imply C<_default>, so use C<include_fields=_default,_collapsed_comments> to get
+the usual comment fields as well.
+
+Comments requested by C<comment_ids> are always returned, collapsed or not.
+
 =item C<skip_private> B<EXPERIMENTAL>
 
 C<boolean> Normally, if you request any inaccessible or invalid bug ids, this
@@ -2874,6 +2906,14 @@ comment, or null if the comment has never been edited.
 
 This key is only present for users who are allowed to edit other people's
 comments, and follows the same rules as C<edit_count> for hidden revisions.
+
+=item collapsed
+
+C<boolean> True if this comment is collapsed in the web UI, either because one
+of its tags is listed in the C<collapsed_comment_tags> parameter or because it
+was authored by treeherder. False otherwise.
+
+This key is only present when comment tagging is enabled.
 
 =back
 
@@ -3046,6 +3086,10 @@ section above for the object format.
 
 This is an B<extra> field returned only by specifying C<comments> or C<_extra>
 in C<include_fields>.
+
+Comments that are collapsed in the web UI are left out unless
+C<_collapsed_comments> is also passed in C<include_fields>, as described under
+L</comments>.
 
 =item C<component>
 
