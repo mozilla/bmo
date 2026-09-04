@@ -32,8 +32,7 @@ $sel->title_is('User Preferences');
 $sel->click_ok('mfa-select-duo');
 $sel->type_ok('mfa-duo-user', $config->{admin_user_login});
 $sel->type_ok('mfa-password', $config->{admin_user_passwd});
-$sel->driver->find_element('//form[@name="userprefsform"]')->submit;
-$sel->wait_for_page_to_load(WAIT_TIME);
+$sel->click_ok('update');
 $sel->click_ok('//a[contains(text(),"Redirect Back")]',
   'Click Duo Security verification');
 $sel->title_is('User Preferences');
@@ -41,6 +40,10 @@ $sel->is_text_present_ok(
   'The changes to your two-factor authentication have been saved',
   'Duo successfully enabled');
 
+ok(
+  $sel->is_element_present('mfa-disable'),
+  'Duo preferences are displayed'
+);
 ok(
   !$sel->is_element_present('mfa-recovery'),
   'Recovery code generation is not offered for Duo'
@@ -75,8 +78,10 @@ $sel->driver->execute_script(q{
   document.body.appendChild(form);
   form.submit();
 });
-sleep(2);
-$sel->wait_for_page_to_load(WAIT_TIME);
+foreach (1 .. WAIT_TIME / 1000) {
+  last if $sel->get_title eq 'Duo Security Error';
+  sleep 1;
+}
 $sel->title_is('Duo Security Error');
 $sel->is_text_present_ok(
   'Recovery codes are not available when using Duo Security',
@@ -87,8 +92,7 @@ $sel->is_text_present_ok(
 $sel->open_ok('/userprefs.cgi?tab=mfa');
 $sel->click_ok('mfa-disable');
 $sel->type_ok('mfa-password', $config->{admin_user_passwd});
-$sel->driver->find_element('//form[@name="userprefsform"]')->submit;
-$sel->wait_for_page_to_load(WAIT_TIME);
+$sel->click_ok('update');
 $sel->click_ok('//a[contains(text(),"Redirect Back")]',
   'Click Duo Security verification');
 $sel->title_is('User Preferences');
