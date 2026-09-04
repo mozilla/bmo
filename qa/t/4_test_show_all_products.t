@@ -40,25 +40,18 @@ logout($sel);
 
 # Same steps, but for a member of the "QA‑Selenium‑TEST" group.
 # The "QA‑Selenium‑TEST" product must be visible to them.
+# The QA_Selenium_TEST user is unprivileged, so they should see the guided bug
+# entry form, which renders dynamically.
 
 log_in($sel, $config, 'QA_Selenium_TEST');
 $sel->click_ok("//a[./span[contains(text(), 'New Bug')]]");
 $sel->wait_for_page_to_load_ok(WAIT_TIME);
-$sel->title_is("Enter A Bug");
-if ($sel->is_text_present('None of the above; my bug is in')) {
-  $sel->click_ok('advanced_link');
-  $sel->wait_for_page_to_load_ok(WAIT_TIME);
-  $sel->title_is("Enter Bug");
-}
-$sel->click_ok('//a/span[contains(text(),"Other Products")]',
-  undef, "Choose full product list");
-$sel->wait_for_page_to_load_ok(WAIT_TIME);
-
-# For some unknown reason, Selenium doesn't like hyphens in links.
-# $sel->is_text_present_ok("QA-Selenium-TEST");
-# $sel->click_ok("link=QA-Selenium-TEST");
-$sel->click_ok(
-  '//section[@id="choose_product"]//a[contains(@href, "QA-Selenium-TEST")]');
-$sel->wait_for_page_to_load_ok(WAIT_TIME);
+$sel->title_is("Enter Bug");
+# `$sel->click_ok()` doesn’t work because the target is not an anchor element
+$sel->driver->execute_script('
+  document.querySelector("li[data-product=\"Other Products\"]").click();
+');
+$sel->click_ok('//a[@data-product="QA-Selenium-TEST"]',
+  undef, "Choose QA-Selenium-TEST product");
 $sel->is_text_present_ok("Product: QA-Selenium-TEST");
 logout($sel);

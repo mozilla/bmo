@@ -11,108 +11,109 @@
 [% js_urls = [ 'extensions/GuidedBugEntry/web/js/products.js',
                'extensions/GuidedBugEntry/web/js/guided.js',
                'extensions/ProdCompSearch/web/js/prod_comp_search.js',
-               'js/field.js', 'js/TUI.js', 'js/data-table.js', 'js/bug.js' ] %]
+               'js/field.js', 'js/TUI.js', 'js/data-table.js', 'js/bug.js',
+               'js/attachment.js' ] %]
 
 [% PROCESS global/header.html.tmpl
-   title = "Enter A Bug"
+   title = "Enter " _ terms.Bug
    generate_api_token = 1
+   responsive = 1
+   use_text_editor = 1
    javascript_urls = js_urls
-   style_urls = [ 
+   style_urls = [
      'extensions/GuidedBugEntry/web/style/guided.css',
-     'skins/standard/index.css'
+     'skins/standard/index.css',
+     'skins/standard/attachment.css',
    ]
 %]
 
-<noscript>
-You require JavaScript to use this [% terms.bug %] entry form.<br><br>
-Please use the <a href="[% basepath FILTER none %]enter_bug.cgi?format=__default__">standard [% terms.bug %] entry form</a>.
-</noscript>
+[%
+  dupe_labels = {
+    id => field_descs.bug_id,
+    summary => field_descs.short_desc,
+    component => field_descs.component,
+    status => field_descs.bug_status
+  };
+%]
 
-<div id="loading" class="hidden">
-Please wait...
+<div id="guided"
+    data-open-states="[% json_encode(open_states) FILTER html %]"
+    data-dupe-labels="[% json_encode(dupe_labels) FILTER html %]">
+  <header id="page-header">
+    <h1>Enter [% terms.Bug %]</h1>
+    <div id="stepper" role="list" aria-label="[% terms.Bug %] filing steps">
+      <div id="stepper-product" role="listitem">
+        <span>1</span>
+        Select a product
+      </div>
+      <div id="stepper-dupes" role="listitem">
+        <span>2</span>
+        Find similar issues
+      </div>
+      <div id="stepper-form" role="listitem">
+        <span>3</span>
+        Enter details
+      </div>
+    </div>
+  </header>
+  <div id="steps" hidden>
+    [% INCLUDE webdev_step %]
+    [% INCLUDE product_step %]
+    [% INCLUDE other_products_step %]
+    [% INCLUDE dupes_step %]
+    [% INCLUDE bug_form_step %]
+  </div>
+  <footer id="page-footer">
+    <p>
+      <a id="advanced-link" href="[% basepath FILTER none %]enter_bug.cgi?format=__default__">
+        <img src="[% basepath FILTER none %]extensions/GuidedBugEntry/web/images/advanced.png"
+            width="16" height="16">
+        <span>Switch to the standard [% terms.bug %] entry form</span>
+      </a>
+    </p>
+  </footer>
 </div>
-<script [% script_nonce FILTER none %]>
-document.getElementById('loading').classList.remove('hidden');
+
+<script [% script_nonce FILTER none %]
+    src="[% basepath FILTER none %]page.cgi?id=guided_products.js[% "&amp;format_forced=1" IF format_forced %]">
 </script>
 
-<div id="steps">
-[% INCLUDE webdev_step %]
-[% INCLUDE product_step %]
-[% INCLUDE otherProducts_step %]
-[% INCLUDE dupes_step %]
-[% INCLUDE bugForm_step %]
-</div>
-
-<div id="advanced">
-  <a id="advanced_img" href="[% basepath FILTER none %]enter_bug.cgi?format=__default__"><img
-  src="[% basepath FILTER none %]extensions/GuidedBugEntry/web/images/advanced.png" width="16" height="16" border="0"></a>
-  <a id="advanced_link" href="[% basepath FILTER none %]enter_bug.cgi?format=__default__">Switch to the standard [% terms.bug %] entry form</a>
-</div>
-
-<script [% script_nonce FILTER none %]>
-document.getElementById('loading').classList.add('hidden');
-guided.init({ webdev: [% webdev ? "true" : "false" %] });
-guided.currentUser = '[% user.login FILTER js %]';
-guided.openStates = [
-[% FOREACH state = open_states %]
-  '[% state FILTER js%]'
-  [%- "," UNLESS loop.last %]
-[% END %]
-];
-dupes.setLabels(
-  {
-    id: "[% field_descs.bug_id FILTER js %]",
-    summary: "[% field_descs.short_desc FILTER js %]",
-    component: "[% field_descs.component FILTER js %]",
-    status: "[% field_descs.bug_status FILTER js %]"
-  }
-);
-</script>
-<script src="[% basepath FILTER none %]page.cgi?id=guided_products.js[% "&amp;format_forced=1" IF format_forced %]"></script>
 [% PROCESS global/footer.html.tmpl %]
 
 [%############################################################################%]
-[%# page title                                                               #%]
-[%############################################################################%]
-
-[% BLOCK page_title %]
-  <div id="page_title">
-    <h2>Enter A [% terms.Bug %]</h2>
-  </div>
-[% END %]
-
-[%############################################################################%]
-[%# webdev step                                                             #%]
+[%# webdev step                                                              #%]
 [%############################################################################%]
 
 [% BLOCK webdev_step %]
-<div id="webdev_step" class="step hidden">
-
-[% INCLUDE page_title %]
-
-<p>Are you reporting a [% terms.bug %] with:</p>
-
-<ul class="product-list">
-[% WRAPPER product_block
-  icon="component.png"
-  onclick="product.select('Core', 'Untriaged')" %]
-HTML, CSS, JS, SVG, or some other web technology or combination of
-web technologies?
-[% END %]
-
-[% WRAPPER product_block
-  icon="devedition.png"
-  onclick="product.select('Firefox', 'Developer Tools')" %]
-Firefox's developer tools
-[% END %]
-
-[% WRAPPER product_block
-  icon="firefox.png"
-  onclick="product.select('Firefox', 'Untriaged')" %]
-Firefox's user interface (for example, an issue with bookmarks,
-tabbed browsing or the location bar)
-[% END %]
-</ul>
+<div id="webdev-step" class="step" hidden>
+  <section>
+    <h2>Select a product category:</h2>
+    <ul class="product-list" role="group" aria-label="Product categories">
+      [% WRAPPER product_block
+        icon="component.png"
+        product_name="Core"
+        component_name="Untriaged"
+        caption="Web Standards"
+      %]
+      Support for HTML, CSS, JavaScript, SVG, or any other web technology
+      [% END %]
+      [% WRAPPER product_block
+        icon="devedition.png"
+        product_name="DevTools"
+        caption="Firefox DevTools"
+      %]
+      Firefox browser’s built-in developer tools
+      [% END %]
+      [% WRAPPER product_block
+        icon="firefox.png"
+        product_name="Firefox"
+        component_name="Untriaged"
+      %]
+      Firefox browser’s user interface, including features like bookmarking,
+      tabbed browsing, location bar, etc.
+      [% END %]
+    </ul>
+  </section>
 </div>
 [% END %]
 
@@ -121,65 +122,49 @@ tabbed browsing or the location bar)
 [%############################################################################%]
 
 [% BLOCK product_step %]
-<div id="product_step" class="step hidden">
-
-[% INCLUDE page_title %]
-
-[% INCLUDE exits
-   show = "all"
-%]
-
-<ul class="product-list">
-[% INCLUDE 'guided/products.html.tmpl' %]
-</ul>
-
-<div id="prod_comp_search_main">
-  [% PROCESS prodcompsearch/form.html.tmpl
-     input_label = "Find product:"
-     format      = "guided"
-     script_name = "enter_bug.cgi" %]
-</div>
+<div id="product-step" class="step" hidden>
+  [% INCLUDE exits
+    show = "all"
+  %]
+  <section>
+    <h2>Select a product to enter a new [% terms.bug %]:</h2>
+    <ul class="product-list" role="group" aria-label="Product categories">
+      [% INCLUDE 'guided/products.html.tmpl' %]
+    </ul>
+  </section>
 </div>
 [% END %]
 
 [% BLOCK product_block %]
   [% IF !caption %]
-    [% caption = name %]
+    [% caption = product_name %]
   [% END %]
   [% IF !desc %]
     [% FOREACH cls = classifications %]
       [% FOREACH p = cls.products %]
-        [% IF p.name == name %]
+        [% IF p.name == product_name %]
           [% desc = p.description %]
           [% LAST %]
         [% END %]
       [% END %]
     [% END %]
   [% END %]
-    <li>
-      <span class="product-item"
-      [% IF onclick %]
-      onclick="[% onclick FILTER html %]"
-      [% ELSE %]
-      onclick="product.select('[% name FILTER js %]')"
-      [% END %]>
-      <img src="[% basepath FILTER none %]extensions/BMO/web/producticons/[% icon FILTER uri %]" class="product-icon">
-      <a href="javascript:void(0)">[% caption FILTER html %]</a>
-      <p>
-        [% IF content %]
-           [% content FILTER none %]
-        [% ELSE %]
-          [% desc FILTER html_light %]
-        [% END %]
-      </p>
-      </span>
-      [% IF security_bug_link %]
-        <span class="product-item">
-          If you are reporting a security issue that puts users at risk,
-          <b><a href="[% security_bug_link FILTER none %]">use this form</a>
-          instead.</b>
-        </span>
-      [% END %]
+    <li role="button" tabindex="0" class="product-item product-link"
+        data-link="[% link FILTER none %]" data-product="[% product_name FILTER html %]"
+        data-component="[% component_name FILTER html %]"
+    >
+      <img src="[% basepath FILTER none %]extensions/BMO/web/producticons/[% icon FILTER uri %]"
+          class="product-icon">
+      <div>
+        <h3>[% caption FILTER html %]</h3>
+        <p>
+          [% IF content %]
+            [% content FILTER none %]
+          [% ELSE %]
+            [% desc FILTER html_light %]
+          [% END %]
+        </p>
+      </div>
     </li>
 [% END %]
 
@@ -187,43 +172,35 @@ tabbed browsing or the location bar)
 [%# other products step                                                      #%]
 [%############################################################################%]
 
-[% BLOCK otherProducts_step %]
-<div id="otherProducts_step" class="step hidden">
-
-[% INCLUDE page_title %]
-
-[% INCLUDE exits
-   show = "all"
-%]
-
-<table id="other_products">
-[% FOREACH cls = classifications %]
-  [% IF cls.object %]
-    <tr class="classification">
-      <th align="right" valign="top">
-        [% cls.object.name FILTER html %]:&nbsp;
-      </th>
-      <td>
-        [% cls.object.description FILTER html_light %]
-      </td>
-    </tr>
+[% BLOCK other_products_step %]
+<div id="other-products-step" class="step" hidden>
+  <div id="prod-comp-search-main">
+    [% PROCESS prodcompsearch/form.html.tmpl
+      input_label = "Find product:"
+      format      = "guided"
+      script_name = "enter_bug.cgi" %]
+  </div>
+  <table id="other-products">
+  [% FOREACH cls = classifications %]
+    <tbody>
+    [% IF cls.object %]
+      <tr class="classification">
+        <th>[% cls.object.name FILTER html %]</th>
+        <td>[% cls.object.description FILTER html_light %]</td>
+      </tr>
+    [% END %]
+    [% FOREACH p = cls.products %]
+      <tr>
+        <th>
+          <a href="#" role="button" class="product-link" data-product="[% p.name FILTER html %]">
+          [%~ p.name FILTER html %]</a>
+        </th>
+        <td>[% p.description FILTER html_light %]</td>
+      </tr>
+    [% END %]
+    </tbody>
   [% END %]
-  [% FOREACH p = cls.products %]
-    <tr>
-      <th align="right" valign="top">
-        <a href="javascript:void(0)" onclick="product.select('[% p.name FILTER js %]')">
-        [% p.name FILTER html %]</a>:&nbsp;
-      </th>
-
-      <td valign="top">[% p.description FILTER html_light %]</td>
-    </tr>
-  [% END %]
-  <tr>
-    <td>&nbsp;</td>
-  </tr>
-[% END %]
-</table>
-
+  </table>
 </div>
 [% END %]
 
@@ -232,59 +209,44 @@ tabbed browsing or the location bar)
 [%############################################################################%]
 
 [% BLOCK exits %]
-  <div class="options">
-    <div class="option">
+<section>
+  <h2>Need help or want to provide feedback instead?</h2>
+  <ul class="product-list" role="group" aria-label="Help and feedback options">
+    <li role="button" tabindex="0" class="product-item product-link"
+        data-link="https://support.mozilla.org/">
       <div class="icon">
-        <a href="https://support.mozilla.org/">
-          <!-- Material Symbols: Contact Support -->
-          <svg xmlns="http://www.w3.org/2000/svg" height="48" width="48"><path d="m25.75 44-.5-5.5h-2q-7.15 0-12.2-5.05Q6 28.4 6 21.25q0-7.15 5.075-12.2Q16.15 4 23.35 4q3.55 0 6.575 1.275Q32.95 6.55 35.2 8.85q2.25 2.3 3.525 5.425T40 21.1q0 3.3-.975 6.6T36.2 34q-1.85 3-4.5 5.55T25.75 44Zm-2.4-11.15q.8 0 1.35-.55t.55-1.35q0-.8-.55-1.35t-1.35-.55q-.8 0-1.35.55t-.55 1.35q0 .8.55 1.35t1.35.55ZM22 26.05h2.5q0-1.25.425-2.075.425-.825 1.775-2.175 1.35-1.35 1.9-2.475.55-1.125.55-2.425 0-2.25-1.525-3.7-1.525-1.45-4.075-1.45-2.1 0-3.75 1.1t-2.45 3l2.3.95q.55-1.3 1.525-1.925.975-.625 2.225-.625 1.5 0 2.35.725.85.725.85 1.925 0 .95-.55 1.925-.55.975-1.95 2.425-1.35 1.4-1.725 2.25-.375.85-.375 2.55Z"/></svg>
-        </a>
+        <!-- Material Symbols: Contact Support -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="m25.75 44-.5-5.5h-2q-7.15 0-12.2-5.05Q6 28.4 6 21.25q0-7.15 5.075-12.2Q16.15 4 23.35 4q3.55 0 6.575 1.275Q32.95 6.55 35.2 8.85q2.25 2.3 3.525 5.425T40 21.1q0 3.3-.975 6.6T36.2 34q-1.85 3-4.5 5.55T25.75 44Zm-2.4-11.15q.8 0 1.35-.55t.55-1.35q0-.8-.55-1.35t-1.35-.55q-.8 0-1.35.55t-.55 1.35q0 .8.55 1.35t1.35.55ZM22 26.05h2.5q0-1.25.425-2.075.425-.825 1.775-2.175 1.35-1.35 1.9-2.475.55-1.125.55-2.425 0-2.25-1.525-3.7-1.525-1.45-4.075-1.45-2.1 0-3.75 1.1t-2.45 3l2.3.95q.55-1.3 1.525-1.925.975-.625 2.225-.625 1.5 0 2.35.725.85.725.85 1.925 0 .95-.55 1.925-.55.975-1.95 2.425-1.35 1.4-1.725 2.25-.375.85-.375 2.55Z" fill="currentColor"/></svg>
       </div>
       <div class="desc-container">
-        <div class="title">
-          <a href="https://support.mozilla.org/">I need technical support</a>
-        </div>
-        <div class="desc">
-          Technical support for Firefox and other Mozilla products.
-        </div>
+        <h3>Get Help</h3>
+        <p>Explore help articles or ask a question on Mozilla Support</p>
       </div>
-    </div>
-    <div class="option">
+    </li>
+    <li role="button" tabindex="0" class="product-item product-link"
+        data-link="https://webcompat.com/issues/new">
       <div class="icon">
-        <a href="https://webcompat.com/issues/new">
-          <!-- Material Symbols: Language -->
-          <svg xmlns="http://www.w3.org/2000/svg" height="48" width="48"><path d="M24 44q-4.2 0-7.85-1.575Q12.5 40.85 9.8 38.15q-2.7-2.7-4.25-6.375Q4 28.1 4 23.9t1.55-7.825Q7.1 12.45 9.8 9.75t6.35-4.225Q19.8 4 24 4q4.2 0 7.85 1.525Q35.5 7.05 38.2 9.75q2.7 2.7 4.25 6.325Q44 19.7 44 23.9t-1.55 7.875Q40.9 35.45 38.2 38.15t-6.35 4.275Q28.2 44 24 44Zm0-2.9q1.75-1.8 2.925-4.125Q28.1 34.65 28.85 31.45H19.2q.7 3 1.875 5.4Q22.25 39.25 24 41.1Zm-4.25-.6q-1.25-1.9-2.15-4.1-.9-2.2-1.5-4.95H8.6Q10.5 35 13 37.025q2.5 2.025 6.75 3.475Zm8.55-.05q3.6-1.15 6.475-3.45 2.875-2.3 4.625-5.55h-7.45q-.65 2.7-1.525 4.9-.875 2.2-2.125 4.1Zm-20.7-12h7.95q-.15-1.35-.175-2.425-.025-1.075-.025-2.125 0-1.25.05-2.225.05-.975.2-2.175h-8q-.35 1.2-.475 2.15T7 23.9q0 1.3.125 2.325.125 1.025.475 2.225Zm11.05 0H29.4q.2-1.55.25-2.525.05-.975.05-2.025 0-1-.05-1.925T29.4 19.5H18.65q-.2 1.55-.25 2.475-.05.925-.05 1.925 0 1.05.05 2.025.05.975.25 2.525Zm13.75 0h8q.35-1.2.475-2.225Q41 25.2 41 23.9q0-1.3-.125-2.25T40.4 19.5h-7.95q.15 1.75.2 2.675.05.925.05 1.725 0 1.1-.075 2.075-.075.975-.225 2.475Zm-.5-11.95h7.5q-1.65-3.45-4.525-5.75Q32 8.45 28.25 7.5q1.25 1.85 2.125 4t1.525 5Zm-12.7 0h9.7q-.55-2.65-1.85-5.125T24 7q-1.6 1.35-2.7 3.55-1.1 2.2-2.1 5.95Zm-10.6 0h7.55q.55-2.7 1.4-4.825.85-2.125 2.15-4.125-3.75.95-6.55 3.2T8.6 16.5Z"/></svg>
-        </a>
+        <!-- Material Symbols: Language -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M24 44q-4.2 0-7.85-1.575Q12.5 40.85 9.8 38.15q-2.7-2.7-4.25-6.375Q4 28.1 4 23.9t1.55-7.825Q7.1 12.45 9.8 9.75t6.35-4.225Q19.8 4 24 4q4.2 0 7.85 1.525Q35.5 7.05 38.2 9.75q2.7 2.7 4.25 6.325Q44 19.7 44 23.9t-1.55 7.875Q40.9 35.45 38.2 38.15t-6.35 4.275Q28.2 44 24 44Zm0-2.9q1.75-1.8 2.925-4.125Q28.1 34.65 28.85 31.45H19.2q.7 3 1.875 5.4Q22.25 39.25 24 41.1Zm-4.25-.6q-1.25-1.9-2.15-4.1-.9-2.2-1.5-4.95H8.6Q10.5 35 13 37.025q2.5 2.025 6.75 3.475Zm8.55-.05q3.6-1.15 6.475-3.45 2.875-2.3 4.625-5.55h-7.45q-.65 2.7-1.525 4.9-.875 2.2-2.125 4.1Zm-20.7-12h7.95q-.15-1.35-.175-2.425-.025-1.075-.025-2.125 0-1.25.05-2.225.05-.975.2-2.175h-8q-.35 1.2-.475 2.15T7 23.9q0 1.3.125 2.325.125 1.025.475 2.225Zm11.05 0H29.4q.2-1.55.25-2.525.05-.975.05-2.025 0-1-.05-1.925T29.4 19.5H18.65q-.2 1.55-.25 2.475-.05.925-.05 1.925 0 1.05.05 2.025.05.975.25 2.525Zm13.75 0h8q.35-1.2.475-2.225Q41 25.2 41 23.9q0-1.3-.125-2.25T40.4 19.5h-7.95q.15 1.75.2 2.675.05.925.05 1.725 0 1.1-.075 2.075-.075.975-.225 2.475Zm-.5-11.95h7.5q-1.65-3.45-4.525-5.75Q32 8.45 28.25 7.5q1.25 1.85 2.125 4t1.525 5Zm-12.7 0h9.7q-.55-2.65-1.85-5.125T24 7q-1.6 1.35-2.7 3.55-1.1 2.2-2.1 5.95Zm-10.6 0h7.55q.55-2.7 1.4-4.825.85-2.125 2.15-4.125-3.75.95-6.55 3.2T8.6 16.5Z" fill="currentColor"/></svg>
       </div>
       <div class="desc-container">
-        <div class="title">
-          <a href="https://webcompat.com/issues/new">Report an issue with a website that I use</a>
-        </div>
-        <div class="desc">
-          File a web compatibility issue.
-        </div>
+        <h3>Report Website Issue</h3>
+        <p>File an issue for a site that doesn’t work in my browser</p>
       </div>
-    </div>
-    <div class="option">
+    </li>
+    <li role="button" tabindex="0" class="product-item product-link"
+        data-link="https://connect.mozilla.org/">
       <div class="icon">
-        <a href="https://connect.mozilla.org/">
-          <!-- Material Symbols: Lightbulb -->
-          <svg xmlns="http://www.w3.org/2000/svg" height="48" width="48"><path d="M24 44q-1.7 0-2.875-1.175T19.95 39.95h8.1q0 1.7-1.175 2.875T24 44Zm-8.1-7.15v-3h16.2v3Zm.25-6.05q-3.3-2.15-5.225-5.375Q9 22.2 9 18.15q0-6.1 4.45-10.55Q17.9 3.15 24 3.15q6.1 0 10.55 4.45Q39 12.05 39 18.15q0 4.05-1.9 7.275-1.9 3.225-5.25 5.375Z"/></svg>
-        </a>
+        <!-- Material Symbols: Lightbulb -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M24 44q-1.7 0-2.875-1.175T19.95 39.95h8.1q0 1.7-1.175 2.875T24 44Zm-8.1-7.15v-3h16.2v3Zm.25-6.05q-3.3-2.15-5.225-5.375Q9 22.2 9 18.15q0-6.1 4.45-10.55Q17.9 3.15 24 3.15q6.1 0 10.55 4.45Q39 12.05 39 18.15q0 4.05-1.9 7.275-1.9 3.225-5.25 5.375Z" fill="currentColor"/></svg>
       </div>
       <div class="desc-container">
-        <div class="title">
-          <a href="https://connect.mozilla.org/">Provide feedback at Mozilla Connect</a>
-        </div>
-        <div class="desc">
-          Mozilla Connect is a collaborative space for ideas, feedback, and
-          discussions that will help shape future product releases.
-        </div>
+        <h3>Provide Feedback</h3>
+        <p>Share your ideas or join discussions on Mozilla Connect</p>
       </div>
-    </div>
-  </div>
-
-  <h3>None of the above; my [% terms.bug %] is in:</h3>
+    </li>
+  </ul>
+</section>
 [% END %]
 
 [%############################################################################%]
@@ -292,51 +254,46 @@ tabbed browsing or the location bar)
 [%############################################################################%]
 
 [% BLOCK dupes_step %]
-<div id="dupes_step" class="step hidden">
-
-[% INCLUDE page_title %]
-
-<p>
-Product: <b><span id="dupes_product_name">?</span></b>:
-(<a href="javascript:void(0)" onclick="guided.setStep('default')">Change</a>)
-</p>
-
-<table border="0" cellpadding="5" cellspacing="0" id="product_support" class="hidden">
-  <tr>
-    <td>
-      <img src="[% basepath FILTER none %]extensions/GuidedBugEntry/web/images/message.png" width="24" height="24">
-    </td>
-    <td id="product_support_message">&nbsp;</td>
-  </tr>
-</table>
-
-<table border="0" cellpadding="5" cellspacing="0" id="l10n_message">
-  <tr>
-    <td>
-      <img src="[% basepath FILTER none %]extensions/BMO/web/producticons/localization.png" width="24" height="24">
-    </td>
-    <td>
-      <a href="javascript:void(0)" id="l10n_link">
-        <span id="l10n_product"></span> is poorly translated into my native language.
-      </a>
-    </td>
-  </tr>
-</table>
-
-<div id="dupe_form">
-  <p>
-  Please summarize your issue or request in one sentence:
-  </p>
-  <input id="dupes_summary" value="Short summary of issue" spellcheck="true" placeholder="Short summary of issue">
-  <button id="dupes_search">Find similar issues</button>
-  <button id="dupes_continue_button_top" onclick="guided.setStep('bugForm')">My issue is not listed</button>
-</div>
-
-<div id="dupes_list"></div>
-<div id="dupes_continue">
-<button id="dupes_continue_button_bottom" onclick="guided.setStep('bugForm')">My issue is not listed</button>
-</div>
-
+<div id="dupes-step" class="step" hidden>
+  <div id="dupe-header">
+    <div class="product">
+      <div class="name">
+        Product: <strong id="dupe-product-name">?</strong>
+      </div>
+      <button type="button" class="secondary small" aria-label="Change product"
+          data-step="default">Change</button>
+    </div>
+    <ul class="messages">
+      <li id="product-support" class="message" hidden>
+        <span class="icon" aria-hidden="true">contact_support</span>
+        <span id="product-support-message"></span>
+      </li>
+      <li id="l10n-message" class="message" hidden>
+        <span class="icon" aria-hidden="true">translate</span>
+        <a href="#" role="button" id="l10n-link">
+          <span id="l10n-product"></span> is poorly translated into my native language.
+        </a>
+      </li>
+    </ul>
+  </div>
+  <section id="dupe-finder" role="search" aria-label="Duplicate issue finder">
+    <div id="dupe-form">
+      <h2>Summarize your issue or request in one sentence:</h2>
+      <div class="input">
+        <div>
+          <input id="dupe-summary" role="searchbox" spellcheck="true"
+              placeholder="Short summary of issue">
+        </div>
+        <div>
+          <button id="dupe-search">Find similar issues</button>
+        </div>
+      </div>
+    </div>
+    <div id="dupe-list"></div>
+    <div id="dupe-continue">
+      <button id="dupe-continue-button" data-step="bug-form">My issue is not listed</button>
+    </div>
+  </section>
 </div>
 [% END %]
 
@@ -344,252 +301,269 @@ Product: <b><span id="dupes_product_name">?</span></b>:
 [%# bug form step                                                            #%]
 [%############################################################################%]
 
-[% BLOCK bugForm_step %]
-<div id="bugForm_step" class="step hidden">
-
-[% INCLUDE page_title %]
-
-<form method="post" action="[% basepath FILTER none %]post_bug.cgi" enctype="multipart/form-data" onsubmit="return bugForm.validate()">
-<input type="hidden" name="filed_via" value="guided_form">
-<input type="hidden" name="token" value="[% token FILTER html %]">
-<input type="hidden" name="product" id="product" value="">
-<input type="hidden" name="component" id="component" value="">
-<input type="hidden" name="rep_platform" id="rep_platform" value="All">
-<input type="hidden" name="op_sys" id="op_sys" value="All">
-<input type="hidden" name="version" id="version" value="">
-<input type="hidden" name="comment" id="comment" value="">
-<input type="hidden" name="format" value="guided">
-<input type="hidden" name="user_agent" id="user_agent" value="">
-
-<ul>
-<li>Please fill out this form clearly, precisely and in as much detail as you can manage.</li>
-<li>Please report only a single problem at a time.</li>
-<li><a href="[% basepath FILTER none %]page.cgi?id=bug-writing.html" target="_blank" rel="noopener noreferrer">These guidelines</a>
-explain how to write effective [% terms.bug %] reports.</li>
-</ul>
-
-<table id="bugForm" cellspacing="0">
-
-<tr>
-  <td class="label">Summary:</td>
-  <td width="100%" colspan="2">
-    <input name="short_desc" id="short_desc" class="textInput" spellcheck="true">
-  </td>
-  <td valign="top">
-    [% PROCESS help id="summary_help" %]
-    <div id="summary_help" class="help" role="tooltip" hidden>
-    A sentence which summarizes the problem. Please be descriptive and use lots of keywords.<br>
-    <br>
-    <span class="help-bad">Bad example</span>: mail crashed<br>
-    <span class="help-good">Good example</span>: crash if I close the mail window while checking for new POP mail
+[% BLOCK bug_form_step %]
+<div id="bug-form-step" class="step" hidden>
+  <form id="bug-form" method="post" action="[% basepath FILTER none %]post_bug.cgi"
+      enctype="multipart/form-data">
+    <input type="hidden" name="filed_via" value="guided_form">
+    <input type="hidden" name="token" value="[% token FILTER html %]">
+    <input type="hidden" name="product" id="product" value="">
+    <input type="hidden" name="component" id="component" value="">
+    <input type="hidden" name="rep_platform" id="rep_platform" value="All">
+    <input type="hidden" name="op_sys" id="op_sys" value="All">
+    <input type="hidden" name="version" id="version" value="">
+    <input type="hidden" name="comment" id="comment" value="">
+    <input type="hidden" name="format" value="guided">
+    <input type="hidden" name="user_agent" id="user_agent" value="">
+    <ul class="messages">
+      <li>Please fill out this form clearly, precisely and as detailed as possible.</li>
+      <li>Please report only a single problem at a time.</li>
+      <li><a href="[% basepath FILTER none %]page.cgi?id=bug-writing.html"
+          target="_blank">These guidelines</a> explain how to write effective [% terms.bug %]
+          reports.</li>
+      [% IF Param('use_markdown') %]
+      <li><a href="https://guides.github.com/features/mastering-markdown/"
+          target="_blank">Markdown</a> formatting is supported in multiline text fields.</li>
+      [% END %]
+    </ul>
+    <div id="bug-form-inner" role="region" aria-label="Bug entry form">
+      <div class="row">
+        <div class="col main">
+          <section>
+            <header>
+              <h3>
+                <label for="short-desc">Summary</label>
+                <span class="required-star" aria-label="Required">*</span>
+              </h3>
+              [% WRAPPER help id="summary-help" %]
+                <p>
+                  A sentence which summarizes the problem. Please be descriptive and use lots of
+                  keywords.
+                </p>
+                <p>
+                  <span aria-label="Bad example:">❌</span> mail crashed
+                </p>
+                <p>
+                  <span aria-label="Good example">✅</span> crash if I close the mail window while
+                  checking for new POP mail
+                </p>
+              [% END %]
+            </header>
+            <div>
+              <input type="text" name="short_desc" id="short-desc" spellcheck="true"
+                  aria-required="true">
+            </div>
+          </section>
+          <section>
+            <header>
+              <h3>
+                <label for="bug-steps">
+                  What did you do?
+                  <span>(steps to reproduce)</span>
+                </label>
+                <span class="required-star" aria-label="Required">*</span>
+              </h3>
+              [% WRAPPER help id="steps-help" %]
+                <p>
+                  Please be as specific as possible about what you did to cause the problem.
+                  Providing step-by-step instructions would be ideal.
+                </p>
+                <p>
+                  Include any relevant URLs and special setup steps.
+                </p>
+                <p>
+                  <span aria-label="Bad example:">❌</span> Firefox crashed. You suck!
+                </p>
+                <p>
+                  <span aria-label="Good example:">✅</span> After a crash which happened when I was
+                  sorting in the Bookmark Manager, all of my top-level bookmark folders beginning
+                  with the letters Q to Z are no longer present.
+                </p>
+              [% END %]
+            </header>
+            <div>
+              <textarea id="bug-steps" class="description" name="bug_steps" aria-required="true"
+                  data-allow-na="true"></textarea>
+            </div>
+          </section>
+          <section>
+            <header>
+              <h3>
+                <label for="actual">
+                  What happened?
+                  <span>(actual results)</span>
+                </label>
+                <span class="required-star" aria-label="Required">*</span>
+              </h3>
+              [% WRAPPER help id="actual-help" %]
+                <p>
+                  What happened after you performed the steps above?
+                </p>
+              [% END %]
+            </header>
+            <div>
+              <textarea id="actual" class="description" name="actual" aria-required="true"
+                  data-allow-na="true"></textarea>
+            </div>
+          </section>
+          <section>
+            <header>
+              <h3>
+                <label for="expected">
+                  What should have happened?
+                  <span>(expected results)</span>
+                </label>
+                <span class="required-star" aria-label="Required">*</span>
+              </h3>
+              [% WRAPPER help id="expected-help" %]
+                <p>
+                  What should the software have done instead?
+                </p>
+              [% END %]
+            </header>
+            <div>
+              <textarea id="expected" class="description" name="expected" aria-required="true"
+                  data-allow-na="true"></textarea>
+            </div>
+          </section>
+        </div>
+        <div class="col side">
+          <section>
+            <header>
+              <h3>Product</h3>
+            </header>
+            <div id="product-display">
+              <span id="product-label"></span>
+              <button type="button" class="secondary small" aria-label="Change product"
+                  data-step="default">Change</button>
+            </div>
+          </section>
+          <section id="version-section">
+            <header>
+              <h3>
+                <label for="version-select">Version</label>
+                <span class="required-star" aria-label="Required">*</span>
+              </h3>
+              [% WRAPPER help id="product_help" %]
+                <p>
+                  The product’s version you are reporting the issue with.
+                </p>
+              [% END %]
+            </header>
+            <div>
+              <select id="version-select" aria-required="true"></select>
+            </div>
+          </section>
+          <section id="component-section">
+            <header>
+              <h3>
+                <label for="component-select">Component</label>
+                <span class="required-star" aria-label="Required">*</span>
+              </h3>
+              [% WRAPPER help id="component_help" %]
+                <p>
+                  The area where the problem occurs. If you are unsure which component to use,
+                  select the General component.
+                </p>
+              [% END %]
+            </header>
+            <div>
+              <select id="component-select" class="mandatory">
+              </select>
+              <div id="component-description"></div>
+              <div>
+                <a id="list-comp" href="[% basepath FILTER none %]describecomponents.cgi"
+                    target="_blank">See All Components</a>
+              </div>
+            </div>
+          </section>
+          <section>
+            <header>
+              <h3>
+                <label for="bug-type-defect">[% terms.Bug %] Type</label>
+                <span class="required-star" aria-label="Required">*</span>
+              </h3>
+              [% WRAPPER help id="type_help" %]
+                <p>
+                  Please select what kind of [% terms.bug %] you’re about to submit.
+                </p>
+              [% END %]
+            </header>
+            <div>
+              <div role="radiogroup" id="bug-type-radiogroup" class="buttons toggle" tabindex="0"
+                  aria-label="Bug type" aria-required="true">
+                <div class="item">
+                  <input id="bug-type-defect" type="radio" name="bug_type" value="defect">
+                  <label for="bug-type-defect">Defect report</label>
+                </div>
+                <div class="item">
+                  <input id="bug-type-enhancement" type="radio" name="bug_type" value="enhancement">
+                  <label for="bug-type-enhancement">Request for enhancement</label>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section>
+            <header>
+              <h3>Attachment</h3>
+              [% WRAPPER help id="file-help" %]
+                <p>
+                  If a file helps explain the issue better, such as a screenshot, please attach one
+                  here.
+                </p>
+              [% END %]
+            </header>
+            <div id="att-placeholder"></div>
+            <input type="hidden" name="contenttypemethod" value="manual">
+            <input type="hidden" name="contenttypeentry" value="text/plain">
+            <input type="hidden" name="ispatch" value="">
+          </section>
+          <section id="att-desc-section" hidden>
+            <header>
+              <h3>
+                <label for="att-description">File Description</label>
+                <span class="required-star" aria-label="Required">*</span>
+              </h3>
+            </header>
+            <div>
+              <input type="text" name="description" id="att-description" disabled
+                  aria-required="false">
+            </div>
+          </section>
+          <section>
+            <header>
+              <h3>Additional Details</h3>
+            </header>
+            <div>
+              <div class="checkbox">
+                <input type="checkbox" name="include_user_agent" id="include-ua" checked>
+                <label for="include-ua">
+                  Include your browser’s user agent string in the [% terms.bug %] description. This
+                  can be helpful to developers working on your issue.
+                </label>
+              </div>
+              <div class="checkbox" id="firefox-android-row">
+                <input type="checkbox" id="firefox-android" name="firefox_for_android" value="1">
+                <label for="firefox-android">
+                  This is a problem with Firefox on mobile or tablet.
+                </label>
+              </div>
+              <div class="checkbox">
+                <input type="checkbox" name="groups" value="core-security" id="groups">
+                <label for="groups">
+                  This is a <strong>security vulnerability report</strong> that must be handled
+                  confidentially.
+                </label>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <div id="submit-row">
+        <input type="submit" id="submit-button" value="Submit [% terms.Bug %]">
+      </div>
     </div>
-  </td>
-</tr>
-
-<tr>
-  <td class="label">Product:</td>
-  <td id="productTD">
-    <span id="product_label"></span>
-    (<a href="javascript:void(0)" onclick="guided.setStep('default')">Change</a>)
-  </td>
-  <td id="versionTD" class="hidden">
-    <span class="label">Version:
-    <select id="version_select" onchange="bugForm.onVersionChange(this.value)">
-    </select>
-  </td>
-  <td valign="top">
-    [% PROCESS help id="product_help" %]
-    <div id="product_help" class="help" role="tooltip" hidden>
-    The Product and Version you are reporting the issue with.
-    </div>
-</tr>
-
-<tr id="componentTR">
-  <td valign="top">
-    <div class="label">
-    Component:
-    </div>
-    (<a id="list_comp" href="[% basepath FILTER none %]describecomponents.cgi" target="_blank"
-    title="Show a list of all components and descriptions (in a new window)."
-    >List</a>)
-  </td>
-  <td valign="top" colspan="2">
-    <select id="component_select" onchange="bugForm.onComponentChange(this.value)" class="mandatory">
-    </select>
-    <div id="component_description"></div>
-  </td>
-  <td valign="top">
-    [% PROCESS help id="component_help" %]
-    <div id="component_help" class="help" role="tooltip" hidden>
-    The area where the problem occurs.<br>
-    <br>
-    If you are unsure which component to use, select a 'General' component.
-    </div>
-</tr>
-
-<tr>
-  <td class="label" colspan="3">
-    What did you do? (steps to reproduce)
-    <span id="guided-markdown-help">
-      <a href="https://guides.github.com/features/mastering-markdown/" target="_blank">
-        Markdown supported</a>
-    </span>
-  </td>
-  <td valign="top">
-  [% PROCESS help id="steps_help" %]
-  <div id="steps_help" class="help" role="tooltip" hidden>
-  Please be as specific as possible about what you did
-  to cause the problem.  Providing step-by-step instructions
-  would be ideal.<br>
-  <br>
-  Include any relevant URLs and special setup steps.<br>
-  <br>
-  <span class="help-bad">Bad example</span>: Mozilla crashed. You suck!<br>
-  <span class="help-good">Good example</span>: After a crash which happened
-  when I was sorting in the Bookmark Manager, all of my top-level bookmark
-  folders beginning with the letters Q to Z are no longer present.
-  </div>
-  </td>
-</tr>
-<tr>
-  <td colspan="3"><textarea id="bug_steps" name="bug_steps" rows="5"></textarea></td>
-  <td>&nbsp;</td>
-</tr>
-
-<tr>
-  <td class="label" colspan="3">What happened? (actual results)</td>
-  <td valign="top">
-  [% PROCESS help id="actual_help" %]
-  <div id="actual_help" class="help" role="tooltip" hidden>
-  What happened after you performed the steps above?
-  </div>
-</tr>
-<tr>
-  <td colspan="3"><textarea id="actual" name="actual" rows="5"></textarea></td>
-  <td>&nbsp;</td>
-</tr>
-
-<tr>
-  <td class="label" colspan="3">What should have happened? (expected results)</td>
-  <td valign="top">
-  [% PROCESS help id="expected_help" %]
-  <div id="expected_help" class="help" role="tooltip" hidden>
-  What should the software have done instead?
-  </div>
-</tr>
-<tr>
-  <td colspan="3"><textarea id="expected" name="expected" rows="5"></textarea></td>
-  <td>&nbsp;</td>
-</tr>
-
-<tr>
-  <td colspan="3">
-    <table>
-    <tr>
-      <td>
-        <input type="checkbox" name="include_user_agent" id="include_user_agent" checked>
-      </td>
-      <td>
-        Include your browser's user agent string in the [% terms.bug %] description. This can be
-        helpful to developers working on your issue.
-      </td>
-    </tr>
-    </table>
-  </td>
-</tr>
-
-<tr>
-  <td class="label">Attach a file:</td>
-  <td colspan="2">
-    <input type="file" name="data" id="data" size="50" onchange="bugForm.onFileChange()">
-    <input type="hidden" name="contenttypemethod" value="autodetect">
-    <button id="reset_data" onclick="return bugForm.onFileClear()" disabled>Clear</button>
-  </td>
-  <td valign="top">
-  [% PROCESS help id="file_help" %]
-  <div id="file_help" class="help" role="tooltip" hidden>
-  If a file helps explain the issue better, such as a screenshot, please
-  attach one here.
-  </div>
-  </td>
-</tr>
-<tr id="data_description_tr">
-  <td class="label">File Description:</td>
-  <td colspan="2"><input type="text" name="description" id="data_description" class="textInput" disabled></td>
-  <td>&nbsp;</td>
-</tr>
-
-<tr>
-  <td class="label">[% terms.Bug %] Type:</td>
-  <td>
-    <label>
-      <input type="radio" name="bug_type" value="defect" required>
-      This is a defect report.
-    </label>
-  </td>
-  <td>
-    <label>
-      <input type="radio" name="bug_type" value="enhancement" required>
-      This is a request for enhancement.
-    </label>
-  </td>
-  <td>
-    [% PROCESS help id="type_help" %]
-    <div id="type_help" class="help" role="tooltip" hidden>
-      Please select what kind of [% terms.bug %] you’re about to submit.
-    </div>
-  </td>
-</tr>
-
-<tr>
-  <td class="label">Security:</td>
-  <td colspan="2">
-    <table border="0" cellpadding="0" cellspacing="0">
-    <tr>
-      <td>
-        <input type="checkbox" name="groups" value="core-security" id="groups">
-      </td>
-      <td>
-        <label for="groups">Many users could be harmed by this security problem:
-        it should be kept hidden from the public until it is resolved.</label>
-      </td>
-    </tr>
-    </table>
-  </td>
-  <td>&nbsp;</td>
-</tr>
-
-<tr id="details">
-  <td class="label">Additional Details:</td>
-  <td colspan="2">
-    <table border="0" cellpadding="0" cellspacing="0">
-      <tr id="firefox_for_android_row">
-        <td>
-          <input type="checkbox" id="firefox_for_android" name="firefox_for_android" value="1">
-        </td>
-        <td>
-          <label for="firefox_for_android">This is a problem with Firefox on my phone or tablet.</label>
-        </td>
-      </tr>
-    </table>
-  </td>
-  <td>
-    &nbsp;
-  </td>
-</tr>
-
-<tr id="submitTR">
-  <td>&nbsp;</td>
-  <td colspan="2" id="submitTD">
-    <input type="submit" id="submit" value="Submit [% terms.Bug %]">
-  </td>
-  <td>&nbsp;</td>
-</tr>
-
-</table>
-
-</form>
-
+  </form>
 </div>
 [% END %]
 
@@ -598,6 +572,10 @@ explain how to write effective [% terms.bug %] reports.</li>
 [%############################################################################%]
 
 [% BLOCK help %]
-<img src="[% basepath FILTER none %]extensions/GuidedBugEntry/web/images/help.png" width="16" height="16"
-  alt="" class="help_icon" aria-label="Help" aria-describedby="[% id FILTER html %]">
+<button class="iconic help-trigger" aria-label="Help" aria-describedby="[% id FILTER html %]">
+  <span class="icon">help</span>
+</button>
+<div id="[% id FILTER html %]" class="help" role="tooltip" hidden>
+  [% content FILTER none %]
+</div>
 [% END %]

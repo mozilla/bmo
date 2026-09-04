@@ -48,7 +48,9 @@
   <input type="hidden" name="token" value="[% token FILTER html %]">
 
   <table class="attachment_entry">
-    [% PROCESS attachment/createformcontents.html.tmpl %]
+    [% PROCESS attachment/createformcontents.html.tmpl
+      required = 1
+    %]
 
     [%# Additional fields for attachments on existing bugs: %]
     <tr>

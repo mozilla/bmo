@@ -66,22 +66,6 @@
   color: var(--control-foreground-color);
 }
 
-[aria-invalid="true"],
-input:invalid,
-.attention {
-  border-color: var(--invalid-control-border-color) !important;
-}
-
-.input-error {
-  margin: 2px 4px;
-  color: var(--error-message-foreground-color);
-  font-size: var(--font-size-small);
-}
-
-.input-error.hidden {
-  display: none !important;
-}
-
 a.activity-ref {
   color: inherit;
 }

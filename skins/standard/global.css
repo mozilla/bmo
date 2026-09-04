@@ -133,7 +133,8 @@
 
     /** Button */
     --button-border-radius: 4px;
-    --button-padding: 6px 12px;
+    --button-padding-medium: 6px 12px;
+    --button-padding-small: 2px 6px;
     --button-center-padding: 6px;
 
     /** App Header: Dark & Light */
@@ -482,6 +483,38 @@ hr {
     box-sizing: border-box;
     width: 100%;
   }
+
+  table.responsive[hidden],
+  table.responsive:has(td[data-column-label]) thead {
+    display: none;
+  }
+
+  table.responsive:has(td[data-column-label]) tbody {
+    border-top: 1px solid var(--grid-border-color);
+  }
+
+  table.responsive:has(td[data-column-label]) tr {
+    border-bottom: 1px solid var(--grid-border-color);
+    padding: 8px 12px;
+  }
+
+  table.responsive tbody td[data-column-label] {
+    gap: 4px;
+    border: none;
+    padding: 4px 0 4px 90px !important;
+    width: auto;
+    text-align: left;
+  }
+
+  table.responsive tbody td[data-column-label]::before {
+    display: block;
+    float: left;
+    margin-inline: -90px 10px;
+    min-width: 80px;
+    color: var(--secondary-label-color);
+    font-size: var(--font-size-small);
+    content: attr(data-column-label) ':';
+  }
 }
 
 /**
@@ -652,7 +685,7 @@ input[type="submit"] {
   outline: 0;
   border-radius: var(--button-border-radius);
   border: 1px solid var(--secondary-button-border-color);
-  padding: var(--button-padding);
+  padding: var(--button-padding-medium);
   color: var(--secondary-button-foreground-color);
   background-color: var(--secondary-button-background-color);
   text-align: center;
@@ -711,7 +744,7 @@ button.primary,
 button:not([type]),
 button[type="submit"]:not(.secondary),
 input[type="submit"]:not(.secondary) {
-  padding: var(--button-padding);
+  padding: var(--button-padding-medium);
   border-color: var(--primary-button-border-color);
   color: var(--primary-button-foreground-color);
   background-color: var(--primary-button-background-color);
@@ -758,6 +791,12 @@ input[type="button"]:disabled {
 
 button .icon {
   pointer-events: none;
+}
+
+button.small,
+input[type="button"].small,
+input[type="submit"].small {
+  padding: var(--button-padding-small) !important;
 }
 
 input[type="checkbox"],
@@ -854,7 +893,7 @@ input[type="radio"]:checked {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--button-padding);
+  padding: var(--button-padding-medium);
   min-width: 1em;
   min-height: 1em;
   text-align: center;
@@ -1408,7 +1447,7 @@ input[type="radio"]:checked {
 }
 
 #header-login .mini-popup :is(a, form) button {
-  padding: var(--button-padding) !important;
+  padding: var(--button-padding-medium) !important;
 }
 
 #header-login .mini-popup :is(button, input:not([type="checkbox"])) {
@@ -1543,6 +1582,7 @@ input[type="radio"]:checked {
  */
 
 #message-container {
+  flex: none;
   text-align: center;
   line-height: var(--line-height-comfortable);
 }
@@ -1771,6 +1811,17 @@ input.requestee {
   color: var(--error-message-foreground-color);
 }
 
+.error-message {
+  margin: 4px;
+  color: var(--error-message-foreground-color);
+  font-size: var(--font-size-small);
+  font-style: italic;
+}
+
+.error-message.hidden {
+  display: none !important;
+}
+
 .throw_error {
   margin: 16px 0;
   border: 1px solid rgb(var(--accent-color-red-1));
@@ -1779,6 +1830,13 @@ input.requestee {
   background-color: var(--primary-region-background-color);
   font-size: var(--font-size-x-large);
   line-height: var(--line-height-comfortable);
+}
+
+[aria-invalid="true"],
+input:invalid,
+.attention {
+  border-color: var(--invalid-control-border-color) !important;
+  box-shadow: 0 0 4px var(--error-message-foreground-color) !important;
 }
 
 table.standard {
@@ -3103,10 +3161,19 @@ div.bz_comment_text pre {
   cursor: pointer;
 }
 
+.data-table-container thead th .label {
+  vertical-align: 3px;
+}
+
+.data-table-container thead th .icon {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+}
+
 .data-table-container thead th .icon::before {
   font-size: var(--icon-size-small);
   font-family: var(--icon-font-family);
-  vertical-align: -3px;
 }
 
 .data-table-container thead th[aria-sort="none"] .icon::before {

@@ -22,45 +22,9 @@
   #                 Kohei Yoshino <kohei.yoshino@gmail.com>
   #%]
 
-<tr id="att-selector">
+<tr>
   <th class="required"><label for="att-file">File</label>:</th>
-  <td>
-    <input hidden id="att-file" type="file" name="data" size="50">
-    <input id="att-filename" type="hidden" name="filename">
-    <section id="att-dropbox">
-      <header>
-        <span class="icon" aria-hidden="true"></span>
-        <span>
-          <label id="att-browse-label" tabindex="0" role="button">Browse a file</label>,
-          drag &amp; drop it, paste text/link/image below, or
-          <label id="att-capture-label" tabindex="0" role="button">take a screenshot</label>.
-        </span>
-      </header>
-      <div>
-        <textarea hidden id="att-data" name="data_base64" aria-hidden="true"
-                  aria-required="true" aria-invalid="false" aria-errormessage="att-data-error"></textarea>
-        <textarea id="att-textarea" name="attach_text" cols="80" rows="10"
-                  aria-label="Attachment Content" aria-invalid="false" aria-errormessage="att-error-message"
-                  aria-description="Paste text, link or image to be added as an attachment"></textarea>
-        <div hidden id="att-preview">
-          <figure role="img" aria-labelledby="att-preview-name" itemscope itemtype="http://schema.org/MediaObject">
-            <meta itemprop="encodingFormat">
-            <pre itemprop="text"></pre>
-            <img src="" alt="" itemprop="image">
-            <figcaption id="att-preview-name" itemprop="name"></figcaption>
-            <span class="icon" aria-hidden="true"></span>
-          </figure>
-          <span id="att-remove-button" tabindex="0" role="button" aria-label="Remove attachment">
-            <span class="icon" aria-hidden="true"></span>
-          </span>
-        </div>
-      </div>
-    </section>
-    <div id="att-error-message" class="warning" aria-live="assertive"></div>
-    <div id="att-data-error" class="input-error bz_default_hidden" aria-live="assertive">
-      You must select a file or enter text for this attachment.
-    </div>
-  </td>
+  <td id="att-placeholder"[% ' data-required="true"' IF required %]></td>
 </tr>
 <tr>
   <th class="required"><label for="att-description">Description</label>:</th>
@@ -68,7 +32,7 @@
     <em>Describe the attachment briefly.</em><br>
     <input id="att-description" class="required" type="text" name="description" size="60" maxlength="200"
            aria-required="true" aria-invalid="false" aria-errormessage="att-desc-error">
-    <div id="att-desc-error" class="input-error bz_default_hidden" aria-live="assertive">
+    <div id="att-desc-error" class="error-message" aria-live="assertive" hidden>
       You must enter the description for this attachment.
     </div>
   </td>

@@ -263,16 +263,16 @@ function handleWantsAttachment(wants_attachment) {
     else {
         showElementById('attachment_false');
         hideElementById('attachment_true');
-        bz_attachment_form.reset_fields();
+        bzAttachmentForm.resetFields();
     }
 
-    bz_attachment_form.update_requirements(wants_attachment);
+    bzAttachmentForm.updateRequirements(wants_attachment);
 }
 
 /**
  * Expose an `AttachmentForm` instance on global.
  */
-var bz_attachment_form;
+var bzAttachmentForm;
 
 /**
  * Reference or define the Bugzilla app namespace.
@@ -281,75 +281,220 @@ var bz_attachment_form;
 var Bugzilla = Bugzilla || {};
 
 /**
- * Implement the attachment selector functionality that can be used standalone or on the New Bug page. This supports 3
- * input methods: traditional `<input type="file">` field, drag & dropping of a file or text, as well as copy & pasting
- * an image or text.
+ * Implement the attachment selector functionality that can be used standalone or on the New Bug
+ * page. This supports multiple input methods:
+ * - Drag & drop: the user drags a file or text and drops it on the drop target. The drop target is
+ *   highlighted when a file is dragged over it.
+ * - Browse: the user clicks the Browse button and selects a file with the file picker dialog.
+ * - Enter text: the user clicks the Enter Text button and enters text in the textarea.
+ * - Paste: the user clicks the Paste button and pastes an image or text from the clipboard. This is
+ *   supported only in browsers with the Async Clipboard API. In other browsers, the Paste button is
+ *   hidden.
+ * - Capture: the user clicks the Take a Screenshot button and captures a screen, window or browser
+ *   tab. The capture is attached as a PNG image.
  */
-Bugzilla.AttachmentForm = class AttachmentForm {
+Bugzilla.AttachmentSelector = class AttachmentSelector {
   /**
-   * Initialize a new `AttachmentForm` instance.
+   * Initialize a new `AttachmentSelector` instance.
+   * @param {object} params An object of parameters.
+   * @param {HTMLElement} params.$placeholder An element to be enhanced with the attachment selector
+   * functionality.
+   * @param {Record<string, Function>} [params.eventHandlers] An object of event handlers to be
+   * called when the user performs certain actions.
    */
-  constructor() {
-    this.$file = document.querySelector('#att-file');
-    this.$data = document.querySelector('#att-data');
-    this.$filename = document.querySelector('#att-filename');
-    this.$dropbox = document.querySelector('#att-dropbox');
-    this.$browse_label = document.querySelector('#att-browse-label');
-    this.$capture_label = document.querySelector('#att-capture-label');
-    this.$textarea = document.querySelector('#att-textarea');
-    this.$preview = document.querySelector('#att-preview');
-    this.$preview_name = this.$preview.querySelector('[itemprop="name"]');
-    this.$preview_type = this.$preview.querySelector('[itemprop="encodingFormat"]');
-    this.$preview_text = this.$preview.querySelector('[itemprop="text"]');
-    this.$preview_image = this.$preview.querySelector('[itemprop="image"]');
-    this.$remove_button = document.querySelector('#att-remove-button');
-    this.$description = document.querySelector('#att-description');
-    this.$error_message = document.querySelector('#att-error-message');
-    this.$ispatch = document.querySelector('#att-ispatch');
-    this.$hide_preview = document.querySelector('#att-hide-preview');
-    this.$type_outer = document.querySelector('#att-type-outer');
-    this.$type_list = document.querySelector('#att-type-list');
-    this.$type_manual = document.querySelector('#att-type-manual');
-    this.$type_select = document.querySelector('#att-type-select');
-    this.$type_input = document.querySelector('#att-type-input');
-    this.$isprivate = document.querySelector('#isprivate');
-    this.$takebug = document.querySelector('#takebug');
+  constructor({ $placeholder, eventHandlers = {} }) {
+    this.$placeholder = $placeholder;
+    this.eventHandlers = eventHandlers;
 
-    // Add event listeners
-    this.$file.addEventListener('change', () => this.file_onchange());
-    this.$dropbox.addEventListener('dragover', event => this.dropbox_ondragover(event));
-    this.$dropbox.addEventListener('dragleave', () => this.dropbox_ondragleave());
-    this.$dropbox.addEventListener('dragend', () => this.dropbox_ondragend());
-    this.$dropbox.addEventListener('drop', event => this.dropbox_ondrop(event));
-    this.$browse_label.addEventListener('click', () => this.$file.click());
-    this.$capture_label.addEventListener('click', () => this.capture_onclick());
-    this.$textarea.addEventListener('input', () => this.textarea_oninput());
-    this.$textarea.addEventListener('paste', event => this.textarea_onpaste(event));
-    this.$remove_button.addEventListener('click', () => this.remove_button_onclick());
-    this.$description.addEventListener('input', () => this.description_oninput());
-    this.$description.addEventListener('change', () => this.description_onchange());
-    this.$ispatch.addEventListener('change', () => this.ispatch_onchange());
-    this.$hide_preview.addEventListener('change', () => this.hide_preview_onchange());
-    this.$type_select.addEventListener('change', () => this.type_select_onchange());
-    this.$type_input.addEventListener('change', () => this.type_input_onchange());
+    this.#renderUI();
+    this.#cacheElements();
+    this.#setupEventListeners();
+    this.#setupFileReaders();
+    this.#initializeView();
+    this.#checkBrowserSupport();
+  }
 
-    // Prepare the file reader
-    this.data_reader = new FileReader();
-    this.text_reader = new FileReader();
-    this.data_reader.addEventListener('load', () => this.data_reader_onload());
-    this.text_reader.addEventListener('load', () => this.text_reader_onload());
+  /**
+   * Render the attachment selector UI template, detecting device type to conditionally show
+   * drag-and-drop hint.
+   */
+  #renderUI() {
+    // Assume a fine pointer (e.g., a mouse) means a desktop device, and a coarse pointer means a
+    // mobile device. Don’t show the “Drag & drop” hint on mobile because it’s not a common input
+    // method on that platform.
+    const isDesktop = window.matchMedia('(pointer: fine)').matches;
 
-    // Initialize the view
-    this.enable_keyboard_access();
-    this.reset_fields();
+    this.$placeholder.innerHTML = `
+      <div id="att-selector">
+        <div id="att-dropbox">
+          <div class="actions">
+            <span class="icon" aria-hidden="true"></span>
+            ${isDesktop ? `<span>Drag &amp; drop a file here, or</span>` : ''}
+           <span class="button-group">
+              <button type="button" id="att-browse-button">Browse File</button>
+              <button type="button" id="att-paste-button">Paste Text or Image</button>
+              <button type="button" id="att-enter-button">Enter Text</button>
+              <button type="button" id="att-capture-button">Take Screenshot</button>
+            </span>
+          </div>
+          <input hidden id="att-file" type="file">
+          <div id="att-item">
+            <div hidden id="att-editor">
+              <textarea id="att-textarea" name="attach_text" cols="80" rows="8"
+                  aria-label="Attachment Content" aria-invalid="false"
+                  aria-errormessage="att-error-message"
+                  aria-description="Paste text, link or image to be added as an attachment"></textarea>
+              <span id="att-text-remove-button" class="att-remove-button" tabindex="0" role="button"
+                  aria-label="Remove attachment">
+                <span class="icon" aria-hidden="true"></span>
+              </span>
+            </div>
+            <div hidden id="att-preview">
+              <input id="att-filename" type="hidden" name="filename">
+              <textarea hidden id="att-data" name="data_base64" aria-hidden="true"
+                  aria-invalid="false" aria-errormessage="att-data-error"></textarea>
+              <figure role="img" aria-labelledby="att-preview-name" itemscope
+                  itemtype="http://schema.org/MediaObject">
+                <meta itemprop="encodingFormat">
+                <pre itemprop="text"></pre>
+                <img src="" alt="" itemprop="image">
+                <figcaption class="att-preview-name" itemprop="name"></figcaption>
+                <span class="icon" aria-hidden="true"></span>
+              </figure>
+              <span id="att-file-remove-button" class="att-remove-button" tabindex="0" role="button"
+                  aria-label="Remove attachment">
+                <span class="icon" aria-hidden="true"></span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div id="att-error-message" class="warning" aria-live="assertive"></div>
+      </div>
+    `;
+  }
+
+  /**
+   * Cache references to DOM elements for quick access.
+   */
+  #cacheElements() {
+    this.$file = this.$placeholder.querySelector('#att-file');
+    this.$data = this.$placeholder.querySelector('#att-data');
+    this.$filename = this.$placeholder.querySelector('#att-filename');
+    this.$dropbox = this.$placeholder.querySelector('#att-dropbox');
+    this.$selectorActions = this.$placeholder.querySelector('#att-selector .actions');
+    this.$browseButton = this.$placeholder.querySelector('#att-browse-button');
+    this.$enterButton = this.$placeholder.querySelector('#att-enter-button');
+    this.$pasteButton = this.$placeholder.querySelector('#att-paste-button');
+    this.$captureButton = this.$placeholder.querySelector('#att-capture-button');
+    this.$editor = this.$placeholder.querySelector('#att-editor');
+    this.$textarea = this.$editor.querySelector('#att-textarea');
+    this.$preview = this.$placeholder.querySelector('#att-preview');
+    this.$previewName = this.$preview.querySelector('[itemprop="name"]');
+    this.$previewType = this.$preview.querySelector('[itemprop="encodingFormat"]');
+    this.$previewText = this.$preview.querySelector('[itemprop="text"]');
+    this.$previewImage = this.$preview.querySelector('[itemprop="image"]');
+    this.$textRemoveButton = this.$placeholder.querySelector('#att-text-remove-button');
+    this.$fileRemoveButton = this.$placeholder.querySelector('#att-file-remove-button');
+    this.$errorMessage = this.$placeholder.querySelector('#att-error-message');
+  }
+
+  /**
+   * Register all event listeners for form submission, file input, drag-and-drop, buttons, and text
+   * input.
+   */
+  #setupEventListeners() {
+    this.$placeholder.closest('form').addEventListener('submit', (event) => this.validate(event));
+    this.$placeholder.closest('form').querySelector('[type="submit"]')
+      ?.addEventListener('click', (event) => this.validate(event));
+    this.$file.addEventListener('change', () => this.fileOnChange());
+    this.$dropbox.addEventListener('dragover', (event) => this.dropboxOnDragOver(event));
+    this.$dropbox.addEventListener('dragleave', () => this.dropboxOnDragLeave());
+    this.$dropbox.addEventListener('dragend', () => this.dropboxOnDragEnd());
+    this.$dropbox.addEventListener('drop', (event) => this.dropboxOnDrop(event));
+    this.$browseButton.addEventListener('click', () => this.$file.click());
+    this.$enterButton.addEventListener('click', () => this.enterButtonOnClick());
+    this.$pasteButton.addEventListener('click', () => this.pasteButtonOnClick());
+    this.$captureButton.addEventListener('click', () => this.captureButtonOnClick());
+    this.$textarea.addEventListener('input', () => this.textareaOnInput());
+    this.$textRemoveButton.addEventListener('click', () => this.removeButtonOnClick());
+    this.$fileRemoveButton.addEventListener('click', () => this.removeButtonOnClick());
+  }
+
+  /**
+   * Initialize FileReader instances for reading file data and text content.
+   */
+  #setupFileReaders() {
+    this.dataReader = new FileReader();
+    this.textReader = new FileReader();
+    this.dataReader.addEventListener('load', () => this.dataReaderOnLoad());
+    this.textReader.addEventListener('load', () => this.textReaderOnLoad());
+  }
+
+  /**
+   * Initialize the UI state and prepare the form for use.
+   */
+  #initializeView() {
+    this.enableKeyboardAccess();
+    this.resetFields();
+  }
+
+  /**
+   * Hide action buttons if the required browser APIs are not supported.
+   */
+  #checkBrowserSupport() {
+    // Hide the Paste button if the Clipboard API is not available
+    this.$pasteButton.hidden = typeof navigator.clipboard?.read !== 'function';
+    // Hide the Capture button if the Screen Capture API is not available
+    this.$captureButton.hidden = typeof navigator.mediaDevices?.getDisplayMedia !== 'function';
+  }
+
+  /**
+   * Whether the attachment is required.
+   * @type {boolean}
+   */
+  get required() {
+    return this.$placeholder.dataset.required === 'true';
+  }
+
+  /**
+   * Show or hide the header with the action buttons.
+   * @param {boolean} value `true` to show the header, `false` to hide it.
+   */
+  set actionsDisplayed(value) {
+    this.$selectorActions.hidden = !value;
+  }
+
+  /**
+   * Show or hide the editor.
+   * @param {boolean} value `true` to show the editor, `false` to hide it.
+   */
+  set editorDisplayed(value) {
+    this.$editor.hidden = !value;
+  }
+
+  /**
+   * Show or hide the preview.
+   * @param {boolean} value `true` to show the preview, `false` to hide it.
+   */
+  set previewDisplayed(value) {
+    this.$preview.hidden = !value;
+  }
+
+  /**
+   * Dispatch a custom event to the registered event handlers.
+   * @param {string} name The name of the event.
+   * @param {Record<string, any>} [detail] Additional data to pass to the event handler.
+   */
+  dispatchEvent(name, detail = {}) {
+    this.eventHandlers[name]?.(detail);
   }
 
   /**
    * Enable keyboard access on the buttons. Treat the Enter keypress as a click.
    */
-  enable_keyboard_access() {
-    document.querySelectorAll('#att-selector [role="button"]').forEach($button => {
-      $button.addEventListener('keypress', event => {
+  enableKeyboardAccess() {
+    document.querySelectorAll('#att-selector [role="button"]').forEach(($button) => {
+      $button.addEventListener('keypress', (event) => {
         if (!event.isComposing && event.key === 'Enter') {
           event.target.click();
         }
@@ -360,147 +505,110 @@ Bugzilla.AttachmentForm = class AttachmentForm {
   /**
    * Reset all the input fields to the initial state, and remove the preview and message.
    */
-  reset_fields() {
-    this.description_override = false;
-    this.$file.value = this.$data.value = this.$filename.value = this.$type_input.value = this.$description.value = '';
-    this.$type_list.checked = this.$type_select.options[0].selected = true;
+  resetFields() {
+    this.$file.value = '';
+    this.$data.value = '';
+    this.$filename.value = '';
 
-    if (this.$isprivate) {
-      this.$isprivate.checked = this.$isprivate.disabled = false;
-    }
-
-    if (this.$takebug) {
-      this.$takebug.checked = this.$takebug.disabled = false;
-    }
-
-    this.clear_preview();
-    this.clear_error();
-    this.update_requirements();
-    this.update_text();
-    this.update_ispatch();
+    this.clearPreview();
+    this.clearError();
+    this.updateText();
   }
 
   /**
-   * Update the `required` property on the Base64 data and Description fields.
-   * @param {Boolean} [required=true] `true` if these fields are required, `false` otherwise.
-   */
-  update_requirements(required = true) {
-    this.$data.required = this.$description.required = required;
-    this.update_validation();
-  }
-
-  /**
-   * Update the custom validation message on the Base64 data field depending on the requirement and value.
-   */
-  update_validation() {
-    this.$data.setCustomValidity(this.$data.required && !this.$data.value ? 'Please select a file or enter text.' : '');
-
-    // In Firefox, the message won't be displayed once the field becomes valid then becomes invalid again. This is a
-    // workaround for the issue.
-    this.$data.hidden = false;
-    this.$data.hidden = true;
-  }
-
-  /**
-   * Process a user-selected file for upload. Read the content if it's been transferred with a paste or drag operation.
-   * Update the Description, Content Type, etc. and show the preview.
+   * Process a file for upload regardless of how it was provided (file picker, drag-and-drop, paste
+   * or screen capture). Read the file content, update the filename field, and show the preview.
    * @param {File} file A file to be read.
-   * @param {Boolean} [transferred=true] `true` if the source is `DataTransfer`, `false` if it's been selected via
-   * `<input type="file">`.
    */
-  process_file(file, transferred = true) {
+  processFile(file) {
     // Detect patches that should have the `text/plain` MIME type
-    const is_patch = !!file.name.match(/\.(?:diff|patch)$/) || !!file.type.match(/^text\/x-(?:diff|patch)$/);
-    // Detect Markdown files that should have `text/plain` instead of `text/markdown` due to Firefox Bug 1421032
-    const is_markdown = !!file.name.match(/\.(?:md|mkdn?|mdown|markdown)$/);
+    const isPatch =
+      !!file.name.match(/\.(?:diff|patch)$/) || !!file.type.match(/^text\/x-(?:diff|patch)$/);
+    // Detect Markdown files that should have `text/plain` instead of `text/markdown` due to Firefox
+    // Bug 1421032
+    const isMarkdown = !!file.name.match(/\.(?:md|mkdn?|mdown|markdown)$/);
     // Detect common source files that may have no MIME type or `application/*` MIME type
-    const is_source = !!file.name.match(/\.(?:cpp|es|h|js|json|rs|rst|sh|toml|ts|tsx|xml|yaml|yml)$/);
+    const isSource = !!file.name.match(
+      /\.(?:cpp|es|h|js|json|rs|rst|sh|toml|ts|tsx|xml|yaml|yml)$/,
+    );
     // Detect any plaintext file
-    const is_text = file.type.startsWith('text/') || is_patch || is_markdown || is_source;
-    // Reassign the MIME type: use `text/plain` for most text files and `application/octet-stream` as a fallback
-    const type = (is_patch || is_markdown || (is_source && !file.type)) ?
-      'text/plain' : (file.type || 'application/octet-stream');
+    const isText = file.type.startsWith('text/') || isPatch || isMarkdown || isSource;
+    // Reassign the MIME type: use `text/plain` for most text files and `application/octet-stream`
+    // as a fallback
+    const type =
+      isPatch || isMarkdown || (isSource && !file.type)
+        ? 'text/plain'
+        : file.type || 'application/octet-stream';
 
-    if (this.check_file_size(file.size)) {
-      this.$data.required = transferred;
-
-      if (transferred) {
-        this.data_reader.readAsDataURL(file);
-        this.$file.value = '';
-        this.$filename.value = file.name.replace(/\s/g, '-');
-      } else {
-        this.$data.value = this.$filename.value = '';
-      }
+    if (this.checkFileSize(file.size)) {
+      this.dataReader.readAsDataURL(file);
+      this.$file.value = '';
+      this.$filename.value = file.name.replace(/\s/g, '-');
     } else {
-      this.$data.required = true;
-      this.$file.value = this.$data.value = this.$filename.value = '';
+      this.$file.value = '';
+      this.$data.value = '';
+      this.$filename.value = '';
     }
 
-    this.update_validation();
-    this.show_preview(file, is_text);
-    this.update_text();
-    this.update_content_type(type);
-    this.update_ispatch(is_patch);
-
-    if (!this.description_override) {
-      this.$description.value = file.name;
-    }
-
-    this.$description.select();
-    this.$description.focus();
+    this.showPreview(file, isText);
+    this.updateText();
+    this.dispatchEvent('AttachmentProcessed', { file, type, isPatch });
   }
 
   /**
-   * Check the current file size and show an error message if it exceeds the application-defined limit.
-   * @param {Number} size A file size in bytes.
-   * @returns {Boolean} `true` if the file is less than the maximum allowed size, `false` otherwise.
+   * Check the current file size and show an error message if it exceeds the application-defined
+   * limit.
+   * @param {number} size A file size in bytes.
+   * @returns {boolean} `true` if the file is less than the maximum allowed size, `false` otherwise.
    */
-  check_file_size(size) {
-    const file_size = size / 1024; // Convert to KB
-    const max_size = BUGZILLA.param.maxattachmentsize; // Defined in KB
-    const invalid = file_size > max_size;
-    const message = invalid ?
-      `This file (<strong>${(file_size / 1024).toFixed(1)} MB</strong>) is larger than the maximum allowed size ` +
-      `(<strong>${(max_size / 1024).toFixed(1)} MB</strong>). Please consider uploading it to an online file storage ` +
-      'and sharing the link in a bug comment instead.' : '';
-    const message_short = invalid ? 'File too large' : '';
+  checkFileSize(size) {
+    const fileSize = size / 1024; // Convert to KB
+    const maxSize = BUGZILLA.param.maxattachmentsize; // Defined in KB
+    const invalid = fileSize > maxSize;
+    const message = invalid
+      ? `This file (<strong>${(fileSize / 1024).toFixed(1)} MB</strong>) is larger than the ` +
+        `maximum allowed size (<strong>${(maxSize / 1024).toFixed(1)} MB</strong>). Please ` +
+        `consider uploading it to an online file storage and sharing the link in a ` +
+        `${BUGZILLA.string.bug} comment instead.`
+      : '';
+    const messageShort = invalid ? 'File too large' : '';
 
-    this.$error_message.innerHTML = message;
-    this.$textarea.setCustomValidity(message_short);
-    this.$textarea.setAttribute('aria-invalid', invalid);
+    this.$errorMessage.hidden = !invalid;
+    this.$errorMessage.innerHTML = message;
     this.$dropbox.classList.toggle('invalid', invalid);
 
     return !invalid;
   }
 
   /**
-   * Called whenever a file's data URL is read by `FileReader`. Embed the Base64-encoded content for upload.
+   * Called whenever a file’s data URL is read by `FileReader`. Embed the Base64-encoded content for
+   * upload.
    */
-  data_reader_onload() {
-    this.$data.value = this.data_reader.result.split(',')[1];
-    this.update_validation();
+  dataReaderOnLoad() {
+    this.$data.value = this.dataReader.result.split(',')[1];
   }
 
   /**
-   * Called whenever a file's text content is read by `FileReader`. Show the preview of the first 10 lines.
+   * Called whenever a file’s text content is read by `FileReader`. Show the preview of the first 10
+   * lines.
    */
-  text_reader_onload() {
-    this.$preview_text.textContent = this.text_reader.result.split(/\r\n|\r|\n/, 10).join('\n');
+  textReaderOnLoad() {
+    this.$previewText.textContent = this.textReader.result.split(/\r\n|\r|\n/, 10).join('\n');
   }
 
   /**
    * Called whenever a file is selected by the user by using the file picker. Prepare for upload.
    */
-  file_onchange() {
-    this.process_file(this.$file.files[0], false);
+  fileOnChange() {
+    this.processFile(this.$file.files[0]);
   }
 
   /**
-   * Called whenever a file is being dragged on the drop target. Allow the `copy` drop effect, and set a class name on
-   * the drop target for styling.
+   * Called whenever a file is being dragged on the drop target. Allow the `copy` drop effect, and
+   * set a class name on the drop target for styling.
    * @param {DragEvent} event A `dragover` event.
    */
-  dropbox_ondragover(event) {
+  dropboxOnDragOver(event) {
     event.preventDefault();
     event.dataTransfer.dropEffect = event.dataTransfer.effectAllowed = 'copy';
 
@@ -512,280 +620,627 @@ Bugzilla.AttachmentForm = class AttachmentForm {
   /**
    * Called whenever a dragged file leaves the drop target. Reset the styling.
    */
-  dropbox_ondragleave() {
+  dropboxOnDragLeave() {
     this.$dropbox.classList.remove('dragover');
   }
 
   /**
    * Called whenever a drag operation is being ended. Reset the styling.
    */
-  dropbox_ondragend() {
+  dropboxOnDragEnd() {
     this.$dropbox.classList.remove('dragover');
   }
 
   /**
-   * Called whenever a file or text is dropped on the drop target. If it's a file, read the content. If it's plaintext,
-   * fill in the textarea.
+   * Called whenever a file or text is dropped on the drop target. If it’s a file, read the content.
+   * If it’s plaintext, fill in the textarea.
    * @param {DragEvent} event A `drop` event.
    */
-  dropbox_ondrop(event) {
+  dropboxOnDrop(event) {
     event.preventDefault();
 
     const files = event.dataTransfer.files;
     const text = event.dataTransfer.getData('text');
 
     if (files.length > 0) {
-      this.process_file(files[0]);
+      this.processFile(files[0]);
+      this.editorDisplayed = false;
+      this.previewDisplayed = true;
     } else if (text) {
-      this.clear_preview();
-      this.clear_error();
-      this.update_text(text);
+      this.clearPreview();
+      this.clearError();
+      this.updateText(text);
+      this.actionsDisplayed = false;
+      this.editorDisplayed = true;
+      this.previewDisplayed = false;
     }
 
     this.$dropbox.classList.remove('dragover');
   }
 
   /**
-   * Insert text to the textarea, and show it if it's not empty.
-   * @param {String} [text=''] Text to be inserted.
+   * Insert text to the textarea, and show it if it’s not empty.
+   * @param {string} [text] Text to be inserted.
    */
-  update_text(text = '') {
+  updateText(text = '') {
     this.$textarea.value = text;
-    this.textarea_oninput();
+    this.textareaOnInput();
 
-    if (text) {
+    if (text.trim()) {
       this.$textarea.hidden = false;
+      this.$dropbox.classList.remove('invalid');
+      this.$errorMessage.hidden = true;
     }
   }
 
   /**
-   * Called whenever the Take a Screenshot button is clicked. Capture a screen, window or browser tab if the Screen
-   * Capture API is supported, then attach it as a PNG image.
+   * Called whenever the Enter Text button is clicked. Show the textarea for text input.
+   */
+  enterButtonOnClick() {
+    this.actionsDisplayed = false;
+    this.editorDisplayed = true;
+    this.$textarea.focus();
+  }
+
+  /**
+   * Called whenever the Paste button is clicked. Read the clipboard content and process it. This
+   * supports pasting of regular images, links and text.
+   */
+  async pasteButtonOnClick() {
+    try {
+      const items = [...(await navigator.clipboard.read())];
+      let pasted = false;
+
+      // Process only the first item until multiple items are supported
+      items.length = 1;
+
+      for (const item of items) {
+        if (item.types.includes('image/png')) {
+          const blob = await item.getType('image/png');
+          const file = new File([blob], 'pasted-image.png', { type: 'image/png' });
+
+          this.processFile(file);
+          this.editorDisplayed = false;
+          this.previewDisplayed = true;
+          pasted = true;
+        } else if (item.types.includes('text/plain')) {
+          const blob = await item.getType('text/plain');
+          const text = await blob.text();
+
+          this.updateText(text);
+          this.editorDisplayed = true;
+          this.previewDisplayed = false;
+          pasted = true;
+        }
+      }
+
+      if (pasted) {
+        this.actionsDisplayed = false;
+        this.dispatchEvent('AttachmentPasted', { items });
+      } else {
+        alert('No image or text data found in the clipboard.');
+      }
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  /**
+   * Called whenever the Take a Screenshot button is clicked. Capture a screen, window or browser
+   * tab if the Screen Capture API is supported, then attach it as a PNG image.
    * @see https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API
    */
-  capture_onclick() {
-    if (typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
-      alert('This function requires the most recent browser version such as Firefox 66 or Chrome 72.');
-      return;
-    }
-
+  async captureButtonOnClick() {
     const $video = document.createElement('video');
     const $canvas = document.createElement('canvas');
 
-    navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'window' } }).then(stream => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'window' },
+      });
+
       // Render a captured screenshot on `<video>`
       $video.srcObject = stream;
 
-      return $video.play();
-    }).then(() => {
-      const width = $canvas.width = $video.videoWidth;
-      const height = $canvas.height = $video.videoHeight;
+      await $video.play();
+
+      const width = ($canvas.width = $video.videoWidth);
+      const height = ($canvas.height = $video.videoHeight);
 
       // Draw a video frame on `<canvas>`
       $canvas.getContext('2d').drawImage($video, 0, 0, width, height);
 
       // Clean up `<video>`
       $video.pause();
-      $video.srcObject.getTracks().forEach(track => track.stop());
+      $video.srcObject.getTracks().forEach((track) => track.stop());
       $video.srcObject = null;
 
       // Convert to PNG
-      return new Promise(resolve => $canvas.toBlob(blob => resolve(blob)));
-    }).then(blob => {
-      const [date, time] = (new Date()).toISOString().match(/^(.+)T(.+)\./).splice(1);
+      const blob = await new Promise((resolve) => $canvas.toBlob((blob) => resolve(blob)));
+      const [date, time] = new Date().toISOString().match(/^(.+)T(.+)\./).slice(1);
       const file = new File([blob], `Screenshot on ${date} at ${time}.png`, { type: 'image/png' });
 
-      this.process_file(file);
-      this.update_ispatch(false, true);
-    }).catch(() => {
+      this.processFile(file);
+      this.dispatchEvent('AttachmentCaptured', { file });
+    } catch {
       alert('Unable to capture a screenshot.');
-    });
+    }
   }
 
   /**
-   * Called whenever the content of the textarea is updated. Update the Content Type, `required` property, etc.
+   * Called whenever the content of the textarea is updated. Dispatches the `AttachmentTextUpdated`
+   * event with the current text content, and whether it's detected as a patch or GitHub PR link.
    */
-  textarea_oninput() {
+  textareaOnInput() {
     const text = this.$textarea.value.trim();
-    const has_text = !!text;
-    const is_patch = !!text.match(/^(?:diff|---)\s/);
-    const is_ghpr = !!text.match(/^https:\/\/github\.com\/[\w\-]+\/[\w\-]+\/pull\/\d+\/?$/);
+    const hasText = !!text;
+    const isPatch = !!text.match(/^(?:diff|---)\s/);
+    const isGhpr = !!text.match(/^https:\/\/github\.com\/[\w\-]+\/[\w\-]+\/pull\/\d+\/?$/);
 
-    if (has_text) {
-      this.$file.value = this.$data.value = this.$filename.value = '';
-      this.update_content_type('text/plain');
+    if (hasText) {
+      this.$file.value = '';
+      this.$data.value = '';
     }
 
-    if (!this.description_override) {
-      this.$description.value = is_patch ? 'patch' : is_ghpr ? 'GitHub Pull Request' : '';
-    }
-
-    this.$data.required = !has_text && !this.$file.value;
-    this.update_validation();
-    this.$type_input.value = is_ghpr ? 'text/x-github-pull-request' : '';
-    this.update_ispatch(is_patch);
+    this.dispatchEvent('AttachmentTextUpdated', { text, hasText, isPatch, isGhpr });
   }
 
   /**
-   * Called whenever a string or data is pasted from clipboard to the textarea. If it contains a regular image, read the
-   * content for upload.
-   * @param {ClipboardEvent} event A `paste` event.
-   */
-  textarea_onpaste(event) {
-    const image = [...event.clipboardData.items].find(item => item.type.match(/^image\/(?!vnd)/));
-
-    if (image) {
-      this.process_file(image.getAsFile());
-      this.update_ispatch(false, true);
-    }
-  }
-
-  /**
-   * Show the preview of a user-selected file. Display a thumbnail if it's a regular image (PNG, GIF, JPEG, etc.) or
-   * small plaintext file. Don't show the preview of SVG image because it can be a crash test.
+   * Show the preview of a user-selected file. Display a thumbnail if it’s a regular image (PNG,
+   * GIF, JPEG, etc.) or small plaintext file. Don’t show the preview of SVG image because it can be
+   * a crash test.
    * @param {File} file A file to be previewed.
-   * @param {Boolean} [is_text=false] `true` if the file is a plaintext file, `false` otherwise.
+   * @param {boolean} [isText] `true` if the file is a plaintext file, `false` otherwise.
    */
-  show_preview(file, is_text = false) {
-    this.$preview_name.textContent = file.name;
-    this.$preview_type.content = file.type;
-    this.$preview_text.textContent = '';
-    this.$preview_image.src = file.type.match(/^image\/(?!vnd|svg)/) ? URL.createObjectURL(file) : '';
-    this.$preview.hidden = false;
+  showPreview(file, isText = false) {
+    this.$previewName.textContent = file.name;
+    this.$previewType.content = file.type;
+    this.$previewText.textContent = '';
+    this.$previewImage.src = file.type.match(/^image\/(?!vnd|svg)/)
+      ? URL.createObjectURL(file)
+      : '';
+    this.actionsDisplayed = false;
+    this.previewDisplayed = true;
 
-    if (is_text && file.size < 500000) {
-      this.text_reader.readAsText(file);
+    if (isText && file.size < 500000) {
+      this.textReader.readAsText(file);
     }
   }
 
   /**
    * Remove the preview.
    */
-  clear_preview() {
-    URL.revokeObjectURL(this.$preview_image.src);
+  clearPreview() {
+    URL.revokeObjectURL(this.$previewImage.src);
 
-    this.$preview_name.textContent = this.$preview_type.content = '';
-    this.$preview_text.textContent = this.$preview_image.src = '';
-    this.$preview.hidden = true;
+    this.$previewName.textContent = this.$previewType.content = '';
+    this.$previewText.textContent = this.$previewImage.src = '';
+    this.previewDisplayed = false;
   }
 
   /**
-   * Called whenever the Remove buttons is clicked by the user. Reset all the fields and focus the textarea for further
-   * input.
+   * Called whenever the Remove button is clicked by the user. Reset all the fields and show the
+   * action buttons.
    */
-  remove_button_onclick() {
-    this.reset_fields();
+  removeButtonOnClick() {
+    this.resetFields();
 
-    this.$textarea.hidden = false;
-    this.$textarea.focus();
+    this.actionsDisplayed = true;
+    this.editorDisplayed = false;
+    this.previewDisplayed = false;
   }
 
   /**
    * Remove the error message if any.
    */
-  clear_error() {
-    this.check_file_size(0);
+  clearError() {
+    this.checkFileSize(0);
+  }
+
+  /**
+   * Update the required state of the form.
+   * @param {boolean} [required] `true` if an attachment is required, `false` otherwise.
+   */
+  updateRequirements(required = true) {
+    if (!required) {
+      this.$dropbox.classList.remove('invalid');
+      this.$errorMessage.hidden = true;
+    }
+  }
+
+  /**
+   * Update the validation state of the form. Show an error message if the attachment is required
+   * but not provided, and highlight the drop target. This is called on form submission to prevent
+   * the form from being submitted with invalid input.
+   * @param {MouseEvent | SubmitEvent} event A `submit` event from the form or a `click` event from
+   * the submit button.
+   * @returns {boolean} `true` if the form is valid and can be submitted, `false` otherwise.
+   */
+  validate(event) {
+    const invalid =
+      this.required &&
+      !this.$data.value.trim() &&
+      !this.$file.length &&
+      !this.$textarea.value.trim();
+
+    this.$errorMessage.textContent = invalid ? 'You must provide an attachment.' : '';
+    this.$errorMessage.hidden = !invalid;
+    this.$dropbox.classList.toggle('invalid', invalid);
+
+    if (invalid) {
+      event.preventDefault();
+    }
+
+    return !invalid;
+  }
+};
+
+/**
+ * Implement the attachment form functionality on the New Bug and New Attachment pages. This
+ * includes the attachment selector implemented in `AttachmentSelector`, as well as other related
+ * fields such as Description, Content Type, Patch checkbox, etc. that are updated based on the user
+ * input and the selected file.
+ */
+Bugzilla.AttachmentForm = class AttachmentForm {
+  /**
+   * Initialize a new `AttachmentForm` instance.
+   */
+  constructor() {
+    this.#cacheFormElements();
+    this.#setupFormValidation();
+    this.#setupFieldEventListeners();
+    this.#initializeAttachmentSelector();
+    this.updateRequirements(this.required);
+  }
+
+  /**
+   * Cache references to all DOM elements used by this form.
+   */
+  #cacheFormElements() {
+    this.$placeholder = document.querySelector('#att-placeholder');
+    this.$description = document.querySelector('#att-description');
+    this.$descError = document.querySelector('#att-desc-error');
+    this.$isPatch = document.querySelector('#att-ispatch');
+    this.$hidePreview = document.querySelector('#att-hide-preview');
+    this.$typeOuter = document.querySelector('#att-type-outer');
+    this.$typeList = document.querySelector('#att-type-list');
+    this.$typeManual = document.querySelector('#att-type-manual');
+    this.$typeSelect = document.querySelector('#att-type-select');
+    this.$typeInput = document.querySelector('#att-type-input');
+    this.$isPrivate = document.querySelector('#isprivate');
+    this.$takeBug = document.querySelector('#takebug');
+  }
+
+  /**
+   * Set up form submission validation handlers.
+   */
+  #setupFormValidation() {
+    const $form = this.$placeholder.closest('form');
+    const handler = (event) => this.validate(event);
+
+    // Make sure to validate the form on both the `submit` event from the form and the `click` event
+    // from the submit button, since the implementation varies by page
+    $form?.addEventListener('submit', handler);
+    $form?.querySelector('[type="submit"]')?.addEventListener('click', handler);
+  }
+
+  /**
+   * Set up event listeners for individual form fields.
+   */
+  #setupFieldEventListeners() {
+    this.$description.addEventListener('input', () => this.descriptionOnInput());
+    this.$isPatch.addEventListener('change', () => this.isPatchOnChange());
+    this.$hidePreview.addEventListener('change', () => this.hidePreviewOnChange());
+    this.$typeSelect.addEventListener('change', () => this.typeSelectOnChange());
+    this.$typeInput.addEventListener('change', () => this.typeInputOnChange());
+  }
+
+  /**
+   * Initialize the attachment selector with event handlers.
+   */
+  #initializeAttachmentSelector() {
+    this.selector = new Bugzilla.AttachmentSelector({
+      $placeholder: this.$placeholder,
+      eventHandlers: {
+        AttachmentProcessed: (event) => this.onAttachmentProcessed(event),
+        AttachmentCaptured: (event) => this.onAttachmentCaptured(event),
+        AttachmentTextUpdated: (event) => this.onAttachmentTextUpdated(event),
+        AttachmentPasted: (event) => this.onAttachmentPasted(event),
+      },
+    });
+  }
+
+  /**
+   * Whether an attachment is required. This is defined by the presence of the `data-required`
+   * attribute on the placeholder element.
+   * @type {boolean}
+   */
+  get required() {
+    return this.$placeholder.dataset.required === 'true';
+  }
+
+  /**
+   * Get the description of the attachment.
+   * @type {string}
+   */
+  get description() {
+    return this.$description.value.trim();
+  }
+
+  /**
+   * Set the description of the attachment.
+   * @param {string} value A new description for the attachment.
+   */
+  set description(value) {
+    this.$description.value = value;
+    this.updateValidation();
+  }
+
+  /**
+   * Called whenever a file is processed by `AttachmentSelector`. Update the Description, Content
+   * Type, Patch checkbox, etc. based on the file properties and content.
+   * @param {object} params An object with the following properties:
+   * @param {File} params.file A processed `File` object.
+   * @param {string} params.type A MIME type to be selected in the Content Type field.
+   * @param {boolean} params.isPatch `true` if the file is detected as a patch, `false` otherwise.
+   */
+  onAttachmentProcessed({ file, type, isPatch }) {
+    if (!this.descriptionOverridden) {
+      this.description = file.name;
+    }
+
+    this.$description.select();
+    this.$description.focus();
+
+    this.updateContentType(type);
+    this.updateIsPatch(isPatch);
+  }
+
+  /**
+   * Called whenever an attachment is captured. Update the Patch checkbox to be unchecked and
+   * disabled since we cannot reliably detect the content of captured data.
+   * @param {object} params An object with the following properties:
+   * @param {File} params.file A captured `File` object.
+   */
+  onAttachmentCaptured({ file }) {
+    this.updateIsPatch(false, true);
+  }
+
+  /**
+   * Called whenever the attachment text is updated. Update the Content Type, Patch checkbox, etc.
+   * based on the new content.
+   * @param {object} params An object with the following properties:
+   * @param {string} params.text The new text content.
+   * @param {boolean} params.hasText `true` if the textarea has non-empty content, `false`
+   * otherwise.
+   * @param {boolean} params.isPatch `true` if the content is detected as a patch, `false`
+   * otherwise.
+   * @param {boolean} params.isGhpr `true` if the content is detected as a GitHub Pull Request link,
+   * `false` otherwise.
+   */
+  onAttachmentTextUpdated({ text, hasText, isPatch, isGhpr }) {
+    if (hasText) {
+      this.updateContentType('text/plain');
+    }
+
+    if (!this.descriptionOverridden) {
+      this.description = isPatch ? 'patch' : isGhpr ? 'GitHub Pull Request' : '';
+    }
+
+    this.$description.setAttribute('aria-required', hasText);
+    this.$typeInput.value = isGhpr ? 'text/x-github-pull-request' : '';
+    this.updateIsPatch(isPatch);
+  }
+
+  /**
+   * Called whenever an attachment is pasted. Update the Patch checkbox to be unchecked and disabled
+   * since we cannot reliably detect the content of pasted data.
+   * @param {object} params An object with the following properties:
+   * @param {ClipboardItem[]} params.items An array of `ClipboardItem` objects representing the
+   * pasted data.
+   */
+  onAttachmentPasted({ items }) {
+    this.updateIsPatch(false, true);
+  }
+
+  /**
+   * Reset all the input fields to the initial state, and remove the preview and message.
+   */
+  resetFields() {
+    this.description = '';
+    this.descriptionOverridden = false;
+    this.$typeInput.value = '';
+    this.$typeList.checked = this.$typeSelect.options[0].selected = true;
+    this.resetOptionalFields();
+    this.updateIsPatch();
+    this.selector.resetFields();
+  }
+
+  /**
+   * Reset optional form fields (isPrivate, takeBug) if they exist.
+   */
+  resetOptionalFields() {
+    if (this.$isPrivate) {
+      this.$isPrivate.checked = this.$isPrivate.disabled = false;
+    }
+
+    if (this.$takeBug) {
+      this.$takeBug.checked = this.$takeBug.disabled = false;
+    }
   }
 
   /**
    * Called whenever the Description is updated. Update the Patch checkbox when needed.
    */
-  description_oninput() {
-    const is_patch = !!this.$description.value.match(/^patch\b/i);
+  descriptionOnInput() {
+    const isPatch = !!this.description.match(/^patch\b/i);
 
-    if (is_patch !== this.$ispatch.checked) {
-      this.update_ispatch(is_patch);
+    if (isPatch !== this.$isPatch.checked) {
+      this.updateIsPatch(isPatch);
+    }
+
+    this.descriptionOverridden = !!this.description;
+    this.updateValidation();
+  }
+
+  /**
+   * Clear the validation error on the Description field if the description is non-empty.
+   */
+  updateValidation() {
+    if (this.description) {
+      this.$description.setAttribute('aria-invalid', 'false');
+      this.$descError.hidden = true;
     }
   }
 
   /**
-   * Called whenever the Description is changed manually. Set the override flag so the user-defined Description will be
-   * retained later on.
+   * Select a Content Type from the list or fill in the “enter manually” field if the option is not
+   * available.
+   * @param {string} type A detected MIME type.
    */
-  description_onchange() {
-    this.description_override = true;
-  }
-
-  /**
-   * Select a Content Type from the list or fill in the "enter manually" field if the option is not available.
-   * @param {String} type A detected MIME type.
-   */
-  update_content_type(type) {
-    if ([...this.$type_select.options].find($option => $option.value === type)) {
-      this.$type_list.checked = true;
-      this.$type_select.value = type;
-      this.$type_input.value = '';
+  updateContentType(type) {
+    if ([...this.$typeSelect.options].find(($option) => $option.value === type)) {
+      this.$typeList.checked = true;
+      this.$typeSelect.value = type;
+      this.$typeInput.value = '';
     } else {
-      this.$type_manual.checked = true;
-      this.$type_input.value = type;
+      this.$typeManual.checked = true;
+      this.$typeInput.value = type;
     }
   }
 
   /**
    * Update the Patch checkbox state.
-   * @param {Boolean} [checked=false] The `checked` property of the checkbox.
-   * @param {Boolean} [disabled=false] The `disabled` property of the checkbox.
+   * @param {boolean} [checked] The `checked` property of the checkbox.
+   * @param {boolean} [disabled] The `disabled` property of the checkbox.
    */
-  update_ispatch(checked = false, disabled = false) {
-    this.$ispatch.checked = checked;
-    this.$ispatch.disabled = disabled;
-    this.ispatch_onchange();
+  updateIsPatch(checked = false, disabled = false) {
+    this.$isPatch.checked = checked;
+    this.$isPatch.disabled = disabled;
+    this.isPatchOnChange();
   }
 
   /**
-   * Called whenever the Patch checkbox is checked or unchecked. Disable or enable the Content Type fields accordingly.
+   * Enable or disable all content type input fields.
+   * @param {boolean} disabled - Whether to disable the fields.
    */
-  ispatch_onchange() {
-    const is_patch = this.$ispatch.checked;
-    const is_ghpr = this.$type_input.value === 'text/x-github-pull-request';
+  setTypeFieldsDisabled(disabled) {
+    this.$typeOuter.querySelectorAll('[name]').forEach(($input) => ($input.disabled = disabled));
+  }
 
-    this.$type_outer.querySelectorAll('[name]').forEach($input => $input.disabled = is_patch);
+  /**
+   * Select the appropriate content type selection mode (dropdown list or manual input).
+   * @param {string} mode - Either 'list' or 'manual'.
+   */
+  selectContentTypeMode(mode) {
+    if (mode === 'manual') {
+      this.$typeManual.checked = true;
+    } else {
+      this.$typeList.checked = true;
+      this.$typeSelect.options[0].selected = true;
+    }
+  }
 
-    if (is_patch) {
-      this.update_content_type('text/plain');
+  /**
+   * Called whenever the Patch checkbox is checked or unchecked. Disable or enable the Content Type
+   * fields accordingly.
+   */
+  isPatchOnChange() {
+    const isPatch = this.$isPatch.checked;
+    const isGhpr = this.$typeInput.value === 'text/x-github-pull-request';
+
+    this.setTypeFieldsDisabled(isPatch);
+
+    if (isPatch) {
+      this.updateContentType('text/plain');
     }
 
     // Reassign the bug to the user if the attachment is a patch or GitHub Pull Request
-    if (this.$takebug && this.$takebug.clientHeight > 0 && this.$takebug.dataset.takeIfPatch) {
-      this.$takebug.checked = is_patch || is_ghpr;
+    if (this.$takeBug && this.$takeBug.clientHeight > 0 && this.$takeBug.dataset.takeIfPatch) {
+      this.$takeBug.checked = isPatch || isGhpr;
     }
   }
 
   /**
-   * Called whenever the "hide preview" checkbox is checked or unchecked. Change the Content Type to binary if checked
-   * so the file will always be downloaded.
+   * Called whenever the “hide preview” checkbox is checked or unchecked. Change the Content Type to
+   * binary if checked so the file will always be downloaded.
    */
-  hide_preview_onchange() {
-    const hide_preview = this.$hide_preview.checked;
+  hidePreviewOnChange() {
+    const hidePreview = this.$hidePreview.checked;
 
-    this.$type_outer.querySelectorAll('[name]').forEach($input => $input.disabled = hide_preview);
+    this.setTypeFieldsDisabled(hidePreview);
 
-    if (hide_preview) {
-      this.original_type = this.$type_input.value || this.$type_select.value;
-      this.update_content_type('application/octet-stream');
-    } else if (this.original_type) {
-      this.update_content_type(this.original_type);
+    if (hidePreview) {
+      this.originalType = this.$typeInput.value || this.$typeSelect.value;
+      this.updateContentType('application/octet-stream');
+    } else if (this.originalType) {
+      this.updateContentType(this.originalType);
     }
   }
 
   /**
-   * Called whenever an option is selected from the Content Type list. Select the "select from list" radio button.
+   * Called whenever an option is selected from the Content Type list. Select the “select from list”
+   * radio button.
    */
-  type_select_onchange() {
-    this.$type_list.checked = true;
+  typeSelectOnChange() {
+    this.selectContentTypeMode('list');
   }
 
   /**
-   * Called whenever the used manually specified the Content Type. Select the "select from list" or "enter manually"
-   * radio button depending on the value.
+   * Called whenever the used manually specified the Content Type. Select the “select from list” or
+   * “enter manually” radio button depending on the value.
    */
-  type_input_onchange() {
-    if (this.$type_input.value) {
-      this.$type_manual.checked = true;
-    } else {
-      this.$type_list.checked = this.$type_select.options[0].selected = true;
+  typeInputOnChange() {
+    const mode = this.$typeInput.value ? 'manual' : 'list';
+
+    this.selectContentTypeMode(mode);
+  }
+
+  /**
+   * Update the required state of the form.
+   * @param {boolean} [required] `true` if an attachment is required, `false` otherwise.
+   */
+  updateRequirements(required = true) {
+    this.$placeholder.dataset.required = required;
+    this.$description.setAttribute('aria-required', required);
+
+    if (!required) {
+      this.$description.setAttribute('aria-invalid', 'false');
+      this.$descError.hidden = true;
     }
+
+    this.selector.updateRequirements(required);
+  }
+
+  /**
+   * Validate the form on submission. Show an error message if the attachment is required but not
+   * provided, and prevent the form from being submitted.
+   * @param {MouseEvent | SubmitEvent} event A `submit` event from the form or a `click` event from
+   * the submit button.
+   * @returns {boolean} `true` if the form is valid and can be submitted, `false` otherwise.
+   */
+  validate(event) {
+    const invalid = this.required && !this.description;
+
+    this.$description.setAttribute('aria-invalid', invalid);
+    this.$descError.hidden = !invalid;
+
+    if (invalid) {
+      event.preventDefault();
+    }
+
+    return !invalid;
   }
 };
 
-window.addEventListener('DOMContentLoaded', () => bz_attachment_form = new Bugzilla.AttachmentForm(), { once: true });
+window.addEventListener(
+  'DOMContentLoaded',
+  () => {
+    // Automatically initialize the attachment form if the attachment entry table is present on the
+    // page. This includes the New Bug and New Attachment pages.
+    if (document.querySelector('table.attachment_entry')) {
+      bzAttachmentForm = new Bugzilla.AttachmentForm();
+    }
+  },
+  { once: true },
+);

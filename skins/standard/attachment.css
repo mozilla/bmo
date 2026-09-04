@@ -6,15 +6,16 @@
  * defined by the Mozilla Public License, v. 2.0. */
 
 table.attachment_entry th {
+  padding: 4px;
   text-align: right;
   vertical-align: top;
   white-space: nowrap;
 }
 
 table.attachment_entry td {
+  padding: 4px;
   text-align: left;
   vertical-align: baseline;
-  padding-bottom: 5px;
 }
 
 table#flags th,
@@ -316,12 +317,12 @@ textarea#viewFrame {
 }
 
 #att-dropbox {
+  overflow: hidden;
   box-sizing: border-box;
-  border: 1px solid var(--control-border-color);
-  border-radius: 4px;
-  margin: 4px;
-  width: 560px;
-  background-color: var(--control-background-color);
+  border: 2px dashed var(--control-border-color);
+  border-radius: 8px;
+  background-color: var(--primary-region-background-color);
+  background-clip: content-box;
   -moz-user-select: none;
   -webkit-user-select: none;
   user-select: none;
@@ -329,60 +330,75 @@ textarea#viewFrame {
 }
 
 #att-dropbox.invalid {
-  border-color: var(--invalid-control-border-color);
-  background-color: rgb(var(--accent-color-red-1), .1);
-  box-shadow: 0 0 4px var(--invalid-control-border-color);
+  border: 1px solid var(--invalid-control-border-color) !important;
+  box-shadow: 0 0 4px var(--error-message-foreground-color);
 }
 
 #att-dropbox.dragover {
-  border-color: var(--focused-control-border-color);
+  border: 2px solid var(--focused-control-border-color);
   background-color: rgba(var(--accent-color-blue-1), .1);
   box-shadow: 0 0 4px var(--focused-control-border-color);
 }
 
-#att-dropbox.invalid header,
+#att-dropbox:has(#att-editor:not([hidden])),
+#att-dropbox:has(#att-preview:not([hidden])) {
+  border: 1px solid var(--control-border-color);
+}
+
+#att-dropbox.invalid .actions,
 #att-dropbox.invalid #att-textarea,
-#att-dropbox.dragover header,
+#att-dropbox.dragover .actions,
 #att-dropbox.dragover #att-textarea {
   background-color: transparent;
 }
 
-#att-dropbox header {
+#att-dropbox .actions:not([hidden]) {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-bottom: 1px solid var(--secondary-control-border-color);
+  flex-direction: column;
+  box-sizing: border-box;
   border-radius: 4px 4px 0 0;
-  padding: 8px;
-  background-color: var(--primary-region-background-color);
-  font-style: italic;
-  pointer-events: none;
+  padding: 16px 12px;
+  min-height: 160px;
+  text-align: center;
   transition: all .2s;
 }
 
-#att-dropbox header .icon {
+#att-dropbox .actions .icon {
   display: inline-block;
-  margin: 2px 8px 0 0;
   color: var(--tertiary-label-color);
   transition: all .2s;
 }
 
-#att-dropbox.invalid header .icon {
+#att-dropbox.invalid .actions .icon {
   color: var(--error-message-foreground-color);
 }
 
-#att-dropbox.dragover header .icon {
+#att-dropbox.dragover .actions .icon {
   color: var(--focused-control-border-color);
 }
 
-#att-dropbox header .icon::before {
-  font-size: 24px;
+#att-dropbox .actions .icon::before {
+  font-size: 48px;
   content: "\E2C3";
+}
+
+#att-dropbox .actions .button-group {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 16px;
+}
+
+#att-dropbox .actions .button-group button {
+  min-width: 140px;
+  white-space: nowrap;
 }
 
 #att-dropbox > div {
   position: relative;
-  min-height: 160px;
 }
 
 #att-data {
@@ -401,6 +417,7 @@ textarea#viewFrame {
 }
 
 #att-textarea {
+  box-sizing: border-box;
   margin: 0;
   border: 0;
   border-radius: 0 0 4px 4px;
@@ -412,17 +429,15 @@ textarea#viewFrame {
   transition: all .2s;
 }
 
-#att-preview {
+#att-preview:not([hidden]) {
   display: flex;
   align-items: center;
   justify-content: center;
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  position: relative;
+  box-sizing: border-box;
   border-radius: 0 0 4px 4px;
   padding: 8px;
+  height: 160px;
   pointer-events: none;
 }
 
@@ -455,7 +470,6 @@ textarea#viewFrame {
   font-size: var(--font-size-x-large);
   text-align: center;
   text-shadow: var(--text-shadow-light);
-  color: var(--inverted-label-color);
   background-image: linear-gradient(to bottom, transparent 50%, var(--secondary-control-border-color));
 }
 
@@ -490,7 +504,7 @@ textarea#viewFrame {
   content: "\E24D";
 }
 
-#att-remove-button {
+.att-remove-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -499,9 +513,10 @@ textarea#viewFrame {
   right: 4px;
   padding: 4px;
   pointer-events: auto;
+  cursor: pointer;
 }
 
-#att-remove-button .icon::before {
+.att-remove-button .icon::before {
   font-size: 16px;
   color: var(--secondary-label-color);
   content: "\E5C9";
@@ -509,10 +524,8 @@ textarea#viewFrame {
 
 #att-error-message {
   box-sizing: border-box;
-  margin: 8px 4px 0;
-  padding: 0 8px;
-  width: 560px;
-  text-align: center;
+  margin: 4px;
+  font-size: var(--font-size-small);
   font-style: italic;
 }
 

@@ -8,21 +8,19 @@ Firefox for Android
 [% END %]
 
 [% IF cgi.param('bug_steps') %]
-Steps to reproduce:
+### Steps to reproduce
 
 [%+ cgi.param('bug_steps') %]
 [% END %]
 
 [% IF cgi.param('actual') %]
-
-Actual results:
+### Actual results
 
 [%+ cgi.param('actual') %]
 [% END %]
 
 [% IF cgi.param('expected') %]
-
-Expected results:
+### Expected results
 
 [%+ cgi.param('expected') %]
 [% END %]

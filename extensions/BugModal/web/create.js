@@ -103,7 +103,7 @@ window.addEventListener('DOMContentLoaded', () => {
     window.status_comment_required = statusCommentRequired;
 
     // attachment.js
-    bz_attachment_form.update_requirements(false);
+    bzAttachmentForm.updateRequirements(false);
 
     // bug_modal.js
     initKeywordsAutocomplete(keywords);
@@ -133,7 +133,7 @@ window.addEventListener('DOMContentLoaded', () => {
         },
         {
           key: 'update_token',
-          label: '',
+          label: 'Action',
           formatter: Bugzilla.DupTable.formatCcButton,
           allowHTML: true,
           sortable: false,
@@ -283,9 +283,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const $attachFileActionOuter = document.querySelector('#attach-file-action-outer');
 
     const updatedRequiredFields = (required) => {
-      $attachFileContentOuter.querySelectorAll('[aria-required]').forEach(($input) => {
-        $input.setAttribute('aria-required', required);
-      });
+      bzAttachmentForm.updateRequirements(required);
     };
 
     $attachNewFile.addEventListener('click', () => {

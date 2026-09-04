@@ -467,6 +467,8 @@ sub is_editable_ok {
 sub attach_file {
   my ($self, $locator, $filename) = @_;
   my $path = Mojo::File->new($filename);
+  # Click the Enter Text button to show the textarea for attachment data
+  $self->click_ok('att-enter-button');
   $self->type_ok('att-textarea', $path->slurp, 'Add attachment data');
 }
 

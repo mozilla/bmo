@@ -803,13 +803,7 @@ $(function() {
                 .map(($input) => {
                     let invalid = false;
 
-                    if ($input.id === 'att-data') {
-                        invalid = !$input.value.trim()
-                            && !document.querySelector('#att-textarea').value.trim()
-                            && !document.querySelector('#att-file').files.length;
-                        document.querySelector('#att-dropbox')?.classList
-                            .toggle('attention', invalid);
-                    } else if ($input.type === 'text') {
+                    if ($input.type === 'text') {
                         invalid = !$input.value.trim();
                     } else if ($input.type === 'select-one') {
                         invalid = $input.selectedIndex === -1;

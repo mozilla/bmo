@@ -241,33 +241,6 @@ td.bz_total {
 }
 
 @media screen and (max-width: 799px) {
-  .bz_buglist.responsive thead {
-    display: none;
-  }
-
-  .bz_buglist.responsive tbody tr {
-    padding: 8px 12px;
-  }
-
-  .bz_buglist.responsive tbody td {
-    display: flow-root;
-    gap: 4px;
-    margin-block: 8px;
-    padding: 0 0 0 90px !important;
-    width: auto;
-    text-align: left;
-  }
-
-  .bz_buglist.responsive tbody td::before {
-    display: block;
-    float: left;
-    margin-inline: -90px 10px;
-    min-width: 80px;
-    color: var(--secondary-label-color);
-    font-size: var(--font-size-small);
-    content: attr(data-column-label) ':';
-  }
-
   .footer-nav.responsive td {
     margin: 8px 0;
     padding: 0;
