@@ -1,0 +1,8 @@
+name: id_or_alias
+in: path
+description: A single integer bug ID or alias.
+required: true
+schema:
+  type:
+    - string
+    - integer

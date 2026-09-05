@@ -1,0 +1,142 @@
+get:
+  summary: Return a graph of bug relationships
+  description: >-
+    Return a graph of bug relationships such as dependencies, regressions, and
+    duplicates. By default, resolved bugs are not returned but can be if needed.
+    The bug ID provided will be the root node of the graph.
+  operationId: bug_graph
+  parameters:
+    - name: bug_id
+      in: path
+      description: The bug ID that will be the root node of the graph.
+      required: true
+      schema:
+        type: integer
+    - name: ids_only
+      in: query
+      description: Do not return simple bug data with each bug ID in the tree.
+      schema:
+        type: boolean
+        default: false
+    - name: depth
+      in: query
+      description: Limit the depth of the graph.
+      schema:
+        type: integer
+        default: 3
+        maximum: 9
+    - name: show_resolved
+      in: query
+      description: Enable if you want to also see RESOLVED bugs in the graph.
+      schema:
+        type: boolean
+        default: false
+    - name: relationship
+      in: query
+      description: >-
+        The default is the dependencies graph. To return the graph for other
+        types, pass this parameter.
+      schema:
+        type: string
+        default: dependencies
+        enum:
+          - dependencies
+          - duplicates
+          - regressions
+  responses:
+    '200':
+      description: >
+        A graph of bug relationships
+
+
+        The default return object will be an object with two trees based on the
+        type of relationship selected. For dependencies, it will be ``blocked``
+        and ``dependson`` For regressions, it will be be ``regresses`` and
+        ``regressed_by``. And for duplicates, it will be ``dupe_of`` and
+        ``dupe``.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - type: object
+                title: dependencies
+                properties:
+                  blocked:
+                    $ref: ../components/schemas/BugNode.yaml
+                  dependson:
+                    $ref: ../components/schemas/BugNode.yaml
+              - type: object
+                title: regressions
+                properties:
+                  regresses:
+                    $ref: ../components/schemas/BugNode.yaml
+                  regressed_by:
+                    $ref: ../components/schemas/BugNode.yaml
+              - type: object
+                title: duplicates
+                properties:
+                  dupe_of:
+                    $ref: ../components/schemas/BugNode.yaml
+                  dupe:
+                    $ref: ../components/schemas/BugNode.yaml
+          example:
+            blocked:
+              '2':
+                '3':
+                  bug:
+                    alias: null
+                    id: 3
+                    is_confirmed: 1
+                    op_sys: Unspecified
+                    platform: Unspecified
+                    priority: '--'
+                    resolution: ''
+                    severity: normal
+                    status: NEW
+                    summary: Another new test bug
+                    target_milestone: '---'
+                    type: defect
+                    url: ''
+                    version: unspecified
+                    whiteboard: ''
+                bug:
+                  alias: null
+                  id: 2
+                  is_confirmed: 1
+                  op_sys: Unspecified
+                  platform: Unspecified
+                  priority: '--'
+                  resolution: ''
+                  severity: normal
+                  status: NEW
+                  summary: this is a new test bug
+                  target_milestone: '---'
+                  type: defect
+                  url: ''
+                  version: unspecified
+                  whiteboard: ''
+              bug:
+                alias: null
+                id: 1
+                is_confirmed: 1
+                op_sys: Unspecified
+                platform: Unspecified
+                priority: '--'
+                resolution: ''
+                severity: normal
+                status: NEW
+                summary: This is a new test bug
+                target_milestone: '---'
+                type: defect
+                url: ''
+                version: unspecified
+                whiteboard: ''
+            dependson: {}
+    default:
+      description: Various error responses
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Bugs

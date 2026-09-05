@@ -1,0 +1,24 @@
+type: object
+properties:
+  name:
+    description: The name of the flag that will be created or updated.
+    type: string
+  type_id:
+    description: The internal flag type ID that will be created or updated.
+    type: integer
+  status:
+    description: The flags new status (i.e. "?", "+", "-" or "X" to clear a flag).
+    type: string
+  requestee:
+    description: >-
+      The login of the requestee if the flag type is requestable to a specific
+      user.
+    type: string
+  id:
+    description: Use ID to specify the flag to be updated.
+    type: integer
+  new:
+    description: Set to true if you specifically want a new flag to be created.
+    type: boolean
+required:
+  - status

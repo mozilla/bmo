@@ -1,0 +1,12 @@
+type: object
+properties:
+  added:
+    description: >-
+      The values that were added to this field, possibly a
+      comma-and-space-separated list if multiple values were added.
+    type: string
+  removed:
+    description: >-
+      The values that were removed from this field, possibly a
+      comma-and-space-separated list if multiple values were removed.
+    type: string

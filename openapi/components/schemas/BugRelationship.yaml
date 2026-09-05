@@ -1,0 +1,21 @@
+type: object
+properties:
+  add:
+    description: Bug IDs to add to this field.
+    type: array
+    items:
+      type: integer
+  remove:
+    description: >-
+      Bug IDs to remove from this field. If the bug IDs are not already in the
+      field, they will be ignored.
+    type: array
+    items:
+      type: integer
+  set:
+    description: >-
+      An exact set of bug IDs to set this field to, overriding the current
+      value. If you specify `set`, then `add` and `remove` will be ignored.
+    type: array
+    items:
+      type: integer

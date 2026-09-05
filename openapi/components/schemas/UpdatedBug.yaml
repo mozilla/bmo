@@ -1,0 +1,16 @@
+type: object
+properties:
+  id:
+    description: The ID of the bug that was updated.
+    type: integer
+  alias:
+    description: The alias of the bug that was updated, if this bug has any alias.
+    type: string
+  last_change_time:
+    description: The exact time that this update was done at, for this bug.
+    type: string
+    format: date-time
+  changes:
+    type: object
+    additionalProperties:
+      $ref: ./FieldChange.yaml

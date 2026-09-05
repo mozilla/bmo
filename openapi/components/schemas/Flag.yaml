@@ -1,0 +1,30 @@
+type: object
+properties:
+  id:
+    description: The ID of the flag.
+    type: integer
+  name:
+    description: The name of the flag.
+    type: string
+  type_id:
+    description: The type ID of the flag.
+    type: integer
+  creation_date:
+    description: The timestamp when this flag was originally created.
+    type: string
+    format: date-time
+  modification_date:
+    description: The timestamp when the flag was last modified.
+    type: string
+    format: date-time
+  status:
+    description: The current status of the flag.
+    type: string
+  setter:
+    description: The login name of the user who created or last modified the flag.
+    type: string
+  requestee:
+    description: >-
+      The login name of the user this flag has been requested to be granted or
+      denied. Note, this field is only returned if a requestee is set.
+    type: string

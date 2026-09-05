@@ -1,0 +1,56 @@
+type: object
+properties:
+  data:
+    description: The raw data of the attachment, encoded as Base64.
+    type: string
+    format: base64
+  size:
+    description: The length (in bytes) of the attachment.
+    type: integer
+  creation_time:
+    description: The time the attachment was created.
+    type: string
+    format: date-time
+  last_change_time:
+    description: The last time the attachment was modified.
+    type: string
+    format: date-time
+  id:
+    description: The numeric ID of the attachment.
+    type: integer
+  bug_id:
+    description: The numeric ID of the bug that the attachment is attached to.
+    type: integer
+  file_name:
+    description: The file name of the attachment.
+    type: string
+  summary:
+    description: A short string describing the attachment.
+    type: string
+  content_type:
+    description: The MIME type of the attachment.
+    type: string
+  is_private:
+    description: >-
+      ``true`` if the attachment is private (only visible to a certain group
+      called the "insidergroup"), ``false`` otherwise.
+    type: boolean
+  is_obsolete:
+    description: '``true`` if the attachment is obsolete, ``false`` otherwise.'
+    type: boolean
+  is_patch:
+    description: '``true`` if the attachment is a patch, ``false`` otherwise.'
+    type: boolean
+  creator:
+    description: The login name of the user that created the attachment.
+    type: string
+  creator_detail:
+    description: An object containing detailed user information for the creator.
+    $ref: ./User.yaml
+  flags:
+    description: >-
+      Array of objects, each containing the information about the flag currently
+      set for each attachment.
+    type: array
+    items:
+      $ref: ./Flag.yaml

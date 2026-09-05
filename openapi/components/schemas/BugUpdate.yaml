@@ -1,0 +1,296 @@
+type: object
+properties:
+  ids:
+    description: The IDs or aliases of the bugs that you want to modify.
+    type: array
+    items:
+      type:
+        - integer
+        - string
+  alias:
+    description: >-
+      The alias for the bug that can be used instead of a bug number when
+      accessing this bug. Must be unique in all of this Bugzilla.
+    type: string
+  assigned_to:
+    description: The full login name of the user this bug is assigned to.
+    type: string
+  blocks:
+    description: Bugs that this bug blocks.
+    type: object
+    $ref: ./BugRelationship.yaml
+  depends_on:
+    description: Bugs that this bug depends on.
+    type: object
+    $ref: ./BugRelationship.yaml
+  regressions:
+    description: Bugs that this bug regresses.
+    type: object
+    $ref: ./BugRelationship.yaml
+  regressed_by:
+    description: Bugs that regress this bug.
+    type: object
+    $ref: ./BugRelationship.yaml
+  cc:
+    description: The users on the cc list.
+    type: object
+    properties:
+      add:
+        description: >-
+          User names to add to the CC list. They must be full user names, and an
+          error will be thrown if you pass in an invalid user name.
+        type: array
+        items:
+          type: string
+      remove:
+        description: >-
+          User names to remove from the CC list. They must be full user names,
+          and an error will be thrown if you pass in an invalid user name.
+        type: array
+        items:
+          type: string
+  is_cc_accessible:
+    description: >-
+      Whether or not users in the CC list are allowed to access the bug, even if
+      they aren't in a group that can normally access the bug.
+    type: boolean
+  comment:
+    description: A comment on the change.
+    type: object
+    properties:
+      body:
+        description: The actual text of the comment.
+        type: string
+      comment:
+        description: >-
+          An alias for the comment body. (For compatibility with the parameters
+          to [Create Comments](#tag/Comments/paths/~1bug~1{id}~1comment/post))
+        type: string
+      is_private:
+        description: >-
+          Whether the comment is private or not. If you try to make a comment
+          private and you don't have the permission to, an error will be thrown.
+        type: boolean
+  comment_is_private:
+    description: >
+      This is how you update the privacy of comments that are already on a bug.
+      This is a object, where the keys are the ``int`` ID of comments (not their
+      count on a bug, like #1, #2, #3, but their globally-unique ID, as returned
+      by [Get Comment](#tag/Comments/paths/~1bug~1comment~1{comment_id}/get) and
+      the value is a ``boolean`` which specifies whether that comment should
+      become private (``true``) or public (``false``).
+
+
+      The comment IDs must be valid for the bug being updated. Thus, it is not
+      practical to use this while updating multiple bugs at once, as a single
+      comment ID will never be valid on multiple bugs.
+    type: object
+    additionalProperties:
+      type: boolean
+      description: >-
+        Specifies whether that comment should become private (`true`) or public
+        (`false`).
+  component:
+    description: The Component the bug is in.
+    type: string
+  deadline:
+    description: >-
+      The Deadline field is a date specifying when the bug must be completed by,
+      in the format ``YYYY-MM-DD``.
+    type: string
+    format: date
+  dupe_of:
+    description: >-
+      The bug that this bug is a duplicate of. If you want to mark a bug as a
+      duplicate, the safest thing to do is to set this value and *not* set the
+      ``status`` or ``resolution`` fields. They will automatically be set by
+      Bugzilla to the appropriate values for duplicate bugs.
+    type: integer
+  estimated_time:
+    description: >-
+      The total estimate of time required to fix the bug, in hours. This is the
+      *total* estimate, not the amount of time remaining to fix it.
+    type: number
+  flags:
+    description: >
+      An array of Flag change objects.
+
+
+      Of any item, at least the status and one of type_id, id, or name must be
+      specified. If a type_id or name matches a single currently set flag, the
+      flag will be updated unless new is specified.
+    type: array
+    items:
+      $ref: ./FlagUpdate.yaml
+  groups:
+    description: The groups a bug is in.
+    type: object
+    properties:
+      add:
+        description: >
+          The names of groups to add. Passing in an invalid group name or a
+          group that you cannot add to this bug will cause an error to be
+          thrown.
+        type: array
+        items:
+          type: string
+      remove:
+        description: >-
+          The names of groups to remove. Passing in an invalid group name or a
+          group that you cannot remove from this bug will cause an error to be
+          thrown.
+        type: array
+        items:
+          type: string
+  keywords:
+    description: Keywords on the bug.
+    type: object
+    properties:
+      add:
+        description: >-
+          The names of keywords to add to the field on the bug. Passing
+          something that isn't a valid keyword name will cause an error to be
+          thrown.
+        type: array
+        items:
+          type: string
+      remove:
+        description: >-
+          The names of keywords to remove from the field on the bug. Passing
+          something that isn't a valid keyword name will cause an error to be
+          thrown.
+        type: array
+        items:
+          type: string
+      set:
+        description: >-
+          An exact set of keywords to set the field to, on the bug. Passing
+          something that isn't a valid keyword name will cause an error to be
+          thrown. Specifying `set` overrides `add` and `remove`.
+        type: array
+        items:
+          type: string
+  op_sys:
+    description: The Operating System ("OS") field on the bug.
+    type: string
+  platform:
+    description: The Platform or "Hardware" field on the bug.
+    type: string
+  priority:
+    description: The Priority field on the bug.
+    type: string
+  product:
+    description: >
+      The name of the product that the bug is in. If you change this, you will
+      probably also want to change ``target_milestone``, ``version``, and
+      ``component``, since those have different legal values in every product.
+
+
+      If you cannot change the ``target_milestone`` field, it will be reset to
+      the default for the product, when you move a bug to a new product.
+
+
+      You may also wish to add or remove groups, as which groups are valid on a
+      bug depends on the product. Groups that are not valid in the new product
+      will be automatically removed, and groups which are mandatory in the new
+      product will be automatically added, but no other automatic group changes
+      will be done.
+
+
+      > **Note:**
+         Users can only move a bug into a product if they would normally have permission to file new bugs in that product.
+    type: string
+  qa_contact:
+    description: The full login name of the bug's QA Contact.
+    type: string
+  is_creator_accessible:
+    description: Whether or not the bug's reporter is allowed to access the bug.
+    type: boolean
+  remaining_time:
+    description: >-
+      How much work time is remaining to fix the bug, in hours. If you set
+      ``work_time`` but don't explicitly set ``remaining_time``, then the
+      ``work_time`` will be deducted from the bug's ``remaining_time``.
+    type: number
+  reset_assigned_to:
+    description: >-
+      If true, the `assigned_to` field will be reset to the default for the
+      component that the bug is in. (If you have set the component at the same
+      time as using this, then the component used will be the new component, not
+      the old one.)
+    type: boolean
+  reset_qa_contact:
+    description: >-
+      If true, the ``qa_contact`` field will be reset to the default for the
+      component that the bug is in. (If you have set the component at the same
+      time as using this, then the component used will be the new component, not
+      the old one.)
+    type: boolean
+  resolution:
+    description: >-
+      The current resolution. May only be set if you are closing a bug or if you
+      are modifying an already-closed bug. Attempting to set the resolution to
+      *any* value (even an empty or null string) on an open bug will cause an
+      error to be thrown.
+
+      > **Note:** If you change the ``status`` field to an open status, the
+      resolution field will automatically be cleared, so you don't have to clear
+      it manually.
+    type: string
+  see_also:
+    description: >-
+      The See Also field on a bug, specifying URLs to bugs in other bug
+      trackers.
+    type: object
+    properties:
+      add:
+        description: >-
+          URLs to add to the field. Each URL must be a valid URL to a
+          bug-tracker, or an error will be thrown.
+        type: array
+        items:
+          type: string
+      remove:
+        description: URLs to remove from the field. Invalid URLs will be ignored.
+        type: array
+        items:
+          type: string
+  severity:
+    description: The Severity field of a bug.
+    type: string
+  status:
+    description: >-
+      The status you want to change the bug to. Note that if a bug is changing
+      from open to closed, you should also specify a `resolution`.
+    type: string
+  summary:
+    description: The Summary field of the bug.
+    type: string
+  target_milestone:
+    description: The bug's Target Milestone.
+    type: string
+  type:
+    description: The Type field on the bug.
+    type: string
+  url:
+    description: The "URL" field of a bug.
+    type: string
+  version:
+    description: The bug's Version field.
+    type: string
+  whiteboard:
+    description: The Status Whiteboard field of a bug.
+    type: string
+  work_time:
+    description: >-
+      The number of hours worked on this bug as part of this change. If you set
+      ``work_time`` but don't explicitly set ``remaining_time``, then the
+      ``work_time`` will be deducted from the bug's ``remaining_time``.
+    type: number
+additionalProperties:
+  description: >-
+    In addition to the above parameters, if your installation has any custom
+    fields, you can set them just by passing in the name of the field and its
+    value as a string.
+required:
+  - ids

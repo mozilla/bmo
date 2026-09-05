@@ -1,0 +1,6 @@
+type: object
+properties:
+  bug:
+    $ref: ./Bug.yaml
+  additionalProperties:
+    $ref: ./BugNode.yaml

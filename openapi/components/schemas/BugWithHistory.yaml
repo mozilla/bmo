@@ -1,0 +1,17 @@
+type: object
+properties:
+  id:
+    description: The numeric ID of the bug.
+    type: integer
+  alias:
+    description: >-
+      The unique alias of this bug. A `null` value will be returned if this bug
+      has no alias.
+    type:
+      - string
+      - null
+  history:
+    description: An array of History objects.
+    type: array
+    items:
+      $ref: ./BugHistory.yaml

@@ -1,0 +1,56 @@
+get:
+  summary: Get the history of changes for a specific bug
+  description: >
+    Gets the history of changes for a particular bug in the database. You can
+    specify a bug ID or alias and, optionally, a datetime timestamp to only show
+    history since that date.
+  operationId: get_bug_history
+  parameters:
+    - $ref: ../components/parameters/BugIdOrAlias.yaml
+    - name: new_since
+      in: query
+      description: A datetime timestamp to only show history since.
+      schema:
+        type: string
+        format: date-time
+  responses:
+    '200':
+      description: A list of bugs with their history
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              bugs:
+                type: array
+                items:
+                  $ref: ../components/schemas/BugWithHistory.yaml
+          example:
+            bugs:
+              - id: 35
+                alias: null
+                history:
+                  - when: '2014-09-23T19:12:17Z'
+                    who: user@bugzilla.org
+                    changes:
+                      - field_name: priority
+                        added: P1
+                        removed: P2
+                      - field_name: severity
+                        added: critical
+                        removed: blocker
+                  - when: '2014-09-28T21:03:47Z'
+                    who: user@bugzilla.org
+                    changes:
+                      - field_name: flagtypes.name
+                        added: blocker?
+                        removed: ''
+    default:
+      description: |
+        Same as [Get Bug](#tag/Bugs/paths/~1bug~1{id_or_alias}/get).
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Bugs
