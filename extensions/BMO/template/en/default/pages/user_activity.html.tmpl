@@ -87,6 +87,10 @@
   </p>
 [% END %]
 
+<p>
+  <a href="[% basepath FILTER none %]user_profile?user_id=[% user.id FILTER uri %]"> User Profile</a>
+</p>
+
 [% IF operations.size > 0 %]
   <br>
   <table id="report" class="standard">
