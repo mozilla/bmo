@@ -188,10 +188,10 @@ Do not store recovery codes with your password or on the device that provides
 your second factor. If you are unsure whether your codes remain private,
 generate and print a new set.
 
-BMO recovery codes cannot replace a Duo verification, even though the 2FA
-preferences page offers Duo users the recovery-code generator. Duo users should
-configure more than one authentication method in Duo and contact `Mozilla
-Service Desk`_ if none of those methods are available.
+BMO does not offer its recovery-code generator for Duo accounts because BMO
+recovery codes cannot replace a Duo verification. Duo users should configure
+more than one authentication method in Duo and contact `Mozilla Service Desk`_
+if none of those methods are available.
 
 .. _two-factor-troubleshooting:
 
