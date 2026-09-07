@@ -65,14 +65,7 @@ function validateAndSubmit() {
 [% USE Bugzilla %]
 [% cgi = Bugzilla.cgi %]
 
-<h1>Web Bounty Form (obsolete)</h1>
-
-<div id="message">
-  <p>We have migrated our web [% terms.bug %] bounty program to HackerOne. Please submit
-  your report to <a href="https://hackerone.com/mozilla">our program on HackerOne</a>.
-  <p>You can still submit website security [% terms.bugs %] using this form, but they
-  will not be eligible for a [% terms.bug %] bounty.
-</div>
+<h1>Web Bounty Form</h1>
 
 <form id="web_bounty_form" method="post" action="[% basepath FILTER none %]post_bug.cgi" enctype="multipart/form-data"
       onSubmit="return validateAndSubmit();">
@@ -96,7 +89,7 @@ function validateAndSubmit() {
   <label for="short_desc" class="field_label required">Summary / Title</label>
   <div class="field_desc">
     A short description of the issue being reported including the host name
-    for the website on which it exists (example XSS in blarg.foo.mozilla.org)
+    for the website on which it exists (example XSS in foo.mozilla.org)
   </div>
   <input type="text" name="short_desc" id="short_desc" size="80" autocomplete="off">
 </div>
