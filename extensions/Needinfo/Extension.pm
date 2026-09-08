@@ -312,8 +312,13 @@ sub user_preferences {
 
   my $value = $input->{block_needinfo} // 'off';
   $value = 'on' if $value eq '1';    # stale page still posting the old checkbox
-  $settings->{block_needinfo}->validate_value($value);
-  $settings->{block_needinfo}->set($value);
+
+  my $setting = $settings->{block_needinfo};
+  my %legal_values = map { $_ => 1 } @{$setting->legal_values};
+  ThrowCodeError('setting_value_invalid',
+    {name => 'block_needinfo', value => $value})
+    unless $legal_values{$value};
+  $setting->set($value);
   clear_settings_cache(Bugzilla->user->id);
 }
 
