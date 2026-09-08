@@ -685,6 +685,27 @@ sub modification_ts          { $_[0]->{modification_ts}; }
 sub password_change_required { $_[0]->{password_change_required}; }
 sub password_change_reason   { $_[0]->{password_change_reason}; }
 
+# Ensure the current user is allowed to administer this account. Users who are
+# not admins cannot edit admins, and cannot edit members of the insider group
+# unless they have insider or service desk access.
+sub check_can_be_edited {
+  my $self = shift;
+  my $user = Bugzilla->user;
+  return if $user->in_group('admin');
+
+  if ($self->in_group('admin')) {
+    ThrowUserError('auth_failure', {action => 'modify', object => 'user'});
+  }
+
+  my $insider_group = Bugzilla->params->{insidergroup};
+  return unless $insider_group;
+
+  return if $user->in_group($insider_group) || $user->in_group('servicedesk');
+  if ($self->in_group($insider_group)) {
+    ThrowUserError('auth_failure', {action => 'modify', object => 'user'});
+  }
+}
+
 sub reminder_count {
   my $self = shift;
 

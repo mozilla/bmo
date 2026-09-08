@@ -269,6 +269,26 @@ sub check_members_are_visible {
   }
 }
 
+# Ensure non-admins cannot edit the admin group, and that only members of the
+# insider group can edit the insider group.
+sub check_can_be_edited {
+  my $self = shift;
+  my $user = Bugzilla->user;
+  return if $user->in_group('admin');
+
+  if ($self->name eq 'admin') {
+    ThrowUserError('auth_failure', {action => 'edit', object => 'admin_group',});
+  }
+
+  my $insider_group = Bugzilla->params->{insidergroup};
+  return unless $insider_group;
+
+  return if $user->in_group($insider_group);
+  if ($self->name eq $insider_group) {
+    ThrowUserError('auth_failure', {action => 'edit', object => 'insider_group',});
+  }
+}
+
 sub set_description         { $_[0]->set('description',         $_[1]); }
 sub set_is_active           { $_[0]->set('isactive',            $_[1]); }
 sub set_name                { $_[0]->set('name',                $_[1]); }
