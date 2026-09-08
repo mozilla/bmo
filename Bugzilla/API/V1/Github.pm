@@ -59,7 +59,7 @@ sub pull_request {
     return $self->render(json => {error => 0});
   }
 
-  # Validate JSON input 
+  # Validate JSON input
   my $payload = $self->req->json;
   my @errors  = joi->object->props(
     action       => joi->string->required,
@@ -101,81 +101,179 @@ sub pull_request {
     return $self->render(json => {error => 1, message => $message});
   }
 
-  # Check if bug already has this pull request attached (non-fatal)
-  foreach my $attachment (@{$bug->attachments}) {
-    next if $attachment->contenttype ne 'text/x-github-pull-request';
-    if ($attachment->data eq $html_url) {
-      $template->process('global/code-error.html.tmpl',
-        {error => 'github_pr_attachment_exists'}, \$message)
-        || die $template->error();
-      return $self->render(json => {error => 1, message => $message});
-    }
-  }
-
-  # Create new attachment using pull request URL as attachment content
+  # Create new attachment using pull request URL as attachment content.
+  # This path must be serialized per bug because concurrent webhook deliveries
+  # can otherwise race between duplicate-check and insert.
   my $auto_user = Bugzilla::User->check({name => 'github-automation@bmo.tld'});
   $auto_user->{groups}       = [Bugzilla::Group->get_all];
   $auto_user->{bless_groups} = [Bugzilla::Group->get_all];
   Bugzilla->set_user($auto_user);
 
-  my $timestamp = Bugzilla->dbh->selectrow_array("SELECT NOW()");
-
-  my $attachment = Bugzilla::Attachment->create({
-    bug         => $bug,
-    creation_ts => $timestamp,
-    data        => $html_url,
-    description => "[$repository] $title (#$pr_number)",
-    filename    => "github-$repo_filename-$pr_number-url.txt",
-    ispatch     => 0,
-    isprivate   => 0,
-    mimetype    => 'text/x-github-pull-request',
-  });
-
-  # Insert a comment about the new attachment into the database.
-  $bug->add_comment(
-    '',
-    {
-      type        => CMT_ATTACHMENT_CREATED,
-      extra_data  => $attachment->id,
-      is_markdown => (Bugzilla->params->{use_markdown} ? 1 : 0)
-    }
-  );
-  $bug->update($timestamp);
-
-  # Fixup attachments with same github pull request but on different bugs
-  my %other_bugs;
-  my $other_attachments = Bugzilla::Attachment->match({
-    mimetype => 'text/x-github-pull-request',
-    filename => "github-$repo_filename-$pr_number-url.txt",
-    WHERE    => {'bug_id != ? AND NOT isobsolete' => $bug->id}
-  });
-  foreach my $attachment (@$other_attachments) {
-
-    # data doesn't match this URL, skip it
-    next if $attachment->data ne $html_url;
-
-    $other_bugs{$attachment->bug_id}++;
-    my $moved_comment
-      = "GitHub pull request attachment was moved to bug "
-      . $bug->id
-      . ". Setting attachment "
-      . $attachment->id
-      . " to obsolete.";
-    $attachment->set_is_obsolete(1);
-    $attachment->bug->add_comment(
-      $moved_comment,
-      {
-        type        => CMT_ATTACHMENT_UPDATED,
-        extra_data  => $attachment->id,
-        is_markdown => (Bugzilla->params->{use_markdown} ? 1 : 0)
+  my $dbh = Bugzilla->dbh;
+  my $pr_lock_name = _acquire_pr_lock($dbh, $repository, $pr_number);
+  if ($dbh->isa('Bugzilla::DB::Mysql') && !$pr_lock_name) {
+    return $self->render(
+      json => {
+        error   => 1,
+        message => 'Unable to acquire a lock for this pull request. Please retry.'
       }
     );
-    $attachment->bug->update($timestamp);
-    $attachment->update($timestamp);
+  }
+
+  my ($attachment, $duplicate);
+  eval {
+    $dbh->bz_start_transaction;
+
+    # Lock all potentially-affected bugs in sorted order before we read/write
+    # attachments. This avoids deadlocks when two webhook deliveries move
+    # different PR attachments between the same pair of bugs in opposite
+    # directions.
+    my $candidate_bug_ids = $dbh->selectcol_arrayref(
+      'SELECT DISTINCT bug_id
+         FROM attachments
+        WHERE mimetype = ?
+          AND filename = ?
+          AND NOT isobsolete',
+      undef,
+      'text/x-github-pull-request',
+      "github-$repo_filename-$pr_number-url.txt"
+    );
+
+    my %bug_ids_to_lock = map { $_ => 1 } @{$candidate_bug_ids // []};
+    $bug_ids_to_lock{$bug->id} = 1;
+    my @lock_bug_ids = sort { $a <=> $b } keys %bug_ids_to_lock;
+    my $lock_placeholders = join(', ', ('?') x @lock_bug_ids);
+
+    $dbh->selectcol_arrayref(
+      "SELECT bug_id
+         FROM bugs
+        WHERE bug_id IN ($lock_placeholders)
+        ORDER BY bug_id
+        FOR UPDATE",
+      undef,
+      @lock_bug_ids
+    );
+
+    my $existing_attachments = Bugzilla::Attachment->match({
+      bug_id   => $bug->id,
+      mimetype => 'text/x-github-pull-request',
+    });
+
+    foreach my $existing_attachment (@$existing_attachments) {
+      next if $existing_attachment->data ne $html_url;
+      $template->process('global/code-error.html.tmpl',
+        {error => 'github_pr_attachment_exists'}, \$message)
+        || die $template->error();
+      $duplicate = 1;
+      last;
+    }
+
+    if ($duplicate) {
+      $dbh->bz_commit_transaction;
+      1;
+    }
+    else {
+
+      my $timestamp = $dbh->selectrow_array("SELECT NOW()");
+
+      $attachment = Bugzilla::Attachment->create({
+        bug         => $bug,
+        creation_ts => $timestamp,
+        data        => $html_url,
+        description => "[$repository] $title (#$pr_number)",
+        filename    => "github-$repo_filename-$pr_number-url.txt",
+        ispatch     => 0,
+        isprivate   => 0,
+        mimetype    => 'text/x-github-pull-request',
+      });
+
+      # Insert a comment about the new attachment into the database.
+      $bug->add_comment(
+        '',
+        {
+          type        => CMT_ATTACHMENT_CREATED,
+          extra_data  => $attachment->id,
+          is_markdown => (Bugzilla->params->{use_markdown} ? 1 : 0)
+        }
+      );
+      $bug->update($timestamp);
+
+      # Fixup attachments with same github pull request but on different bugs
+      my %other_bugs;
+      my $other_attachments = Bugzilla::Attachment->match({
+        mimetype => 'text/x-github-pull-request',
+        filename => "github-$repo_filename-$pr_number-url.txt",
+        WHERE    => {'bug_id != ? AND NOT isobsolete' => $bug->id}
+      });
+      foreach my $attachment (@$other_attachments) {
+
+        # data doesn't match this URL, skip it
+        next if $attachment->data ne $html_url;
+
+        $other_bugs{$attachment->bug_id}++;
+        my $moved_comment
+          = "GitHub pull request attachment was moved to bug "
+          . $bug->id
+          . ". Setting attachment "
+          . $attachment->id
+          . " to obsolete.";
+        $attachment->set_is_obsolete(1);
+        $attachment->bug->add_comment(
+          $moved_comment,
+          {
+            type        => CMT_ATTACHMENT_UPDATED,
+            extra_data  => $attachment->id,
+            is_markdown => (Bugzilla->params->{use_markdown} ? 1 : 0)
+          }
+        );
+        $attachment->bug->update($timestamp);
+        $attachment->update($timestamp);
+      }
+
+      $dbh->bz_commit_transaction;
+      1;
+    }
+  } or do {
+    my $error = $@;
+    $dbh->bz_rollback_transaction;
+    _release_pr_lock($dbh, $pr_lock_name);
+    die $error;
+  };
+
+  _release_pr_lock($dbh, $pr_lock_name);
+
+  if ($duplicate) {
+    return $self->render(json => {error => 1, message => $message});
   }
 
   # Return new attachment id when successful
   return $self->render(json => {error => 0, id => $attachment->id});
+}
+
+sub _acquire_pr_lock {
+  my ($dbh, $repository, $pr_number) = @_;
+
+  # Named advisory locks are MySQL-specific. bmo uses MySQL in production.
+  return undef if !$dbh->isa('Bugzilla::DB::Mysql');
+
+  my $lock_name
+    = 'github-pr:'
+    . substr(hmac_sha256_hex("$repository#$pr_number", 'github_pr_lock'), 0, 54);
+
+  my ($locked) = $dbh->selectrow_array(
+    'SELECT GET_LOCK(?, ?)',
+    undef,
+    $lock_name,
+    30
+  );
+
+  return $locked ? $lock_name : undef;
+}
+
+sub _release_pr_lock {
+  my ($dbh, $lock_name) = @_;
+  return if !$lock_name;
+  $dbh->selectrow_array('SELECT RELEASE_LOCK(?)', undef, $lock_name);
 }
 
 sub push_comment {
@@ -204,7 +302,7 @@ sub push_comment {
     return $self->render(json => {error => 0});
   }
 
-  # Validate JSON input 
+  # Validate JSON input
   my $payload = $self->req->json;
   my @errors  = joi->object->props(
     ref => joi->string->required,
@@ -435,7 +533,7 @@ sub _set_status_flag {
 
   # In order to determine the appropriate status flag for the default
   # branch, we have to find out what the current *nightly* Firefox version is.
-  # fetch_product_versions() calls an API endpoint maintained by rel-eng that 
+  # fetch_product_versions() calls an API endpoint maintained by rel-eng that
   # returns all of the current product versions so we can use that.
   my $version;
   if ($branch eq 'main' || $branch eq 'master') {

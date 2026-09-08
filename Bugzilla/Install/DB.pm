@@ -698,6 +698,11 @@ sub update_table_definitions {
   # 2013-08-16 glob@mozilla.com - Bug 905925
   $dbh->bz_add_index('attachments', 'attachments_ispatch_idx', ['ispatch']);
 
+  # 2026-07-27 justdave@bugzilla.org - Bug 2058190
+  $dbh->bz_add_index('attachments',
+    'attachments_filename_isobsolete_bug_id_idx',
+    [qw(filename isobsolete bug_id)]);
+
   # 2014-06-09 dylan@mozilla.com - Bug 1022923
   $dbh->bz_add_index('bug_user_last_visit',
     'bug_user_last_visit_last_visit_ts_idx',

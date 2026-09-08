@@ -572,6 +572,7 @@ use constant ABSTRACT_SCHEMA => {
       attachments_bug_id_idx            => ['bug_id'],
       attachments_creation_ts_idx       => ['creation_ts'],
       attachments_modification_time_idx => ['modification_time'],
+      attachments_filename_isobsolete_bug_id_idx => ['filename', 'isobsolete', 'bug_id'],
       attachments_submitter_id_idx      => ['submitter_id', 'bug_id'],
       attachments_ispatch_idx           => ['ispatch'],
     ],
