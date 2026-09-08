@@ -16,10 +16,19 @@
     <th align="right" valign="top">Request blocking:</th>
   [% END %]
   <td>
-    <input type="checkbox" id="block_needinfo" name="block_needinfo" value="1"
-            [% " checked" IF user.settings.block_needinfo.value == "on" %]>
-    <label for="block_needinfo">
-      Block needinfo requests (please use only if you'll be unavailable for an extended period of time)
-    </label>
+    [% block_needinfo = user.settings.block_needinfo.value %]
+    <label for="block_needinfo">Needinfo requests:</label>
+    <select id="block_needinfo" name="block_needinfo">
+      <option value="off"[% " selected" IF block_needinfo == "off" %]>
+        Accept from anyone
+      </option>
+      <option value="editbugs"[% " selected" IF block_needinfo == "editbugs" %]>
+        Only accept from users with editbugs
+      </option>
+      <option value="on"[% " selected" IF block_needinfo == "on" %]>
+        Block all needinfo requests (please use only if you'll be unavailable
+        for an extended period of time)
+      </option>
+    </select>
   </td>
 </tr>

@@ -14,4 +14,9 @@
   [% title = "Needinfo Request Blocked" %]
   [% requestee.identity FILTER html %] is not currently accepting "needinfo"
   requests.
+
+[% ELSIF error == "needinfo_blocked_editbugs" %]
+  [% title = "Needinfo Request Blocked" %]
+  [% requestee.identity FILTER html %] only accepts "needinfo" requests from
+  users with the <em>editbugs</em> permission.
 [% END %]
