@@ -34,8 +34,6 @@ sub _user_needinfo_blocked {
   # Never block someone from needinfo'ing themselves.
   return 0 if Bugzilla->user->id == $requestee->id;
 
-  # ponytail: global editbugs membership, not per-product -- needinfo_blocked
-  # has no bug in scope. Thread a product id through if that's ever needed.
   return Bugzilla->user->in_group('editbugs') ? 0 : 1;
 }
 
@@ -312,13 +310,8 @@ sub user_preferences {
 
   my $value = $input->{block_needinfo} // 'off';
   $value = 'on' if $value eq '1';    # stale page still posting the old checkbox
-
-  my $setting = $settings->{block_needinfo};
-  my %legal_values = map { $_ => 1 } @{$setting->legal_values};
-  ThrowCodeError('setting_value_invalid',
-    {name => 'block_needinfo', value => $value})
-    unless $legal_values{$value};
-  $setting->set($value);
+  $settings->{block_needinfo}->validate_value($value);
+  $settings->{block_needinfo}->set($value);
   clear_settings_cache(Bugzilla->user->id);
 }
 
