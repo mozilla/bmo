@@ -13,6 +13,53 @@
   padding: 16px 24px 32px;
 }
 
+/* Documentation keyword search (pages/doc_search_form.html.tmpl and
+ * pages/doc_search.html.tmpl) */
+
+.docs-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--primary-region-border-color);
+}
+
+.docs-search label {
+  font-size: var(--font-size-small);
+  font-weight: bold;
+}
+
+.docs-search-result {
+  margin: 24px 0;
+}
+
+.docs-search-title {
+  margin: 0;
+  font-size: var(--font-size-x-large);
+}
+
+.docs-search-path {
+  color: var(--secondary-label-color);
+  font-family: var(--font-family-monospace);
+  font-size: var(--font-size-small);
+}
+
+.docs-search-match {
+  margin: 8px 0 8px 16px;
+}
+
+.docs-search-snippet {
+  margin: 2px 0 0;
+  color: var(--secondary-label-color);
+}
+
+.docs-search-snippet mark {
+  background-color: var(--selected-text-background-color);
+  color: inherit;
+}
+
 .docs-breadcrumb {
   margin-bottom: 8px;
   font-size: var(--font-size-small);

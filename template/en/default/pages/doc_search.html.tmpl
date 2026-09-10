@@ -1,0 +1,68 @@
+[%# This Source Code Form is subject to the terms of the Mozilla Public
+  # License, v. 2.0. If a copy of the MPL was not distributed with this
+  # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+  #
+  # This Source Code Form is "Incompatible With Secondary Licenses", as
+  # defined by the Mozilla Public License, v. 2.0.
+  #%]
+
+[%# Results of a documentation keyword search. See Docs#search in
+  # Bugzilla::App::Controller::Docs for the shape of doc_query/doc_results.
+  #%]
+
+[% PROCESS global/variables.none.tmpl %]
+
+[% INCLUDE global/header.html.tmpl
+  title      = "Search Documentation"
+  style_urls = ['skins/standard/docs.css']
+%]
+
+<div class="docs-page">
+  <nav class="docs-breadcrumb">
+    <a href="[% docs_urlbase FILTER html %]index.md">Documentation Home</a>
+  </nav>
+
+  [% INCLUDE pages/doc_search_form.html.tmpl query = doc_query %]
+
+  <div class="docs-search-results">
+    [% IF !doc_query %]
+      <p>Enter one or more keywords to search the documentation.</p>
+    [% ELSIF !doc_results.size %]
+      <p>
+        No documentation pages match
+        <strong>[% doc_query FILTER html %]</strong>.
+      </p>
+    [% ELSE %]
+      <p>
+        [% doc_results.size %] page[% "s" UNLESS doc_results.size == 1 %]
+        match[% "es" IF doc_results.size == 1 %]
+        <strong>[% doc_query FILTER html %]</strong>.
+      </p>
+
+      [% FOREACH result IN doc_results %]
+        <section class="docs-search-result">
+          <h2 class="docs-search-title">
+            <a href="[% docs_urlbase FILTER html %][% result.path FILTER html %]">
+              [% result.title FILTER html %]</a>
+          </h2>
+          <div class="docs-search-path">
+            [% result.path FILTER html %]
+          </div>
+          [% FOREACH match IN result.matches %]
+            [% match_url = docs_urlbase _ result.path %]
+            [% match_url = match_url _ "#" _ match.anchor IF match.anchor %]
+            <div class="docs-search-match">
+              <a class="docs-search-heading" href="[% match_url FILTER html %]">
+                [% match.heading FILTER html %]</a>
+              <p class="docs-search-snippet">
+                [% FOREACH s IN match.snippet %][% IF s.match %]<mark>[% s.text FILTER html %]</mark>[% ELSE %][% s.text FILTER html %][% END %][% END %]
+              </p>
+            </div>
+          [% END %]
+        </section>
+      [% END %]
+    [% END %]
+  </div>
+</div>
+
+[% INCLUDE global/footer.html.tmpl %]

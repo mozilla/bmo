@@ -19,6 +19,7 @@
 %]
 
 <div class="docs-page">
+  [% INCLUDE pages/doc_search_form.html.tmpl query = "" %]
   [% IF doc_path != 'md/index.md' %]
     <nav class="docs-breadcrumb">
       <a href="[% docs_urlbase FILTER html %]index.md">Documentation Home</a>

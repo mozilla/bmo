@@ -75,6 +75,48 @@ SKIP: {
     ->header_is('Content-Type' => 'image/png');
 }
 
+# The search form is on every documentation page.
+$t->get_ok('/docs/en/md/index.md')
+  ->element_exists('form.docs-search input[name="q"]',
+  'the docs home page has a search field')
+  ->element_exists('form.docs-search button[type="submit"]');
+$t->get_ok('/docs/en/md/using/finding.md')
+  ->element_exists('form.docs-search input[name="q"]',
+  'sub-pages have a search field too');
+
+# An empty query just prompts for keywords.
+$t->get_ok('/docs/en/search')->status_is(200);
+$t->element_exists_not('.docs-search-result', 'no results without a query')
+  ->text_like('.docs-search-results p' => qr/Enter one or more keywords/);
+
+# Searching finds pages, links to the matching section and highlights the
+# keywords in the snippet.
+$t->get_ok('/docs/en/search?q=quicksearch')->status_is(200)
+  ->element_exists('.docs-search-result', 'quicksearch matches something');
+$t->element_exists('.docs-search-result a[href*="using/finding.md"]',
+  'the finding page is among the results')
+  ->element_exists('.docs-search-match a.docs-search-heading[href*="#"]',
+  'matches link to a heading anchor')
+  ->text_like('.docs-search-snippet mark' => qr/quicksearch/i);
+
+# The anchor a result links to really exists on the target page.
+my $results_dom = $t->tx->res->dom;
+my $heading_link
+  = $results_dom->at('a.docs-search-heading[href*="using/finding.md#"]');
+ok($heading_link, 'a result links into a section of the finding page');
+if ($heading_link) {
+  (my $anchor = $heading_link->attr('href')) =~ s/^.*#//;
+  $t->get_ok('/docs/en/md/using/finding.md')
+    ->element_exists(qq{.docs-content [id="$anchor"]},
+    "heading anchor #$anchor exists on the page it links to");
+}
+
+# All keywords have to match, and unmatched queries say so.
+$t->get_ok('/docs/en/search?q=quicksearch+zzzznotaword')->status_is(200);
+$t->element_exists_not('.docs-search-result',
+  'every keyword has to appear on the page')
+  ->text_like('.docs-search-results p' => qr/No documentation pages match/);
+
 # Directory traversal and non-doc files are rejected.
 $t->get_ok('/docs/en/md/../../../Bugzilla.pm')->status_is(404);
 $t->get_ok('/docs/en/localconfig')->status_is(404);
