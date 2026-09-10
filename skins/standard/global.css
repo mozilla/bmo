@@ -2724,6 +2724,18 @@ div.bz_comment_text pre {
   margin: 0;
 }
 
+.markdown-body details {
+  margin-bottom: 10px;
+}
+
+.markdown-body details > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body summary {
+  cursor: pointer;
+}
+
 .markdown-body ul,
 .markdown-body ol {
   padding-left: 0;

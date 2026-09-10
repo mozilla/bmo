@@ -36,6 +36,30 @@ sub _build_markdown_parser {
 }
 
 my $MARKDOWN_OFF = quotemeta '#[markdown(off)]';
+
+# The only raw HTML allowed in comments: GitHub-style collapsible sections.
+# Markdown rendering escapes all tags, so the escaped text is swapped back to
+# real elements afterwards. Only these exact tags are recognized and they never
+# carry attributes, so no other markup can be smuggled in.
+my %DISCLOSURE_MARKER = (
+  '<details>'  => "\x{E000}",
+  '</details>' => "\x{E001}",
+  '<summary>'  => "\x{E002}",
+  '</summary>' => "\x{E003}",
+);
+
+# Markdown wraps the tags in a paragraph. Closing and reopening it lets the
+# HTML parser lift the block level disclosure elements out of the paragraph;
+# the empty paragraphs left behind are dropped afterwards.
+my %DISCLOSURE_HTML = (
+  "\x{E000}" => '</p><details><p>',
+  "\x{E001}" => '</p></details><p>',
+  "\x{E002}" => '</p><summary>',
+  "\x{E003}" => '</summary><p>',
+);
+
+my $DISCLOSURE_RE = qr{</?(?:details|summary)>}i;
+
 sub render_html {
   my ($self, $markdown, $bug, $comment, $user) = @_;
   my $parser = $self->markdown_parser;
@@ -60,9 +84,12 @@ sub render_html {
     return $html;
   }
 
+  my $has_disclosure = $markdown =~ $DISCLOSURE_RE;
+
   # Replace < with \x{FFFD} (special unicode replacement character),
-  # and remove \x{FFFD} later.
-  $markdown =~ tr/\x{FFFD}//d;
+  # and remove \x{FFFD} later. The private use characters reserved for the
+  # disclosure markers are dropped too, so they can't be forged in a comment.
+  $markdown =~ tr/\x{FFFD}\x{E000}-\x{E003}//d;
   $markdown =~ s{<(?!https?://)}{\x{FFFD}}gs;
 
   my @valid_text_parent_tags = ('h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'td');
@@ -91,8 +118,40 @@ sub render_html {
     });
     return $node;
   });
-  return $dom->to_string;
+  return $has_disclosure ? _expand_disclosure_tags($dom) : $dom->to_string;
+}
 
+# Turn the escaped <details>/<summary> text left by the markdown renderer back
+# into real elements. Text inside code blocks is skipped so the syntax can
+# still be documented in a comment.
+sub _expand_disclosure_tags {
+  my ($dom) = @_;
+
+  my $found = 0;
+  $dom->descendant_nodes->each(sub {
+    my ($node) = @_;
+    return unless $node->type eq 'text';
+    return if $node->ancestors('pre, code')->size;
+    my $text = $node->content;
+    return unless $text =~ s/($DISCLOSURE_RE)/$DISCLOSURE_MARKER{lc $1}/g;
+    $found = 1;
+    $node->content($text);
+  });
+
+  my $html = $dom->to_string;
+  return $html unless $found;
+
+  $html =~ s/([\x{E000}-\x{E003}])/$DISCLOSURE_HTML{$1}/g;
+
+  # Drop the line breaks and empty paragraphs the rewrite leaves behind.
+  $html =~ s{\s*<br\s*/?>\s*(?=</p>)}{}g;
+  $html =~ s{(?<=<p>)\s*<br\s*/?>\s*}{}g;
+
+  my $expanded = Mojo::DOM->new($html);
+  $expanded->find('p')
+    ->grep(sub { !$_->children->size && $_->all_text !~ /\S/ })->map('remove');
+
+  return $expanded->to_string;
 }
 
 sub _is_external_link {
