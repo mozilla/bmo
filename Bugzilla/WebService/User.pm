@@ -433,6 +433,11 @@ sub update {
 
   my $user_objects = params_to_objects($params, 'Bugzilla::User');
 
+  # Some accounts are protected from being edited by non-admins.
+  foreach my $user (@$user_objects) {
+    $user->check_can_be_edited();
+  }
+
   my $values = translate($params, MAPPED_FIELDS);
 
   # We delete names and ids to keep only new values to set.
@@ -966,6 +971,11 @@ B<EXPERIMENTAL>
 =item B<Description>
 
 Updates user accounts in Bugzilla.
+
+You must be in the C<editusers> group. Additionally, accounts in the C<admin>
+group can only be updated by members of the C<admin> group, and accounts in
+the insider group can only be updated by members of the C<admin>, insider, or
+C<servicedesk> groups.
 
 =item B<Params>
 

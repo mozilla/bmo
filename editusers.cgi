@@ -772,16 +772,7 @@ sub check_user {
   }
   ($otherUser && $otherUser->id) || ThrowCodeError('invalid_user', $vars);
 
-  if (!$user->in_group('admin')) {
-    my $insider_group = Bugzilla->params->{insidergroup};
-    my $can_edit_insider
-      = $user->in_group($insider_group) || $user->in_group('servicedesk');
-    if ($otherUser->in_group('admin')
-      || ($otherUser->in_group($insider_group) && !$can_edit_insider))
-    {
-      ThrowUserError('auth_failure', {action => 'modify', object => 'user'});
-    }
-  }
+  $otherUser->check_can_be_edited();
 
   return $otherUser;
 }

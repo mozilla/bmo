@@ -256,6 +256,9 @@ attachments               array     Each array item is an Attachment object. See
                                     :ref:`rest_attachments` for details of the object.
 comments                  array     Each array item is a Comment object. See
                                     :ref:`rest_comments` for details of the object.
+                                    Comments that are collapsed in the web UI are
+                                    left out unless ``_collapsed_comments`` is also
+                                    passed in ``include_fields``.
 counts                    object    An object containing the numbers of the items in the
                                     following fields: ``attachments``, ``cc``,
                                     ``comments``, ``keywords``, ``blocks``,

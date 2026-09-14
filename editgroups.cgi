@@ -499,22 +499,7 @@ sub _do_remove {
 sub check_for_restricted_groups {
   my ($groups) = @_;
 
-  my $user = Bugzilla->user;
-  return if $user->in_group('admin');
-
-  # check for admin changes
   foreach my $group (@$groups) {
-    if ($group->name eq 'admin') {
-      ThrowUserError('auth_failure', {action => 'edit', object => 'admin_group',});
-    }
-  }
-
-  # check for insider group changes
-  my $insider_group = Bugzilla->params->{insidergroup};
-  return if $user->in_group($insider_group);
-  foreach my $group (@$groups) {
-    if ($group->name eq $insider_group) {
-      ThrowUserError('auth_failure', {action => 'edit', object => 'insider_group',});
-    }
+    $group->check_can_be_edited();
   }
 }

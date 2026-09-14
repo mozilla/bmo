@@ -22,7 +22,7 @@ use Bugzilla::Hook;
 use Bugzilla::User;
 use Bugzilla::Util;
 
-use List::Util qw(first);
+use List::Util qw(first any);
 use Scalar::Util qw(blessed weaken isweak);
 use Role::Tiny::With;
 use Tie::IxHash;
@@ -327,8 +327,19 @@ sub tag_url {
 sub collapsed {
   my ($self) = @_;
   return $self->{collapsed} if exists $self->{collapsed};
-  return 0 unless Bugzilla->params->{'comment_taggers_group'};
   $self->{collapsed} = 0;
+
+  # treeherder is so spammy we hide its comments by default. treeherder_users
+  # is added by the BugModal extension, which may be disabled.
+  if (Bugzilla->can('treeherder_users')
+    && any { $_->id == $self->author->id } @{Bugzilla->treeherder_users})
+  {
+    $self->{collapsed}        = 1;
+    $self->{collapsed_reason} = $self->author->name;
+    return $self->{collapsed};
+  }
+
+  return $self->{collapsed} unless Bugzilla->params->{'comment_taggers_group'};
   Bugzilla->request_cache->{comment_tags_collapsed}
     ||= [split(/\s*,\s*/, lc(Bugzilla->params->{'collapsed_comment_tags'}))];
   my @collapsed_tags = @{Bugzilla->request_cache->{comment_tags_collapsed}};

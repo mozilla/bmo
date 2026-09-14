@@ -62,6 +62,11 @@ sub update {
 
   my $group_objects = params_to_objects($params, 'Bugzilla::Group');
 
+  # Some groups are protected from being edited by non-admins.
+  foreach my $group (@$group_objects) {
+    $group->check_can_be_edited();
+  }
+
   my %values = %$params;
 
   # We delete names and ids to keep only new values to set.
@@ -352,6 +357,10 @@ B<UNSTABLE>
 =item B<Description>
 
 This allows you to update a group in Bugzilla.
+
+You must be in the C<creategroups> group. Additionally, the C<admin> group can
+only be updated by members of the C<admin> group, and the insider group can
+only be updated by members of the C<admin> or insider groups.
 
 =item B<REST>
 

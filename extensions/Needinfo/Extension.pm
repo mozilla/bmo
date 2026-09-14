@@ -25,8 +25,16 @@ BEGIN {
 }
 
 sub _user_needinfo_blocked {
-  return $_[0]->settings->{block_needinfo}
-    && $_[0]->settings->{block_needinfo}->{value} eq 'on';
+  my ($requestee) = @_;
+  my $setting = $requestee->settings->{block_needinfo} or return 0;
+
+  return 1 if $setting->{value} eq 'on';
+  return 0 unless $setting->{value} eq 'editbugs';
+
+  # Never block someone from needinfo'ing themselves.
+  return 0 if Bugzilla->user->id == $requestee->id;
+
+  return Bugzilla->user->in_group('editbugs') ? 0 : 1;
 }
 
 sub install_update_db {
@@ -63,10 +71,15 @@ sub install_update_db {
 sub install_before_final_checks {
   my ($self, $args) = @_;
   add_setting({
-    name     => 'block_needinfo',
-    options  => ['on', 'off'],
-    default  => 'off',
-    category => 'Reviews and Needinfo'
+    name        => 'block_needinfo',
+    options     => ['on', 'editbugs', 'off'],
+    default     => 'off',
+    category    => 'Reviews and Needinfo',
+
+    # The setting predates the 'editbugs' option, so force add_setting to
+    # rebuild it. remove_setting only drops user choices outside the new
+    # option list, so existing 'on'/'off' preferences survive.
+    force_check => 1,
   });
 }
 
@@ -241,9 +254,13 @@ sub _check_requestee {
     = ref($requestee)
     ? $requestee
     : Bugzilla::User->new({name => $requestee, cache => 1});
-  if ($user->needinfo_blocked) {
-    ThrowUserError('needinfo_blocked', {requestee => $user});
-  }
+  return unless $user->needinfo_blocked;
+
+  my $blocked_editbugs
+    = $user->settings->{block_needinfo}->{value} eq 'editbugs';
+  ThrowUserError(
+    $blocked_editbugs ? 'needinfo_blocked_editbugs' : 'needinfo_blocked',
+    {requestee => $user});
 }
 
 sub object_end_of_create {
@@ -291,7 +308,8 @@ sub user_preferences {
   my $input    = Bugzilla->input_params;
   my $settings = Bugzilla->user->settings;
 
-  my $value = $input->{block_needinfo} ? 'on' : 'off';
+  my $value = $input->{block_needinfo} // 'off';
+  $value = 'on' if $value eq '1';    # stale page still posting the old checkbox
   $settings->{block_needinfo}->validate_value($value);
   $settings->{block_needinfo}->set($value);
   clear_settings_cache(Bugzilla->user->id);

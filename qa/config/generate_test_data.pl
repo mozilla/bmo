@@ -130,8 +130,9 @@ $group->set_user_regexp('');
 $group->update();
 
 my @usernames = (
-  'admin',       'unprivileged',   'QA_Selenium_TEST', 'canconfirm',
-  'tweakparams', 'permanent',      'editbugs',         'disabled',
+  'admin',       'unprivileged',     'QA_Selenium_TEST', 'canconfirm',
+  'tweakparams', 'permanent',        'editbugs',         'disabled',
+  'editusers',   'editusers_target', 'creategroups',
 );
 
 print "creating user accounts...\n";
@@ -614,6 +615,21 @@ if (!Bugzilla::Group->new({name => $group_name})) {
   );
 }
 
+# An ordinary group for the REST protected group tests to edit. Created the
+# same way as QA-Selenium-TEST, so that the admin group doesn't inherit
+# membership of it.
+($group_name, $group_desc)
+  = ($config->{protected_group_name}, "REST protected group test");
+
+if (!Bugzilla::Group->new({name => $group_name})) {
+  $dbh->do(
+        'INSERT INTO '
+      . $dbh->quote_identifier('groups')
+      . ' (name, description, isbuggroup, isactive)
+              VALUES (?, ?, 1, 1)', undef, ($group_name, $group_desc)
+  );
+}
+
 # BMO 'editbugs' is also a member of 'canconfirm'
 my $editbugs   = Bugzilla::Group->new({name => 'editbugs'});
 my $canconfirm = Bugzilla::Group->new({name => 'canconfirm'});
@@ -639,6 +655,8 @@ my @users_groups = (
   {user => $config->{tweakparams_user_login},      group => 'tweakparams'},
   {user => $config->{canconfirm_user_login},       group => 'canconfirm'},
   {user => $config->{editbugs_user_login},         group => 'editbugs'},
+  {user => $config->{editusers_user_login},        group => 'editusers'},
+  {user => $config->{creategroups_user_login},     group => 'creategroups'},
 );
 
 print "adding users to groups...\n";

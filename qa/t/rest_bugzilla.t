@@ -35,7 +35,8 @@ ok($headers->header('Access-Control-Allow-Origin') eq '*');
 ok($headers->header('Access-Control-Allow-Headers') =~ /x-bugzilla-api-key/);
 
 # Make sure list of enabled extensions is returned
-$t->get_ok($url . 'rest/extensions')->status_is(200)->json_has('/extensions');
+$t->get_ok($url . 'rest/extensions' => {'X-Bugzilla-API-Key' => $api_key})
+  ->status_is(200)->json_has('/extensions');
 my $extensions = $t->tx->res->json->{extensions};
 my @ext_names  = sort keys %{$extensions};
 
@@ -45,16 +46,28 @@ ok(scalar @ext_names,
 ok($extensions->{QA},
   'The QA extension is enabled, with version ' . $extensions->{QA}->{version});
 
+# Anonymous access must return the JSON login_required error, not a 404
+$t->get_ok($url . 'rest/extensions')->status_is(401)
+  ->json_is('/error' => 1)->json_has('/message');
+
 # Check that the server timezone is returned
 $t->get_ok($url . 'rest/timezone')->status_is(200)->json_has('/timezone');
 
 # Check that the server times are returned
-$t->get_ok($url . 'rest/time')->status_is(200)->json_has('/db_time')
-  ->json_has('/web_time');
+$t->get_ok($url . 'rest/time' => {'X-Bugzilla-API-Key' => $api_key})
+  ->status_is(200)->json_has('/db_time')->json_has('/web_time');
+
+# Anonymous access must return the JSON login_required error, not a 404
+$t->get_ok($url . 'rest/time')->status_is(401)
+  ->json_is('/error' => 1)->json_has('/message');
 
 # Make sure there are no jobqueue errors
 $t->get_ok($url . 'rest/jobqueue_status' => {'X-Bugzilla-API-Key' => $api_key})
   ->status_is(200)->json_is('/errors' => 0);
+
+# Anonymous access must return the JSON login_required error, not a 404
+$t->get_ok($url . 'rest/jobqueue_status')->status_is(401)
+  ->json_is('/error' => 1)->json_has('/message');
 
 # Check the configuration data for this Bugzilla instance
 $t->get_ok($url . 'rest/configuration')->status_is(200)

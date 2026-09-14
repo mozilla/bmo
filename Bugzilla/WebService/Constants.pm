@@ -313,7 +313,6 @@ sub WS_DISPATCH {
   Bugzilla::Hook::process('webservice', {dispatch => \%hook_dispatch});
 
   my $dispatch = {
-    'Bugzilla'         => 'Bugzilla::WebService::Bugzilla',
     'Bug'              => 'Bugzilla::WebService::Bug',
     'User'             => 'Bugzilla::WebService::User',
     'Product'          => 'Bugzilla::WebService::Product',

@@ -293,15 +293,12 @@ sub legal_values {
 }
 
 sub validate_value {
-  my $self = shift;
+  my ($self, $value) = @_;
 
-  if (grep(/^$_[0]$/, @{$self->legal_values()})) {
-    # do nothing
-  }
-  else {
-    ThrowCodeError('setting_value_invalid',
-      {'name' => $self->{'_setting_name'}, 'value' => $_[0]});
-  }
+  my %legal_values = map { $_ => 1 } @{$self->legal_values};
+  ThrowCodeError('setting_value_invalid',
+    {name => $self->{_setting_name}, value => $value})
+    unless $legal_values{$value};
 }
 
 sub reset_to_default {
