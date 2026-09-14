@@ -6,10 +6,9 @@
   # defined by the Mozilla Public License, v. 2.0.
   #%]
 
-[%
-  RETURN UNLESS attachment;
-  external = attachment.external_redirect;
-  RETURN UNLESS external;
-  attach_url.title = external.title;
-  attach_url.href  = attachment.data;
-%]
+[% USE Bugzilla %]
+[% RETURN UNLESS event.action == 'requested'
+      && (event.type.name == 'review' || event.type.name == 'feedback')
+      && event.attachment && event.attachment.can_review %]
+<br>
+<a href="[% Bugzilla.splinter_review_url(bug.id, event.attachment_id, 1) FILTER html %]">Review</a>
