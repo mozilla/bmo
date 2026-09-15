@@ -50,7 +50,7 @@ sub add_text_attachment {
   $sel->click_ok('attachments-add-link');
   $sel->wait_for_page_to_load_ok(WAIT_TIME);
   $sel->title_is("Create New Attachment for Bug #$bug_id");
-  $sel->type_ok('att-textarea', $content, 'Enter attachment content');
+  $sel->attach_text($content, 'Enter attachment content');
   $sel->type_ok('att-description', $description, 'Enter attachment description');
   if ($obsoletes) {
     $sel->click_ok(qq{//input[\@name="obsolete" and \@value="$obsoletes"]},

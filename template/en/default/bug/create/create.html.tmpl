@@ -59,7 +59,7 @@ function init() {
   showElementById('btn_no_attachment');
   initCrashSignatureField();
   init_take_handler('[% user.login FILTER js %]');
-  bz_attachment_form.update_requirements(false);
+  bzAttachmentForm.updateRequirements(false);
 
   document.querySelector('#bug_type').addEventListener('change', () => {
     bug_type_specified = true;

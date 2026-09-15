@@ -70,7 +70,7 @@ Bugzilla.DataTable = class DataTable {
 
     this.$container.innerHTML = `
       <div class="data-table-container" aria-label="${this.strings.TITLE || ''}">
-        <table class="data-table">
+        <table class="data-table responsive">
           <caption hidden></caption>
           <thead>
             <tr></tr>
@@ -162,7 +162,7 @@ Bugzilla.DataTable = class DataTable {
       // Add DOM reference
       row.$row = $row;
 
-      this.columns.forEach(({ key, formatter, allowHTML = false, className }) => {
+      this.columns.forEach(({ key, label, formatter, allowHTML = false, className }) => {
         const $column = $row.appendChild(document.createElement('td'));
 
         $column.dataset.key = key;
@@ -195,9 +195,13 @@ Bugzilla.DataTable = class DataTable {
             ? formatter.replaceAll('{value}', value)
             : value;
 
-        if (content === undefined) {
+        // An empty cell is left unlabeled: the label is only rendered as a row header on narrow
+        // screens, where it would otherwise show a heading with no value under it
+        if (content === undefined || content === '') {
           return;
         }
+
+        $column.dataset.columnLabel = label || key;
 
         if (allowHTML) {
           if (typeof content === 'string') {
@@ -333,6 +337,7 @@ Bugzilla.DataTable = class DataTable {
    * @param {string} message Message text.
    */
   setMessage(message) {
+    this.#$table.hidden = !this.data.length;
     this.#$message.innerHTML =
       this.strings[message] || this.#defaultStrings[message] || message || '';
     this.#$message.hidden = !message;

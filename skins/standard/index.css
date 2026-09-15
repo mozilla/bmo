@@ -12,10 +12,6 @@
   min-height: calc(100dvh - var(--global-header-height));
 }
 
-#bugzilla-body:has(#home) #message-container {
-  flex: none;
-}
-
 #main-inner:has(#home) {
   flex: auto;
   display: flex;

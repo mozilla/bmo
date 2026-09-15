@@ -467,7 +467,16 @@ sub is_editable_ok {
 sub attach_file {
   my ($self, $locator, $filename) = @_;
   my $path = Mojo::File->new($filename);
-  $self->type_ok('att-textarea', $path->slurp, 'Add attachment data');
+  $self->attach_text($path->slurp);
+}
+
+# Enter the given text as the content of a new attachment. The attachment
+# selector keeps its textarea hidden until the Enter Text button is clicked,
+# so it has to be revealed before it can be typed into.
+sub attach_text {
+  my ($self, $text, $desc) = @_;
+  $self->click_ok('att-enter-button', undef, 'Show the attachment text editor');
+  $self->type_ok('att-textarea', $text, $desc || 'Add attachment data');
 }
 
 # Private Helpers

@@ -152,7 +152,7 @@ END;
       aria-required="true" aria-invalid="false" aria-errormessage="field-[% name FILTER html %]-error"
     [% END %]
     [% error_message = BLOCK %]
-      <div id="field-[% name FILTER html %]-error" class="input-error bz_default_hidden" aria-live="assertive">
+      <div id="field-[% name FILTER html %]-error" class="error-message bz_default_hidden" aria-live="assertive">
         [% IF field_type == constants.FIELD_TYPE_SINGLE_SELECT %]
           You must select a
         [% ELSIF field_type == constants.FIELD_TYPE_MULTI_SELECT %]

@@ -7,35 +7,65 @@
   #%]
 
 [% WRAPPER product_block
-   name="Firefox"
+   product_name="Firefox"
    icon="firefox.png"
 %]
-For [% terms.bugs %] in Firefox, the Mozilla Foundation's web browser.
-
-(<a href="https://www.mozilla.org/en-US/firefox/desktop/">more info</a>)
+Web browser for Windows, Mac and Linux
 [% END %]
-[% INCLUDE product_block
-   name="Firefox for Android"
+
+[% WRAPPER product_block
+   product_name="Firefox for Android"
    icon="firefox_android.png"
 %]
-[% INCLUDE product_block
-   name="Firefox for iOS"
+Web browser for Android phones and tablets
+[% END %]
+
+[% WRAPPER product_block
+   product_name="Firefox for iOS"
    icon="firefox_ios.png"
-   onclick="document.location='https://github.com/mozilla-mobile/firefox-ios/issues'"
-   security_bug_link = "enter_bug.cgi?format=guided#h=dupes|Focus|Security%3A iOS"
+   link="https://github.com/mozilla-mobile/firefox-ios/issues"
 %]
-[% INCLUDE product_block
-   name="Focus"
+Web browser for iPhone and iPad<br>
+Use <a href="enter_bug.cgi?format=guided&amp;product=Focus&amp;component=Security%3A+iOS">this form</a>
+for security issues.
+[% END %]
+
+[% WRAPPER product_block
+   caption="Firefox Focus for Android"
+   product_name="Focus"
    icon="focus.png"
 %]
-[% INCLUDE product_block
-   name="Thunderbird"
+Privacy browser for Android phones and tablets
+[% END %]
+
+[% WRAPPER product_block
+   caption="Firefox Focus for iOS"
+   product_name="Focus"
+   icon="focus.png"
+   link="https://github.com/mozilla-mobile/firefox-ios/issues"
+%]
+Privacy browser for iPhone and iPad
+[% END %]
+
+[% WRAPPER product_block
+   product_name="Thunderbird"
    icon="thunderbird.png"
 %]
+Email software for Windows, Mac and Linux
+[% END %]
+
 [% WRAPPER product_block
-   name="Other Products"
-   icon="other.png"
-   onclick="guided.setStep('otherProducts')"
+   caption="Thunderbird for Android"
+   product_name="Thunderbird"
+   icon="thunderbird.png"
+   link="https://github.com/thunderbird/thunderbird-android/issues"
 %]
-Other Mozilla products which aren't listed here
+Email software for Android phones and tablets
+[% END %]
+
+[% WRAPPER product_block
+   product_name="Other Products"
+   icon="other.png"
+%]
+Other Mozilla products that are not listed here
 [% END %]
