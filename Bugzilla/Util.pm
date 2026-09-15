@@ -298,7 +298,9 @@ sub i_am_cgi {
 
 sub i_am_webservice {
   my $usage_mode = Bugzilla->usage_mode;
-  return $usage_mode == USAGE_MODE_JSON || $usage_mode == USAGE_MODE_REST;
+  return $usage_mode == USAGE_MODE_JSON
+    || $usage_mode == USAGE_MODE_REST
+    || $usage_mode == USAGE_MODE_MOJO_REST;
 }
 
 sub is_webserver_group {
