@@ -158,10 +158,42 @@ is(
   'A disclosure tag in a code span keeps the spelling the comment used'
 );
 
+is(
+  $parser->render_html('<details open><summary>x</summary>y</details>'),
+  "<details open><summary>x</summary><p>y</p></details>\n",
+  'The open attribute starts a section expanded'
+);
+
+is(
+  $parser->render_html('<DETAILS OPEN ><summary>x</summary>y</details>'),
+  "<details open><summary>x</summary><p>y</p></details>\n",
+  'The open attribute is case insensitive and tolerates whitespace'
+);
+
+is(
+  $parser->render_html('Use `<DETAILS OPEN>` to fold.'),
+  "<p>Use <code>&lt;DETAILS OPEN&gt;</code> to fold.</p>\n",
+  'An open disclosure tag in a code span keeps the spelling the comment used'
+);
+
+is(
+  $parser->render_html('<summary open>nope'),
+  "<p>&lt;summary open&gt;nope</p>\n",
+  'The open attribute is only recognized on <details>'
+);
+
 like(
   $parser->render_html('<details open onclick="x">nope'),
   qr{&lt;details open onclick=&quot;x&quot;&gt;nope},
-  'Only the bare disclosure tags are recognized'
+  'The open attribute is the only attribute recognized'
+);
+
+# A marker must not span a line break, or the hard break the parser puts there
+# would split it and spill its innards into the page.
+like(
+  $parser->render_html("<details\nopen>hidden?"),
+  qr{\A<p>&lt;details<br>\nopen&gt;hidden\?</p>\n\z},
+  'A disclosure tag split over two lines is not recognized'
 );
 
 # Only the raw tags in the comment are expanded; text that merely renders as a

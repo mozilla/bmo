@@ -2736,6 +2736,17 @@ div.bz_comment_text pre {
   cursor: pointer;
 }
 
+/* A heading is a block, which would drop it below the disclosure triangle. */
+.markdown-body summary h1,
+.markdown-body summary h2,
+.markdown-body summary h3,
+.markdown-body summary h4,
+.markdown-body summary h5,
+.markdown-body summary h6 {
+  display: inline-block;
+  margin: 0;
+}
+
 .markdown-body ul,
 .markdown-body ol {
   padding-left: 0;

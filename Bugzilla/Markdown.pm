@@ -42,27 +42,35 @@ my $MARKDOWN_OFF = quotemeta '#[markdown(off)]';
 # The raw tags are swapped for markers before the markdown is parsed, and
 # those markers are turned into real elements afterwards. Marking them up
 # front is what keeps a raw tag distinct from text that merely renders as one,
-# such as an entity-encoded tag. Only these exact tags are recognized and they
-# never carry attributes, so no other markup can be smuggled in.
+# such as an entity-encoded tag. Only these exact tags are recognized, and the
+# bare `open` attribute on <details> is the only attribute they may carry, so
+# no other markup can be smuggled in.
 
 # Markdown wraps the tags in a paragraph. Closing and reopening it lets the
 # HTML parser lift the block level disclosure elements out of the paragraph;
 # the empty paragraphs left behind are dropped afterwards. Keyed by tag name,
 # as a marker carries the name rather than the whole tag.
 my %DISCLOSURE_HTML = (
-  'details'  => '</p><details><p>',
-  '/details' => '</p></details><p>',
-  'summary'  => '</p><summary>',
-  '/summary' => '</summary><p>',
+  'details'      => '</p><details><p>',
+  'details open' => '</p><details open><p>',
+  '/details'     => '</p></details><p>',
+  'summary'      => '</p><summary>',
+  '/summary'     => '</summary><p>',
 );
 
-my $DISCLOSURE_RE = qr{</?(?:details|summary)>}i;
+# <details open> starts a section already expanded. Only the bare attribute is
+# recognized, so a marker never has to carry a quoted value, and the whitespace
+# around it has to stay horizontal: a marker spanning a line break would be
+# split by the hard break the parser puts there.
+my $DISCLOSURE_OPEN_RE = qr{\h+open\h*}i;
+
+my $DISCLOSURE_RE = qr{<details$DISCLOSURE_OPEN_RE?>|</details>|</?summary>}i;
 
 # A marker wraps the tag name as the comment spelled it, so the marker is self
 # describing: a tag that turns out to be a code literal is restored to the
 # comment's own spelling, while one that becomes an element is named in
 # canonical lower case.
-my $DISCLOSURE_NAME_RE = qr{/?(?:details|summary)}i;
+my $DISCLOSURE_NAME_RE = qr{details$DISCLOSURE_OPEN_RE?|/details|/?summary}i;
 
 # The private use characters a marker starts and ends with.
 my $MARKER_START = chr 0xE000;
@@ -214,7 +222,7 @@ sub _expand_disclosure_tags {
   my $html = $dom->to_string;
   return $html unless $found;
 
-  $html =~ s/$marker_re/$DISCLOSURE_HTML{lc $1}/g;
+  $html =~ s/$marker_re/_disclosure_html($1)/ge;
 
   # Drop the line breaks and empty paragraphs the rewrite leaves behind.
   $html =~ s{\s*<br\s*/?>\s*(?=</p>)}{}g;
@@ -225,6 +233,17 @@ sub _expand_disclosure_tags {
     ->grep(sub { !$_->children->size && $_->all_text !~ /\S/ })->map('remove');
 
   return $expanded->to_string;
+}
+
+# The markup a marker expands to. A marker carries the tag name as the comment
+# spelled it, so the lookup normalizes the case and the whitespace an `open`
+# attribute was written with.
+sub _disclosure_html {
+  my ($name) = @_;
+
+  $name = lc $name;
+  $name =~ s/$DISCLOSURE_OPEN_RE\z/ open/;
+  return $DISCLOSURE_HTML{$name};
 }
 
 sub _is_external_link {
