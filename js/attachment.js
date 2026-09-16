@@ -527,7 +527,8 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
   }
 
   /**
-   * Reset all the input fields to the initial state, and remove the preview and message.
+   * Reset all the input fields and the view to the initial state: no file, no text, no preview, no
+   * message, and the action buttons showing again.
    */
   resetFields() {
     this.#abortReads();
@@ -538,6 +539,10 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
     this.clearPreview();
     this.clearError();
     this.updateText();
+
+    this.actionsDisplayed = true;
+    this.editorDisplayed = false;
+    this.previewDisplayed = false;
   }
 
   /**
@@ -876,10 +881,6 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
    */
   removeButtonOnClick() {
     this.resetFields();
-
-    this.actionsDisplayed = true;
-    this.editorDisplayed = false;
-    this.previewDisplayed = false;
   }
 
   /**

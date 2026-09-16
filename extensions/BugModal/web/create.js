@@ -296,14 +296,10 @@ window.addEventListener('DOMContentLoaded', () => {
       $attachFileActionOuter.hidden = false;
       $attachFileContentOuter.hidden = true;
 
-      // Reset all the input values under Attachment
-      $form.attach_text.value = '';
-      $form.description.value = '';
-      $form.ispatch.checked = false;
+      // Reset all the input values under Attachment, including a file already provided through
+      // the selector, so nothing is submitted for an attachment the user has just declined
+      bzAttachmentForm.resetFields();
       $form.hide_preview.checked = false;
-      $form.contenttypemethod.checked = true;
-      $form.contenttypeselection.selectedIndex = 0;
-      $form.contenttypeentry.value = '';
       document.querySelectorAll('#attachment_flags select').forEach(($select) => {
         $select.selectedIndex = 0;
       });
