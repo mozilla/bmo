@@ -148,8 +148,33 @@ like(
   'Only the bare disclosure tags are recognized'
 );
 
+# Only the raw tags in the comment are expanded; text that merely renders as a
+# tag must not be able to close the section early and reveal hidden content.
 is(
-  $parser->render_html("\x{E000}\x{E002}nope\x{E003}\x{E001}"),
+  $parser->render_html('<details><summary>x</summary>'
+    . '&lt;/details&gt;hidden</details>'),
+  '<details><summary>x</summary>'
+    . "<p>&lt;/details&gt;hidden</p></details>\n",
+  'Entity encoded disclosure tags are not expanded'
+);
+
+is(
+  $parser->render_html('Use `<details>` for &lt;summary&gt;a&lt;/summary&gt;'),
+  '<p>Use <code>&lt;details&gt;</code> for '
+    . "&lt;summary&gt;a&lt;/summary&gt;</p>\n",
+  'A raw tag in a code span does not expand entity encoded tags elsewhere'
+);
+
+# Spelled with chr() rather than \x escapes, which perlcritic flags.
+my $details_open  = chr 0xE000;
+my $details_close = chr 0xE001;
+my $summary_open  = chr 0xE002;
+my $summary_close = chr 0xE003;
+
+is(
+  $parser->render_html(
+    $details_open . $summary_open . 'nope' . $summary_close . $details_close
+  ),
   "<p>nope</p>\n",
   'The internal disclosure markers cannot be forged in a comment'
 );

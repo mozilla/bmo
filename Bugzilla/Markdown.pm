@@ -38,27 +38,33 @@ sub _build_markdown_parser {
 my $MARKDOWN_OFF = quotemeta '#[markdown(off)]';
 
 # The only raw HTML allowed in comments: GitHub-style collapsible sections.
-# Markdown rendering escapes all tags, so the escaped text is swapped back to
-# real elements afterwards. Only these exact tags are recognized and they never
-# carry attributes, so no other markup can be smuggled in.
+# The raw tags are swapped for private use characters before the markdown is
+# parsed, and those markers are turned into real elements afterwards. Marking
+# them up front is what keeps a raw tag distinct from text that merely renders
+# as one, such as an entity-encoded tag. Only these exact tags are recognized
+# and they never carry attributes, so no other markup can be smuggled in.
 my %DISCLOSURE_MARKER = (
-  '<details>'  => "\x{E000}",
-  '</details>' => "\x{E001}",
-  '<summary>'  => "\x{E002}",
-  '</summary>' => "\x{E003}",
+  '<details>'  => chr 0xE000,
+  '</details>' => chr 0xE001,
+  '<summary>'  => chr 0xE002,
+  '</summary>' => chr 0xE003,
 );
+
+# Marker back to the tag it stands for, for markers that cannot be expanded.
+my %DISCLOSURE_TAG = reverse %DISCLOSURE_MARKER;
 
 # Markdown wraps the tags in a paragraph. Closing and reopening it lets the
 # HTML parser lift the block level disclosure elements out of the paragraph;
 # the empty paragraphs left behind are dropped afterwards.
 my %DISCLOSURE_HTML = (
-  "\x{E000}" => '</p><details><p>',
-  "\x{E001}" => '</p></details><p>',
-  "\x{E002}" => '</p><summary>',
-  "\x{E003}" => '</summary><p>',
+  $DISCLOSURE_MARKER{'<details>'}  => '</p><details><p>',
+  $DISCLOSURE_MARKER{'</details>'} => '</p></details><p>',
+  $DISCLOSURE_MARKER{'<summary>'}  => '</p><summary>',
+  $DISCLOSURE_MARKER{'</summary>'} => '</summary><p>',
 );
 
-my $DISCLOSURE_RE = qr{</?(?:details|summary)>}i;
+my $DISCLOSURE_RE        = qr{</?(?:details|summary)>}i;
+my $DISCLOSURE_MARKER_RE = qr{[\x{E000}-\x{E003}]};
 
 sub render_html {
   my ($self, $markdown, $bug, $comment, $user) = @_;
@@ -84,12 +90,16 @@ sub render_html {
     return $html;
   }
 
-  my $has_disclosure = $markdown =~ $DISCLOSURE_RE;
-
   # Replace < with \x{FFFD} (special unicode replacement character),
   # and remove \x{FFFD} later. The private use characters reserved for the
   # disclosure markers are dropped too, so they can't be forged in a comment.
   $markdown =~ tr/\x{FFFD}\x{E000}-\x{E003}//d;
+
+  # Mark the raw disclosure tags before the markdown is parsed, so that only
+  # these occurrences can ever become elements again.
+  my $has_disclosure
+    = $markdown =~ s/($DISCLOSURE_RE)/$DISCLOSURE_MARKER{lc $1}/g;
+
   $markdown =~ s{<(?!https?://)}{\x{FFFD}}gs;
 
   my @valid_text_parent_tags = ('h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'td');
@@ -121,27 +131,40 @@ sub render_html {
   return $has_disclosure ? _expand_disclosure_tags($dom) : $dom->to_string;
 }
 
-# Turn the escaped <details>/<summary> text left by the markdown renderer back
-# into real elements. Text inside code blocks is skipped so the syntax can
-# still be documented in a comment.
+# Turn the markers left in place of the raw <details>/<summary> tags into real
+# elements. A marker that ended up somewhere it cannot be expanded is restored
+# as literal text: inside a code block, so the syntax can still be documented
+# in a comment, or inside an attribute value, where only text belongs.
 sub _expand_disclosure_tags {
   my ($dom) = @_;
 
   my $found = 0;
   $dom->descendant_nodes->each(sub {
     my ($node) = @_;
-    return unless $node->type eq 'text';
-    return if $node->ancestors('pre, code')->size;
+
+    if ($node->type eq 'tag') {
+      my $attr = $node->attr;
+      foreach my $key (keys %$attr) {
+        next unless defined $attr->{$key};
+        $attr->{$key} =~ s/($DISCLOSURE_MARKER_RE)/$DISCLOSURE_TAG{$1}/g;
+      }
+      return;
+    }
+
     my $text = $node->content;
-    return unless $text =~ s/($DISCLOSURE_RE)/$DISCLOSURE_MARKER{lc $1}/g;
-    $found = 1;
+    return unless $text =~ $DISCLOSURE_MARKER_RE;
+    if ($node->type eq 'text' && !$node->ancestors('pre, code')->size) {
+      $found = 1;
+      return;
+    }
+    $text =~ s/($DISCLOSURE_MARKER_RE)/$DISCLOSURE_TAG{$1}/g;
     $node->content($text);
   });
 
   my $html = $dom->to_string;
   return $html unless $found;
 
-  $html =~ s/([\x{E000}-\x{E003}])/$DISCLOSURE_HTML{$1}/g;
+  $html =~ s/($DISCLOSURE_MARKER_RE)/$DISCLOSURE_HTML{$1}/g;
 
   # Drop the line breaks and empty paragraphs the rewrite leaves behind.
   $html =~ s{\s*<br\s*/?>\s*(?=</p>)}{}g;
