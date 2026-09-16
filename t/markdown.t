@@ -142,6 +142,22 @@ is(
   'Disclosure tags in a code span stay literal'
 );
 
+# A code literal is the comment's own text, so marking the tags must not
+# normalize the spelling of the ones that turn out to be literals. Only the
+# tags that become elements are named in canonical lower case.
+is(
+  $parser->render_html("```\n<DETAILS><SUMMARY>x</SUMMARY>y</DETAILS>\n```"),
+  "<pre><code>&lt;DETAILS&gt;&lt;SUMMARY&gt;x&lt;/SUMMARY&gt;"
+    . "y&lt;/DETAILS&gt;\n</code></pre>\n",
+  'A literal disclosure tag keeps the spelling the comment used'
+);
+
+is(
+  $parser->render_html('Use `<DeTaIlS>` to fold.'),
+  "<p>Use <code>&lt;DeTaIlS&gt;</code> to fold.</p>\n",
+  'A disclosure tag in a code span keeps the spelling the comment used'
+);
+
 like(
   $parser->render_html('<details open onclick="x">nope'),
   qr{&lt;details open onclick=&quot;x&quot;&gt;nope},
@@ -166,17 +182,56 @@ is(
 );
 
 # Spelled with chr() rather than \x escapes, which perlcritic flags.
-my $details_open  = chr 0xE000;
-my $details_close = chr 0xE001;
-my $summary_open  = chr 0xE002;
-my $summary_close = chr 0xE003;
+my $marker_start = chr 0xE000;
+my $marker_end   = chr 0xE001;
 
 is(
   $parser->render_html(
-    $details_open . $summary_open . 'nope' . $summary_close . $details_close
+    "${marker_start}details${marker_end}${marker_start}summary${marker_end}nope"
   ),
-  "<p>nope</p>\n",
-  'The internal disclosure markers cannot be forged in a comment'
+  "<p>detailssummarynope</p>\n",
+  'The marker characters cannot be forged in a comment'
+);
+
+# A character reference is decoded by the markdown parser, after the comment
+# has been scrubbed of the marker characters, so it must not be able to hand
+# back a marker. Otherwise a comment with one real disclosure tag could close
+# the section early and reveal the content hidden in it, or open a section of
+# its own and hide what follows.
+foreach my $reference ('&#xE001;', '&#57345;', '&#x0000E001;') {
+  is(
+    $parser->render_html(
+      "<details><summary>x</summary>${reference}visible</details>"
+    ),
+    "<details><summary>x</summary><p>visible</p></details>\n",
+    "A $reference character reference cannot forge a disclosure marker"
+  );
+}
+
+is(
+  $parser->render_html(
+    '<details><summary>x</summary>y</details> &#xE000;hidden?'
+  ),
+  '<details><summary>x</summary><p>y</p></details>'
+    . "<p> hidden?</p>\n",
+  'A character reference cannot open a section of its own'
+);
+
+# The characters the markers are built from are never content, so a reference
+# to one leaves nothing behind, whether or not the comment has a real tag.
+is(
+  $parser->render_html('a&#xE000;b&#xE001;c'),
+  "<p>abc</p>\n",
+  'References to the reserved characters are dropped'
+);
+
+# A marker is percent encoded when it lands in a link destination, where it
+# has to be recognized too: otherwise the token meant to stay internal is
+# served as part of the URL.
+like(
+  $parser->render_html('[a](http://x/<DETAILS>)'),
+  qr{href="http://x/&lt;DETAILS&gt;"},
+  'A marker in a link destination is restored, not served as the URL'
 );
 
 # An unbalanced tag must not leak an unclosed element into the page.
