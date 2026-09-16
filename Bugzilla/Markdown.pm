@@ -99,6 +99,10 @@ sub _disclosure_markers {
       # The tag without its angle brackets, which a marker cannot contain:
       # every remaining < in the comment is escaped before it is parsed.
       my $name = substr $_[0], 1, -1;
+
+      # A name the lookup has no markup for is left as the comment wrote it,
+      # rather than marked and expanded to nothing later on.
+      return $_[0] unless defined _disclosure_key($name);
       return $MARKER_START . $nonce . $name . $nonce . $MARKER_END;
     },
     re => qr{
@@ -235,15 +239,28 @@ sub _expand_disclosure_tags {
   return $expanded->to_string;
 }
 
-# The markup a marker expands to. A marker carries the tag name as the comment
-# spelled it, so the lookup normalizes the case and the whitespace an `open`
-# attribute was written with.
-sub _disclosure_html {
+# The %DISCLOSURE_HTML key a tag name belongs to, or nothing when it has no
+# markup. A marker carries the tag name as the comment spelled it, so the case
+# and the whitespace an `open` attribute was written with are normalized here.
+#
+# The name is checked against the keys rather than assumed to be one of them,
+# because a case insensitive match is not the same thing as lc: Perl folds
+# Unicode, so <detailſ> (U+017F) matches the tags while lc leaves that
+# spelling alone.
+sub _disclosure_key {
   my ($name) = @_;
 
   $name = lc $name;
   $name =~ s/$DISCLOSURE_OPEN_RE\z/ open/;
-  return $DISCLOSURE_HTML{$name};
+  return exists $DISCLOSURE_HTML{$name} ? $name : undef;
+}
+
+# The markup a marker expands to. The name was checked when the marker was
+# made, so the key is always there.
+sub _disclosure_html {
+  my ($name) = @_;
+
+  return $DISCLOSURE_HTML{_disclosure_key($name)};
 }
 
 sub _is_external_link {

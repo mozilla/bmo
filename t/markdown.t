@@ -266,6 +266,23 @@ like(
   'A marker in a link destination is restored, not served as the URL'
 );
 
+# Perl's case insensitive match folds Unicode, so a spelling like <detail\x{17f}>
+# matches the disclosure tags while lc does not turn it into a tag name. Such a
+# tag has no markup to expand to and must be left as the comment wrote it,
+# rather than marked and then dropped, deleting the text.
+my $long_s = chr 0x17F;
+
+foreach my $tag ("<detail$long_s>", "<detail$long_s open>", "</detail$long_s>",
+  "<$long_s" . 'ummary>', "</$long_s" . 'ummary>')
+{
+  my $name = substr $tag, 1, -1;
+  is(
+    $parser->render_html("${tag}text"),
+    "<p>&lt;${name}&gt;text</p>\n",
+    "A $tag Unicode case fold of a disclosure tag is kept literally"
+  );
+}
+
 # An unbalanced tag must not leak an unclosed element into the page.
 like(
   $parser->render_html("<details>\n<summary>oops</summary>\n\nrest\n"),
