@@ -20,6 +20,7 @@ use Bugzilla::Search;
 use Bugzilla::Search::Quicksearch;
 use Bugzilla::Search::Recent;
 use Bugzilla::Search::Saved;
+use Bugzilla::Series;
 use Bugzilla::User;
 use Bugzilla::Bug;
 use Bugzilla::Product;
@@ -229,12 +230,23 @@ sub LookupSeries {
   my ($series_id) = @_;
   detaint_natural($series_id) || ThrowCodeError("invalid_series_id");
 
-  my $dbh = Bugzilla->dbh;
-  my $result
-    = $dbh->selectrow_array("SELECT query FROM series " . "WHERE series_id = ?",
-    undef, ($series_id));
-  $result || ThrowCodeError("invalid_series_id", {'series_id' => $series_id});
-  return $result;
+  # Series are only visible to charting users, as in chart.cgi.
+  my $user = Bugzilla->user;
+  $user->in_group(Bugzilla->params->{"chartgroup"}) || ThrowUserError(
+    "auth_failure",
+    {
+      group  => Bugzilla->params->{"chartgroup"},
+      action => "use",
+      object => "charts"
+    }
+  );
+
+  # Bugzilla::Series enforces the creator / is_public / category group checks,
+  # and returns undef for both missing and unauthorized series so this is not
+  # an existence oracle.
+  my $series = Bugzilla::Series->new($series_id)
+    || ThrowCodeError("invalid_series_id", {'series_id' => $series_id});
+  return $series->{'query'};
 }
 
 sub GetQuip {
@@ -334,6 +346,7 @@ if ($cmdtype eq "dorem") {
 
   }
   elsif ($remaction eq "runseries") {
+    $user                 = Bugzilla->login(LOGIN_REQUIRED);
     $buffer               = LookupSeries(scalar $cgi->param("series_id"));
     $vars->{'searchname'} = $cgi->param('namedcmd');
     $vars->{'searchtype'} = "series";
