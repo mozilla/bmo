@@ -350,7 +350,7 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
               <button type="button" id="att-capture-button">Take Screenshot</button>
             </span>
           </div>
-          <input hidden id="att-file" type="file">
+          <input hidden id="att-file" type="file" name="data">
           <div id="att-item">
             <div hidden id="att-editor">
               <textarea id="att-textarea" name="attach_text" cols="80" rows="8"
@@ -542,10 +542,15 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
 
   /**
    * Process a file for upload regardless of how it was provided (file picker, drag-and-drop, paste
-   * or screen capture). Read the file content, update the filename field, and show the preview.
+   * or screen capture). Read the file content if needed, update the filename field, and show the
+   * preview.
    * @param {File} file A file to be read.
+   * @param {boolean} [transferred] `true` if the file came from a `DataTransfer` (drag & drop,
+   * paste) or was generated (screen capture), `false` if the user picked it with the file input.
+   * A picked file stays in the input and is uploaded natively as multipart; the rest have no input
+   * to submit, so their content is embedded as Base64 instead.
    */
-  processFile(file) {
+  processFile(file, transferred = true) {
     // Detect patches that should have the `text/plain` MIME type
     const isPatch =
       !!file.name.match(/\.(?:diff|patch)$/) || !!file.type.match(/^text\/x-(?:diff|patch)$/);
@@ -579,12 +584,17 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
       return;
     }
 
-    this.readingFile = true;
-    this.dataReader.readAsDataURL(file);
-    // Note that this clears `$file.files` as well, so `$filename` is what tells us a file has been
-    // picked from here on
-    this.$file.value = '';
-    this.$filename.value = file.name.replace(/\s/g, '-');
+    if (transferred) {
+      this.readingFile = true;
+      this.dataReader.readAsDataURL(file);
+      // Note that this clears `$file.files` as well, so `$filename` is what tells us a file has
+      // been provided from here on
+      this.$file.value = '';
+      this.$filename.value = file.name.replace(/\s/g, '-');
+    } else {
+      this.$data.value = '';
+      this.$filename.value = '';
+    }
 
     this.editorDisplayed = false;
     this.showPreview(file, isText);
@@ -641,7 +651,7 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
    * Called whenever a file is selected by the user by using the file picker. Prepare for upload.
    */
   fileOnChange() {
-    this.processFile(this.$file.files[0]);
+    this.processFile(this.$file.files[0], false);
   }
 
   /**
@@ -706,11 +716,7 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
     this.textareaOnInput();
 
     if (text.trim()) {
-      this.readingFile = false;
-      this.sizeError = false;
       this.$textarea.hidden = false;
-      this.$dropbox.classList.remove('invalid');
-      this.$errorMessage.hidden = true;
     }
   }
 
@@ -819,8 +825,13 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
     const isGhpr = !!text.match(/^https:\/\/github\.com\/[\w\-]+\/[\w\-]+\/pull\/\d+\/?$/);
 
     if (hasText) {
+      // Text replaces any file: one already provided, one still being read, and one that was
+      // rejected for its size along with its error message
+      this.#abortReads();
       this.$file.value = '';
       this.$data.value = '';
+      this.$filename.value = '';
+      this.clearError();
     }
 
     this.dispatchEvent('AttachmentTextUpdated', { text, hasText, isPatch, isGhpr });
@@ -905,7 +916,10 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
     }
 
     if (this.sizeError) {
-      // Keep the file size error on screen instead of overwriting it below
+      // Make sure the file size error is on screen: `updateRequirements(false)` may have hidden it
+      // since, and the check below must not overwrite it
+      this.$errorMessage.hidden = false;
+      this.$dropbox.classList.add('invalid');
       event.preventDefault();
 
       return false;
@@ -921,6 +935,7 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
 
     const invalid =
       this.required &&
+      !this.$file.files.length &&
       !this.$data.value.trim() &&
       !this.$filename.value.trim() &&
       !this.$textarea.value.trim();

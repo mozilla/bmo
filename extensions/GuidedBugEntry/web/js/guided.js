@@ -158,9 +158,7 @@ class GuidedBugEntry {
     GuidedBugEntryFormPage.onInit();
     GuidedBugEntryFormPage.initHelp();
 
-    const noSetHistory = !window.history.state;
-
-    if (noSetHistory) {
+    if (!window.history.state) {
       const { search, pathname } = window.location;
       const params = new URLSearchParams(search);
       const { product: productName, component: componentName } = Object.fromEntries(params);
@@ -176,7 +174,9 @@ class GuidedBugEntry {
       );
     }
 
-    this.onStateChange(noSetHistory);
+    // Render the initial step without pushing: the history already reflects it, whether the state
+    // was just seeded above or restored by the browser on reload
+    this.onStateChange(true);
 
     window.addEventListener('popstate', () => {
       this.onStateChange(true);
@@ -1032,8 +1032,8 @@ class GuidedBugEntryFormPage {
   static attachmentSelector;
 
   /**
-   * Whether the user has edited the attachment description themselves, in which case it’s no
-   * longer updated automatically.
+   * Whether the user has entered an attachment description themselves, in which case it’s no
+   * longer updated automatically. Cleared again once they empty the field.
    * @type {boolean}
    */
   static attDescOverridden = false;
@@ -1085,8 +1085,8 @@ class GuidedBugEntryFormPage {
       this.onComponentChange(event.target.value);
     });
 
-    this.$attDescription.addEventListener('change', () => {
-      this.attDescOverridden = true;
+    this.$attDescription.addEventListener('input', () => {
+      this.attDescOverridden = !!this.$attDescription.value.trim();
     });
 
     const useMarkdown = BUGZILLA.param.use_markdown;
@@ -1214,8 +1214,11 @@ class GuidedBugEntryFormPage {
    * @param {boolean} params.isPatch `true` if the file is detected as a patch, `false` otherwise.
    */
   static onAttachmentProcessed({ file, type, isPatch }) {
+    if (!this.attDescOverridden) {
+      this.$attDescription.value = file.name;
+    }
+
     this.$attDescSection.hidden = false;
-    this.$attDescription.value = file.name;
     this.$attDescription.disabled = false;
     this.$attDescription.setAttribute('aria-required', true);
     this.$attMimeType.value = type;
@@ -1244,10 +1247,6 @@ class GuidedBugEntryFormPage {
     this.$attDescription.setAttribute('aria-required', hasText);
     this.$attMimeType.value = isGhpr ? 'text/x-github-pull-request' : 'text/plain';
     this.$attIsPatch.value = isPatch ? 'on' : '';
-
-    if (!hasText) {
-      this.attDescOverridden = false;
-    }
   }
 
   /**
