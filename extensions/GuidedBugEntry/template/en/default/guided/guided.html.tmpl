@@ -11,8 +11,8 @@
 [% js_urls = [ 'extensions/GuidedBugEntry/web/js/products.js',
                'extensions/GuidedBugEntry/web/js/guided.js',
                'extensions/ProdCompSearch/web/js/prod_comp_search.js',
-               'js/field.js', 'js/TUI.js', 'js/data-table.js',
-               'js/bug.js', 'js/attachment.js' ] %]
+               'js/field.js', 'js/TUI.js', 'js/data-table.js', 'js/bug.js',
+               'js/attachment.js' ] %]
 
 [% PROCESS global/header.html.tmpl
    title = "Enter " _ terms.Bug
@@ -21,7 +21,6 @@
    use_text_editor = 1
    javascript_urls = js_urls
    style_urls = [
-     'skins/standard/global.css',
      'extensions/GuidedBugEntry/web/style/guided.css',
      'skins/standard/index.css',
      'skins/standard/attachment.css',
@@ -103,14 +102,14 @@
         product_name="DevTools"
         caption="Firefox DevTools"
       %]
-      Firefox browser's built-in developer tools
+      Firefox browser’s built-in developer tools
       [% END %]
       [% WRAPPER product_block
         icon="firefox.png"
         product_name="Firefox"
         component_name="Untriaged"
       %]
-      Firefox browser's user interface, including features like bookmarking,
+      Firefox browser’s user interface, including features like bookmarking,
       tabbed browsing, location bar, etc.
       [% END %]
     </ul>
@@ -151,7 +150,7 @@
     [% END %]
   [% END %]
     <li role="button" tabindex="0" class="product-item product-link"
-        data-link="[% link FILTER none %]" data-product="[% product_name FILTER html %]"
+        data-link="[% link FILTER html %]" data-product="[% product_name FILTER html %]"
         data-component="[% component_name FILTER html %]"
     >
       <img src="[% basepath FILTER none %]extensions/BMO/web/producticons/[% icon FILTER uri %]"
@@ -286,13 +285,15 @@
               placeholder="Short summary of issue">
         </div>
         <div>
-          <button id="dupe-search">Find similar issues</button>
+          <button type="button" id="dupe-search">Find similar issues</button>
         </div>
       </div>
     </div>
     <div id="dupe-list"></div>
     <div id="dupe-continue">
-      <button id="dupe-continue-button" data-step="bug-form">My issue is not listed</button>
+      <button type="button" id="dupe-continue-button" data-step="bug-form">
+        My issue is not listed
+      </button>
     </div>
   </section>
 </div>
@@ -573,7 +574,8 @@
 [%############################################################################%]
 
 [% BLOCK help %]
-<button class="iconic help-trigger" aria-label="Help" aria-describedby="[% id FILTER html %]">
+<button type="button" class="iconic help-trigger" aria-label="Help"
+    aria-describedby="[% id FILTER html %]">
   <span class="icon">help</span>
 </button>
 <div id="[% id FILTER html %]" class="help" role="tooltip" hidden>

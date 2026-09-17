@@ -1331,7 +1331,7 @@ sub add_comment {
 
   $bug->update();
 
-  my $new_comment_id = Bugzilla->dbh->bz_last_key('longdescs', 'comment_id');
+  my $new_comment_id = $bug->{added_comments}[0]->id;
 
   # Send mail.
   Bugzilla::BugMail::Send($bug->bug_id, {changer => Bugzilla->user});

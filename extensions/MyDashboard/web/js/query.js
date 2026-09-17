@@ -236,7 +236,7 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   document.querySelector('#query_markread').addEventListener('click', () => {
-    const ids = bugQueryTable.data.map(({ bug_id }) => bug_id);
+    const ids = bugQueryTable.data.map(({ data }) => data.bug_id);
 
     document.querySelector('#query_markread').classList.add('bz_default_hidden');
     document.querySelector('#query_markread_text').classList.remove('bz_default_hidden');
@@ -246,7 +246,7 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   document.querySelector('#query_buglist').addEventListener('click', () => {
-    const ids = bugQueryTable.data.map(({ bug_id }) => bug_id);
+    const ids = bugQueryTable.data.map(({ data }) => data.bug_id);
     const url = `${BUGZILLA.config.basepath}buglist.cgi?bug_id=${ids.join('%2C')}`;
 
     window.open(url, '_blank');

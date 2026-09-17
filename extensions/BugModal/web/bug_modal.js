@@ -827,6 +827,13 @@ $(function() {
                     return !!$input;
                 });
 
+            // attachment.js: the attachment selector markup is generated at runtime, so it is
+            // not covered by the `[aria-required="true"]` loop above. `$form.submit()` below also
+            // bypasses both native constraint validation and the form's `submit` event, so the
+            // selector's own listeners never get a chance to block the submission here.
+            if (window.bzAttachmentForm && !window.bzAttachmentForm.validate(event))
+                return;
+
             if (hasInvalidField || !$form.checkValidity())
                 return;
 

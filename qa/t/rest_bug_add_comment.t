@@ -167,9 +167,18 @@ foreach my $test (@tests) {
   }
 
   $t->post_ok($path => $headers => json => \%args)->status_is(201);
-  next unless $test->{check_privacy};
 
   my $comment_id = $t->tx->res->json->{id};
+
+  {
+    $t->get_ok($path => $headers)->status_is(200);
+    my ($bug) = values %{$t->tx->res->json->{bugs}};
+    is($comment_id, $bug->{comments}[-1]{id},
+      "$test->{test}: returned id is the new comment's id");
+  }
+
+  next unless $test->{check_privacy};
+
   $t->get_ok($url . "rest/bug/comment/$comment_id" => $headers)->status_is(200);
   my $comment = $t->tx->res->json->{comments}->{$comment_id};
   if ($test->{args}{is_private}) {

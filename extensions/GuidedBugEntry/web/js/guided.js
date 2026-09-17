@@ -40,6 +40,12 @@ class GuidedBugEntry {
   static openStates = [];
 
   /**
+   * Whether the web development entry flow is enabled.
+   * @type {boolean}
+   */
+  static webdev = false;
+
+  /**
    * Initiate a step change.
    * @param {string} newStep New step name.
    * @param {boolean} noSetHistory Whether to avoid updating history.
@@ -64,7 +70,7 @@ class GuidedBugEntry {
         GuidedBugEntryFormPage.onShow();
         break;
       default:
-        GuidedBugEntry.setStep(this.defaultStep);
+        GuidedBugEntry.setStep(this.defaultStep, noSetHistory);
         return;
     }
 
@@ -135,7 +141,9 @@ class GuidedBugEntry {
    * Initialize the guided bug entry and history management.
    */
   static init() {
-    if (new URLSearchParams(location.search).has('webdev')) {
+    const webdev = new URLSearchParams(location.search).get('webdev');
+
+    if (webdev && webdev !== '0') {
       this.defaultStep = 'webdev';
       this.webdev = true;
     }
@@ -145,15 +153,12 @@ class GuidedBugEntry {
     this.openStates = JSON.parse(document.querySelector('#guided').dataset.openStates);
 
     // init steps
-    GuidedBugEntryWebDevPage.onInit();
     GuidedBugEntryProductPage.onInit();
     GuidedBugEntryOtherDupesPage.onInit();
     GuidedBugEntryFormPage.onInit();
     GuidedBugEntryFormPage.initHelp();
 
-    const noSetHistory = !window.history.state;
-
-    if (!noSetHistory) {
+    if (!window.history.state) {
       const { search, pathname } = window.location;
       const params = new URLSearchParams(search);
       const { product: productName, component: componentName } = Object.fromEntries(params);
@@ -169,7 +174,9 @@ class GuidedBugEntry {
       );
     }
 
-    this.onStateChange(noSetHistory);
+    // Render the initial step without pushing: the history already reflects it, whether the state
+    // was just seeded above or restored by the browser on reload
+    this.onStateChange(true);
 
     window.addEventListener('popstate', () => {
       this.onStateChange(true);
@@ -186,10 +193,21 @@ class GuidedBugEntry {
         const { link, product: productName, component: componentName } = $item.dataset;
 
         if (link) {
+          if (!URL.canParse(link, location.href)) {
+            return;
+          }
+
+          const { protocol, href } = new URL(link, location.href);
+
+          // Only allow web links; never navigate to `javascript:` etc.
+          if (!protocol.match(/^https?:$/)) {
+            return;
+          }
+
           if (event.metaKey || event.ctrlKey) {
-            window.open(link, '_blank');
+            window.open(href, '_blank');
           } else {
-            location.href = link;
+            location.href = href;
           }
         } else if (productName === 'Other Products') {
           GuidedBugEntry.setStep('other-products');
@@ -224,9 +242,40 @@ class GuidedBugEntry {
   static onStateChange(noSetHistory) {
     const { product, component, step } = window.history.state ?? {};
 
-    GuidedBugEntryProductPage.setProduct(product ?? '');
     GuidedBugEntryProductPage.preselectedComponent = component ?? '';
+    GuidedBugEntryProductPage.setProduct(product ?? '');
     GuidedBugEntry.setStep(step, noSetHistory);
+  }
+
+  /**
+   * Show or clear the inline error message for a field. The message element is keyed off the
+   * field’s own ID, so repeated calls update it in place instead of stacking duplicates.
+   * @param {HTMLElement} $field Field the message belongs to.
+   * @param {string} [message] Message to show. Pass nothing to clear the error.
+   */
+  static setFieldError($field, message = '') {
+    const id = `${$field.id}-error`;
+    let $message = document.getElementById(id);
+
+    if (!message) {
+      $field.removeAttribute('aria-invalid');
+      $field.removeAttribute('aria-errormessage');
+      $message?.remove();
+
+      return;
+    }
+
+    $field.setAttribute('aria-invalid', 'true');
+    $field.setAttribute('aria-errormessage', id);
+
+    if (!$message) {
+      $message = document.createElement('div');
+      $message.id = id;
+      $message.className = 'error-message';
+      $field.insertAdjacentElement('afterend', $message);
+    }
+
+    $message.textContent = message;
   }
 
   /**
@@ -256,11 +305,6 @@ class GuidedBugEntry {
  * Web development product selection page.
  */
 class GuidedBugEntryWebDevPage {
-  /**
-   * Initialization callback.
-   */
-  static onInit() {}
-
   /**
    * Show callback.
    */
@@ -293,9 +337,59 @@ class GuidedBugEntryProductPage {
   static loadedProductName = null;
 
   /**
+   * Reference to the hidden product input element.
+   * @type {HTMLInputElement}
+   */
+  static $product = null;
+
+  /**
+   * Reference to the product name label on the form page.
+   * @type {HTMLElement}
+   */
+  static $productLabel = null;
+
+  /**
+   * Reference to the product name label on the duplicate search page.
+   * @type {HTMLElement}
+   */
+  static $dupeProductName = null;
+
+  /**
+   * Reference to the “See All Components” link element.
+   * @type {HTMLAnchorElement}
+   */
+  static $listComp = null;
+
+  /**
+   * Reference to the product support message container element.
+   * @type {HTMLElement}
+   */
+  static $support = null;
+
+  /**
+   * Reference to the product support message element.
+   * @type {HTMLElement}
+   */
+  static $supportMessage = null;
+
+  /**
+   * Reference to the component selection section element.
+   * @type {HTMLElement}
+   */
+  static $componentSection = null;
+
+  /**
    * Initialization callback.
    */
-  static onInit() {}
+  static onInit() {
+    this.$product = document.querySelector('#product');
+    this.$productLabel = document.querySelector('#product-label');
+    this.$dupeProductName = document.querySelector('#dupe-product-name');
+    this.$listComp = document.querySelector('#list-comp');
+    this.$support = document.querySelector('#product-support');
+    this.$supportMessage = document.querySelector('#product-support-message');
+    this.$componentSection = document.querySelector('#component-section');
+  }
 
   /**
    * Show callback.
@@ -324,8 +418,14 @@ class GuidedBugEntryProductPage {
       }
     }
 
-    this.preselectedComponent = prod?.defaultComponent || '';
+    this.preselectedComponent = prod?.defaultComponent || componentName || '';
+
+    // This is a fresh choice by the user, so drop the component carried over from the previous
+    // selection, then re-apply the preselection. `setProduct()` returns early when the product
+    // itself hasn’t changed, so it can’t be relied on to do this.
+    GuidedBugEntryFormPage.resetComponent();
     this.setProduct(productName);
+    GuidedBugEntryFormPage.onProductUpdated();
 
     GuidedBugEntryOtherDupesPage.reset();
     GuidedBugEntry.setStep('dupes');
@@ -335,7 +435,7 @@ class GuidedBugEntryProductPage {
    * Get the currently selected product name.
    */
   static get productName() {
-    return document.querySelector('#product').value;
+    return this.$product.value;
   }
 
   /**
@@ -344,7 +444,38 @@ class GuidedBugEntryProductPage {
   static get productNameAndRelated() {
     const { productName } = this;
 
-    return [productName, ...(products[productName].related ?? [])];
+    return [productName, ...(products[productName]?.related ?? [])];
+  }
+
+  /**
+   * Get the component to be used as-is for the given product, without asking the user. This is
+   * empty unless the product’s component selection is suppressed *and* a component is actually
+   * known; otherwise the component selector has to be shown, because submitting the form without a
+   * component always fails.
+   * @param {string} [productName] Product name. Defaults to the selected product.
+   * @returns {string} Component name, or an empty string if the user has to pick one.
+   */
+  static fixedComponent(productName = this.productName) {
+    const { noComponentSelection, defaultComponent } = products[productName] ?? {};
+
+    if (!noComponentSelection && !GuidedBugEntry.webdev) {
+      return '';
+    }
+
+    return defaultComponent || this.preselectedComponent || '';
+  }
+
+  /**
+   * Show or hide the component selector according to `fixedComponent()`.
+   * @param {string} [productName] Product name. Defaults to the selected product.
+   * @returns {string} The fixed component name, or an empty string if the user has to pick one.
+   */
+  static updateComponentSection(productName = this.productName) {
+    const fixedComponent = this.fixedComponent(productName);
+
+    this.$componentSection.hidden = !!fixedComponent;
+
+    return fixedComponent;
   }
 
   /**
@@ -357,35 +488,33 @@ class GuidedBugEntryProductPage {
     }
 
     // display the product name
-    document.querySelector('#product').value = productName;
-    document.querySelector('#product-label').innerHTML = productName.htmlEncode();
-    document.querySelector('#dupe-product-name').innerHTML = productName.htmlEncode();
+    this.$product.value = productName;
+    this.$productLabel.innerHTML = productName.htmlEncode();
+    this.$dupeProductName.innerHTML = productName.htmlEncode();
 
     const { basepath } = BUGZILLA.config;
     const params = new URLSearchParams({ product: productName });
 
-    document.querySelector('#list-comp').href = `${basepath}describecomponents.cgi?${params}`;
+    this.$listComp.href = `${basepath}describecomponents.cgi?${params}`;
 
     GuidedBugEntry.setAdvancedLink();
 
-    const productSupport = document.querySelector('#product-support');
-
     if (productName === '') {
-      productSupport.hidden = true;
+      this.$support.hidden = true;
       return;
     }
 
     // show support message
-    if (products[productName]?.support) {
-      document.querySelector('#product-support-message').innerHTML = products[productName].support;
-      productSupport.hidden = false;
-    } else {
-      productSupport.hidden = true;
+    const { support } = products[productName] ?? {};
+
+    if (support) {
+      this.$supportMessage.innerHTML = support;
     }
 
+    this.$support.hidden = !support;
+
     // show/hide component selection row
-    document.querySelector('#component-section').hidden =
-      !!products[productName]?.noComponentSelection || !!GuidedBugEntry.webdev;
+    this.updateComponentSection(productName);
 
     if (this.loadedProductName === productName) {
       return;
@@ -421,11 +550,6 @@ class GuidedBugEntryProductPage {
  * Other products selection page.
  */
 class GuidedBugEntryOtherProductsPage {
-  /**
-   * Initialization callback.
-   */
-  static onInit() {}
-
   /**
    * Show callback.
    */
@@ -470,6 +594,36 @@ class GuidedBugEntryOtherDupesPage {
   static $list = null;
 
   /**
+   * Reference to the “continue to the form” container element.
+   * @type {HTMLDivElement}
+   */
+  static $continue = null;
+
+  /**
+   * Reference to the “continue to the form” button element.
+   * @type {HTMLButtonElement}
+   */
+  static $continueButton = null;
+
+  /**
+   * Reference to the localization message element.
+   * @type {HTMLElement}
+   */
+  static $l10nMessage = null;
+
+  /**
+   * Reference to the product name within the localization message.
+   * @type {HTMLElement}
+   */
+  static $l10nProduct = null;
+
+  /**
+   * Reference to the localization message link element.
+   * @type {HTMLAnchorElement}
+   */
+  static $l10nLink = null;
+
+  /**
    * Current search query.
    * @type {string}
    */
@@ -482,6 +636,11 @@ class GuidedBugEntryOtherDupesPage {
     this.$summary = document.querySelector('#dupe-summary');
     this.$search = document.querySelector('#dupe-search');
     this.$list = document.querySelector('#dupe-list');
+    this.$continue = document.querySelector('#dupe-continue');
+    this.$continueButton = document.querySelector('#dupe-continue-button');
+    this.$l10nMessage = document.querySelector('#l10n-message');
+    this.$l10nProduct = document.querySelector('#l10n-product');
+    this.$l10nLink = document.querySelector('#l10n-link');
 
     this.$summary.addEventListener('blur', this.onSummaryBlur.bind(this));
     this.$summary.addEventListener('input', this.onSummaryBlur.bind(this));
@@ -569,7 +728,7 @@ class GuidedBugEntryOtherDupesPage {
     const isOpen = GuidedBugEntry.openStates.includes(bugStatus);
 
     if (!isOpen && !isCCed) {
-      // you can't cc yourself to a closed bug here
+      // you can’t cc yourself to a closed bug here
       return '';
     }
 
@@ -624,9 +783,8 @@ class GuidedBugEntryOtherDupesPage {
   static reset() {
     this.$summary.value = '';
     this.$list.hidden = true;
-    document.querySelector('#dupe-continue').hidden = true;
     this.$list.innerHTML = '';
-    this.showProductSupport();
+    this.$continue.hidden = true;
     this.currentSearchQuery = '';
 
     window.requestAnimationFrame(() => {
@@ -636,22 +794,9 @@ class GuidedBugEntryOtherDupesPage {
   }
 
   /**
-   * Show the product support message.
-   */
-  static showProductSupport() {
-    const { productName } = GuidedBugEntryProductPage;
-    const elSupportId = `product-support-${productName.replace(' ', '-').toLowerCase()}`;
-
-    document.querySelectorAll('.product-support').forEach(($element) => {
-      $element.classList.toggle('hidden', $element.id !== elSupportId);
-    });
-  }
-
-  /**
    * Show callback.
    */
   static onShow() {
-    this.showProductSupport();
     this.onSummaryBlur();
 
     GuidedBugEntry.updateSteppers('dupes');
@@ -659,18 +804,18 @@ class GuidedBugEntryOtherDupesPage {
     const { productName } = GuidedBugEntryProductPage;
 
     if (products[productName]?.l10n) {
-      document.querySelector('#l10n-message').hidden = false;
-      document.querySelector('#l10n-product').textContent = productName;
-      document.querySelector('#l10n-link').onclick = (event) => {
+      this.$l10nProduct.textContent = productName;
+      this.$l10nLink.onclick = (event) => {
         event.preventDefault();
         GuidedBugEntryProductPage.select('Mozilla Localizations');
       };
+      this.$l10nMessage.hidden = false;
     } else {
-      document.querySelector('#l10n-message').hidden = true;
+      this.$l10nMessage.hidden = true;
     }
 
     if (!this.$search.disabled && this.summary.length >= 4) {
-      // do an immediate search after a page refresh if there's a query
+      // do an immediate search after a page refresh if there’s a query
       this.doSearch();
     } else {
       // prepare for a search
@@ -702,7 +847,7 @@ class GuidedBugEntryOtherDupesPage {
    * Summary input keyup handler.
    */
   static onSummaryKeyUp() {
-    // disable search button until there's a query
+    // disable search button until there’s a query
     this.$search.disabled = !this.summary;
   }
 
@@ -711,24 +856,16 @@ class GuidedBugEntryOtherDupesPage {
    */
   static async doSearch() {
     if ([...this.summary].length < 4) {
-      const message = 'The summary must be at least 4 characters.';
-      this.$summary.setAttribute('aria-invalid', 'true');
-      this.$summary.setAttribute('aria-errormessage', 'dupe-summary-error');
-      this.$summary.insertAdjacentHTML(
-        'afterend',
-        `<div id="dupe-summary-error" class="error-message">${message}</div>`,
-      );
+      GuidedBugEntry.setFieldError(this.$summary, 'The summary must be at least 4 characters.');
 
       return;
     }
 
-    this.$summary.setAttribute('aria-invalid', 'false');
-    this.$summary.removeAttribute('aria-errormessage');
-    this.$summary.parentElement.querySelector('.error')?.remove();
+    GuidedBugEntry.setFieldError(this.$summary);
 
     this.$search.blur();
 
-    // don't query if we already have the results (or they are pending)
+    // don’t query if we already have the results (or they are pending)
     if (this.currentSearchQuery === this.summary) {
       return;
     }
@@ -749,8 +886,8 @@ class GuidedBugEntryOtherDupesPage {
         `Searching for similar issues...&nbsp;&nbsp;&nbsp;<img src="${src}" width="16" height="11">`,
       );
 
-      document.querySelector('#dupe-continue-button').disabled = true;
-      document.querySelector('#dupe-continue').hidden = false;
+      this.$continueButton.disabled = true;
+      this.$continue.hidden = false;
 
       let data;
 
@@ -779,7 +916,7 @@ class GuidedBugEntryOtherDupesPage {
         data = { error: true };
       }
 
-      document.querySelector('#dupe-continue-button').disabled = false;
+      this.$continueButton.disabled = false;
       this.dataTable.update(data);
     } catch (err) {
       console.error(err.message);
@@ -847,10 +984,59 @@ class GuidedBugEntryFormPage {
   static $versionSelect = null;
 
   /**
+   * Reference to the version selection section element.
+   * @type {HTMLElement}
+   */
+  static $versionSection = null;
+
+  /**
+   * Reference to the element the attachment selector is rendered into.
+   * @type {HTMLElement}
+   */
+  static $attPlaceholder = null;
+
+  /**
+   * Reference to the attachment description section element.
+   * @type {HTMLElement}
+   */
+  static $attDescSection = null;
+
+  /**
+   * Reference to the attachment description input element.
+   * @type {HTMLInputElement}
+   */
+  static $attDescription = null;
+
+  /**
+   * Reference to the hidden attachment content type input element.
+   * @type {HTMLInputElement}
+   */
+  static $attMimeType = null;
+
+  /**
+   * Reference to the hidden attachment patch flag input element.
+   * @type {HTMLInputElement}
+   */
+  static $attIsPatch = null;
+
+  /**
    * Reference to the currently visible help panel.
    * @type {HTMLElement}
    */
   static $visibleHelpPanel = null;
+
+  /**
+   * The attachment selector, created once the form page is first shown.
+   * @type {Bugzilla.AttachmentSelector | undefined}
+   */
+  static attachmentSelector;
+
+  /**
+   * Whether the user has entered an attachment description themselves, in which case it’s no
+   * longer updated automatically. Cleared again once they empty the field.
+   * @type {boolean}
+   */
+  static attDescOverridden = false;
 
   /**
    * List of elements that are conditionally displayed.
@@ -864,12 +1050,6 @@ class GuidedBugEntryFormPage {
   ];
 
   /**
-   * Maximum attachment size in KB.
-   * @type {number}
-   */
-  static maxAttachmentSize = Number(BUGZILLA.param.maxattachmentsize);
-
-  /**
    * Initialization callback.
    */
   static onInit() {
@@ -881,6 +1061,7 @@ class GuidedBugEntryFormPage {
     this.$componentDesc = document.querySelector('#component-description');
     this.$version = document.querySelector('#version');
     this.$versionSelect = document.querySelector('#version-select');
+    this.$versionSection = document.querySelector('#version-section');
     this.$attPlaceholder = document.querySelector('#att-placeholder');
     this.$attDescSection = document.querySelector('#att-desc-section');
     this.$attDescription = document.querySelector('#att-description');
@@ -890,7 +1071,7 @@ class GuidedBugEntryFormPage {
     document.querySelector('#user_agent').value = navigator.userAgent;
 
     this.$shortDescInput.addEventListener('blur', () => {
-      document.querySelector('#dupe-summary').value = this.$shortDescInput.value;
+      GuidedBugEntryOtherDupesPage.$summary.value = this.$shortDescInput.value;
       GuidedBugEntry.setAdvancedLink();
     });
 
@@ -904,8 +1085,8 @@ class GuidedBugEntryFormPage {
       this.onComponentChange(event.target.value);
     });
 
-    this.$attDescription.addEventListener('change', () => {
-      this.attDescOverridden = true;
+    this.$attDescription.addEventListener('input', () => {
+      this.attDescOverridden = !!this.$attDescription.value.trim();
     });
 
     const useMarkdown = BUGZILLA.param.use_markdown;
@@ -1000,7 +1181,7 @@ class GuidedBugEntryFormPage {
       this.onProductUpdated();
     }
 
-    new Bugzilla.AttachmentSelector({
+    this.attachmentSelector ??= new Bugzilla.AttachmentSelector({
       $placeholder: this.$attPlaceholder,
       eventHandlers: {
         AttachmentProcessed: (event) => this.onAttachmentProcessed(event),
@@ -1008,10 +1189,8 @@ class GuidedBugEntryFormPage {
       },
     });
 
-    this.requiredFields.forEach((el) => {
-      el.removeAttribute('aria-invalid');
-      el.removeAttribute('aria-errormessage');
-      el.parentElement.querySelector('.error')?.remove();
+    this.requiredFields.forEach(($field) => {
+      GuidedBugEntry.setFieldError($field);
     });
 
     this.conditionalDetails.forEach((cond) => {
@@ -1035,8 +1214,11 @@ class GuidedBugEntryFormPage {
    * @param {boolean} params.isPatch `true` if the file is detected as a patch, `false` otherwise.
    */
   static onAttachmentProcessed({ file, type, isPatch }) {
+    if (!this.attDescOverridden) {
+      this.$attDescription.value = file.name;
+    }
+
     this.$attDescSection.hidden = false;
-    this.$attDescription.value = file.name;
     this.$attDescription.disabled = false;
     this.$attDescription.setAttribute('aria-required', true);
     this.$attMimeType.value = type;
@@ -1065,10 +1247,6 @@ class GuidedBugEntryFormPage {
     this.$attDescription.setAttribute('aria-required', hasText);
     this.$attMimeType.value = isGhpr ? 'text/x-github-pull-request' : 'text/plain';
     this.$attIsPatch.value = isPatch ? 'on' : '';
-
-    if (!hasText) {
-      this.attDescOverridden = false;
-    }
   }
 
   /**
@@ -1086,6 +1264,16 @@ class GuidedBugEntryFormPage {
    */
   static quoteMeta(value) {
     return value.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+  }
+
+  /**
+   * Clear the currently selected component. Called when the user picks a product, so the component
+   * chosen for the previously selected product isn’t silently reused.
+   */
+  static resetComponent() {
+    this.$component.value = '';
+    this.$componentDesc.innerHTML = '';
+    this.$componentDesc.hidden = true;
   }
 
   /**
@@ -1111,7 +1299,8 @@ class GuidedBugEntryFormPage {
 
     this.$submitButton.disabled = false;
 
-    const { componentFilter, noComponentSelection, defaultComponent } = products[productName] ?? {};
+    const { componentFilter, defaultComponent } = products[productName] ?? {};
+    const fixedComponent = GuidedBugEntryProductPage.updateComponentSection(productName);
 
     // filter components
     if (componentFilter) {
@@ -1121,8 +1310,8 @@ class GuidedBugEntryFormPage {
     }
 
     // build components
-    if (noComponentSelection || GuidedBugEntry.webdev) {
-      this.$component.value = defaultComponent;
+    if (fixedComponent) {
+      this.$component.value = fixedComponent;
       this.$componentSelect.removeAttribute('aria-required');
     } else {
       this.$componentSelect.setAttribute('aria-required', 'true');
@@ -1140,7 +1329,7 @@ class GuidedBugEntryFormPage {
       const component = components.find((c) => c.is_active && defaultRegex.test(c.name));
       const preselectedComponentName = component?.name ?? null;
 
-      // if there isn't a default component, default to blank
+      // if there isn’t a default component, default to blank
       if (!preselectedComponentName) {
         $components.options.add(new Option('', ''));
       }
@@ -1195,24 +1384,24 @@ class GuidedBugEntryFormPage {
       }
     }
 
-    if ($versions.length > 1) {
-      // more than one version, show select
-      document.querySelector('#version-section').hidden = false;
-    } else {
-      // if there's only one version, we don't need to ask the user
-      document.querySelector('#version-section').hidden = true;
+    // If there’s only one version, we don’t need to ask the user
+    const singleVersion = $versions.length <= 1;
+
+    this.$versionSection.hidden = singleVersion;
+
+    if (singleVersion) {
       defaultVersion = $versions.options[0]?.value;
     }
 
     if (defaultVersion) {
       $versions.value = defaultVersion;
-    } else {
+    } else if ([...$versions.options].some((o) => o.value === 'unspecified')) {
       // Fallback to 'unspecified' if available
-      const index = [...$versions.options].findIndex((o) => o.value === 'unspecified');
-
-      if (index > -1) {
-        $versions.value = 'unspecified';
-      }
+      $versions.value = 'unspecified';
+    } else {
+      // No default version, select an empty value to force a decision
+      $versions.options.add(new Option('', ''), $versions.options[0]);
+      $versions.value = '';
     }
 
     this.onVersionChange($versions.value);
@@ -1263,7 +1452,12 @@ class GuidedBugEntryFormPage {
    * @returns {HTMLElement[]} Array of required field elements.
    */
   static get requiredFields() {
-    return [...this.$form.querySelectorAll('[aria-required="true"]:not([aria-hidden="true"])')];
+    // Only the field’s own `<section>` decides whether it’s reachable. Don’t look at every
+    // ancestor: the comment editor hides its edit tabpanel while the Preview tab is selected, and
+    // the field inside it still has to be validated.
+    return [...this.$form.querySelectorAll('[aria-required="true"]')].filter(
+      ($field) => !$field.closest('section')?.hidden,
+    );
   }
 
   /**
@@ -1275,37 +1469,25 @@ class GuidedBugEntryFormPage {
     const result = [];
 
     this.requiredFields.forEach(($field) => {
-      let invalid = false;
-      let message = '';
+      const invalid =
+        $field.getAttribute('role') === 'radiogroup'
+          ? ![...$field.querySelectorAll('input')].some((r) => r.checked)
+          : !$field.value.trim();
 
-      if ($field.getAttribute('role') === 'radiogroup') {
-        invalid = ![...$field.querySelectorAll('input')].some((r) => r.checked);
-        message = 'Please select an option.';
-      } else if ($field.matches('select')) {
-        invalid = !$field.value.trim();
-        message = 'Please select an option.';
-      } else {
-        invalid = !$field.value.trim();
-        message = $field.matches('[data-allow-na]')
-          ? 'This field is required. Write "N/A" if not applicable.'
+      if (!invalid) {
+        GuidedBugEntry.setFieldError($field);
+
+        return;
+      }
+
+      const message = $field.matches('[role="radiogroup"], select')
+        ? 'Please select an option.'
+        : $field.matches('[data-allow-na]')
+          ? 'This field is required. Write “N/A” if not applicable.'
           : 'This field is required.';
-      }
 
-      $field.setAttribute('aria-invalid', invalid);
-      $field.setAttribute('aria-errormessage', invalid ? `${$field.id}-error` : '');
-
-      if (invalid) {
-        result.push($field.id);
-
-        if (!$field.parentElement.querySelector('.error-message')) {
-          $field.insertAdjacentHTML(
-            'afterend',
-            `<div id="${$field.id}-error" class="error-message">${message}</div>`,
-          );
-        }
-      } else {
-        $field.parentElement.querySelector('.error-message')?.remove();
-      }
+      GuidedBugEntry.setFieldError($field, message);
+      result.push($field.id);
     });
 
     return result;
@@ -1330,8 +1512,13 @@ class GuidedBugEntryFormPage {
    * Submit the bug form.
    */
   static async submitForm(event) {
-    if (!this.validate()) {
+    // The attachment selector can cancel the submission from its own `submit` listener, which runs
+    // after this one, so ask it first: the submit button must not be left disabled in that case
+    const attachmentValid = this.attachmentSelector?.validate(event) ?? true;
+
+    if (!this.validate() || !attachmentValid) {
       event.preventDefault();
+
       return false;
     }
 

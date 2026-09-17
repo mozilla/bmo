@@ -295,6 +295,19 @@ var Bugzilla = Bugzilla || {};
  */
 Bugzilla.AttachmentSelector = class AttachmentSelector {
   /**
+   * Whether the currently selected file exceeds the maximum allowed size.
+   * @type {boolean}
+   */
+  sizeError = false;
+
+  /**
+   * Whether a selected file is still being read into `$data`. The read is asynchronous, so the form
+   * must not be submitted until it completes, otherwise `data_base64` would be posted empty.
+   * @type {boolean}
+   */
+  readingFile = false;
+
+  /**
    * Initialize a new `AttachmentSelector` instance.
    * @param {object} params An object of parameters.
    * @param {HTMLElement} params.$placeholder An element to be enhanced with the attachment selector
@@ -337,7 +350,7 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
               <button type="button" id="att-capture-button">Take Screenshot</button>
             </span>
           </div>
-          <input hidden id="att-file" type="file">
+          <input hidden id="att-file" type="file" name="data">
           <div id="att-item">
             <div hidden id="att-editor">
               <textarea id="att-textarea" name="attach_text" cols="80" rows="8"
@@ -352,13 +365,13 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
             <div hidden id="att-preview">
               <input id="att-filename" type="hidden" name="filename">
               <textarea hidden id="att-data" name="data_base64" aria-hidden="true"
-                  aria-invalid="false" aria-errormessage="att-data-error"></textarea>
+                  aria-invalid="false" aria-errormessage="att-error-message"></textarea>
               <figure role="img" aria-labelledby="att-preview-name" itemscope
                   itemtype="http://schema.org/MediaObject">
                 <meta itemprop="encodingFormat">
                 <pre itemprop="text"></pre>
                 <img src="" alt="" itemprop="image">
-                <figcaption class="att-preview-name" itemprop="name"></figcaption>
+                <figcaption id="att-preview-name" itemprop="name"></figcaption>
                 <span class="icon" aria-hidden="true"></span>
               </figure>
               <span id="att-file-remove-button" class="att-remove-button" tabindex="0" role="button"
@@ -431,6 +444,17 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
   }
 
   /**
+   * Cancel any file read still in progress. Without this, the `load` event of an earlier read could
+   * repopulate `$data` after the fields have been cleared, and starting a second read while the
+   * first is still running throws an `InvalidStateError`.
+   */
+  #abortReads() {
+    this.readingFile = false;
+    this.dataReader.abort();
+    this.textReader.abort();
+  }
+
+  /**
    * Initialize the UI state and prepare the form for use.
    */
   #initializeView() {
@@ -493,7 +517,7 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
    * Enable keyboard access on the buttons. Treat the Enter keypress as a click.
    */
   enableKeyboardAccess() {
-    document.querySelectorAll('#att-selector [role="button"]').forEach(($button) => {
+    this.$placeholder.querySelectorAll('[role="button"]').forEach(($button) => {
       $button.addEventListener('keypress', (event) => {
         if (!event.isComposing && event.key === 'Enter') {
           event.target.click();
@@ -503,9 +527,11 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
   }
 
   /**
-   * Reset all the input fields to the initial state, and remove the preview and message.
+   * Reset all the input fields and the view to the initial state: no file, no text, no preview, no
+   * message, and the action buttons showing again.
    */
   resetFields() {
+    this.#abortReads();
     this.$file.value = '';
     this.$data.value = '';
     this.$filename.value = '';
@@ -513,14 +539,23 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
     this.clearPreview();
     this.clearError();
     this.updateText();
+
+    this.actionsDisplayed = true;
+    this.editorDisplayed = false;
+    this.previewDisplayed = false;
   }
 
   /**
    * Process a file for upload regardless of how it was provided (file picker, drag-and-drop, paste
-   * or screen capture). Read the file content, update the filename field, and show the preview.
+   * or screen capture). Read the file content if needed, update the filename field, and show the
+   * preview.
    * @param {File} file A file to be read.
+   * @param {boolean} [transferred] `true` if the file came from a `DataTransfer` (drag & drop,
+   * paste) or was generated (screen capture), `false` if the user picked it with the file input.
+   * A picked file stays in the input and is uploaded natively as multipart; the rest have no input
+   * to submit, so their content is embedded as Base64 instead.
    */
-  processFile(file) {
+  processFile(file, transferred = true) {
     // Detect patches that should have the `text/plain` MIME type
     const isPatch =
       !!file.name.match(/\.(?:diff|patch)$/) || !!file.type.match(/^text\/x-(?:diff|patch)$/);
@@ -540,16 +575,33 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
         ? 'text/plain'
         : file.type || 'application/octet-stream';
 
-    if (this.checkFileSize(file.size)) {
+    this.#abortReads();
+
+    if (!this.checkFileSize(file.size)) {
+      this.$file.value = '';
+      this.$data.value = '';
+      this.$filename.value = '';
+      this.clearPreview();
+      this.updateText();
+      this.actionsDisplayed = true;
+      this.editorDisplayed = false;
+
+      return;
+    }
+
+    if (transferred) {
+      this.readingFile = true;
       this.dataReader.readAsDataURL(file);
+      // Note that this clears `$file.files` as well, so `$filename` is what tells us a file has
+      // been provided from here on
       this.$file.value = '';
       this.$filename.value = file.name.replace(/\s/g, '-');
     } else {
-      this.$file.value = '';
       this.$data.value = '';
       this.$filename.value = '';
     }
 
+    this.editorDisplayed = false;
     this.showPreview(file, isText);
     this.updateText();
     this.dispatchEvent('AttachmentProcessed', { file, type, isPatch });
@@ -571,8 +623,8 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
         `consider uploading it to an online file storage and sharing the link in a ` +
         `${BUGZILLA.string.bug} comment instead.`
       : '';
-    const messageShort = invalid ? 'File too large' : '';
 
+    this.sizeError = invalid;
     this.$errorMessage.hidden = !invalid;
     this.$errorMessage.innerHTML = message;
     this.$dropbox.classList.toggle('invalid', invalid);
@@ -586,6 +638,10 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
    */
   dataReaderOnLoad() {
     this.$data.value = this.dataReader.result.split(',')[1];
+    this.readingFile = false;
+
+    // Clear any error shown while the read was still in progress
+    this.clearError();
   }
 
   /**
@@ -600,7 +656,7 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
    * Called whenever a file is selected by the user by using the file picker. Prepare for upload.
    */
   fileOnChange() {
-    this.processFile(this.$file.files[0]);
+    this.processFile(this.$file.files[0], false);
   }
 
   /**
@@ -644,8 +700,6 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
 
     if (files.length > 0) {
       this.processFile(files[0]);
-      this.editorDisplayed = false;
-      this.previewDisplayed = true;
     } else if (text) {
       this.clearPreview();
       this.clearError();
@@ -668,8 +722,6 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
 
     if (text.trim()) {
       this.$textarea.hidden = false;
-      this.$dropbox.classList.remove('invalid');
-      this.$errorMessage.hidden = true;
     }
   }
 
@@ -700,8 +752,6 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
           const file = new File([blob], 'pasted-image.png', { type: 'image/png' });
 
           this.processFile(file);
-          this.editorDisplayed = false;
-          this.previewDisplayed = true;
           pasted = true;
         } else if (item.types.includes('text/plain')) {
           const blob = await item.getType('text/plain');
@@ -733,9 +783,11 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
   async captureButtonOnClick() {
     const $video = document.createElement('video');
     const $canvas = document.createElement('canvas');
+    /** @type {MediaStream | undefined} */
+    let stream;
 
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      stream = await navigator.mediaDevices.getDisplayMedia({
         video: { displaySurface: 'window' },
       });
 
@@ -750,11 +802,6 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
       // Draw a video frame on `<canvas>`
       $canvas.getContext('2d').drawImage($video, 0, 0, width, height);
 
-      // Clean up `<video>`
-      $video.pause();
-      $video.srcObject.getTracks().forEach((track) => track.stop());
-      $video.srcObject = null;
-
       // Convert to PNG
       const blob = await new Promise((resolve) => $canvas.toBlob((blob) => resolve(blob)));
       const [date, time] = new Date().toISOString().match(/^(.+)T(.+)\./).slice(1);
@@ -764,12 +811,17 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
       this.dispatchEvent('AttachmentCaptured', { file });
     } catch {
       alert('Unable to capture a screenshot.');
+    } finally {
+      // Clean up `<video>` and stop sharing, including when the capture failed partway through
+      $video.pause();
+      stream?.getTracks().forEach((track) => track.stop());
+      $video.srcObject = null;
     }
   }
 
   /**
    * Called whenever the content of the textarea is updated. Dispatches the `AttachmentTextUpdated`
-   * event with the current text content, and whether it's detected as a patch or GitHub PR link.
+   * event with the current text content, and whether it’s detected as a patch or GitHub PR link.
    */
   textareaOnInput() {
     const text = this.$textarea.value.trim();
@@ -778,8 +830,13 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
     const isGhpr = !!text.match(/^https:\/\/github\.com\/[\w\-]+\/[\w\-]+\/pull\/\d+\/?$/);
 
     if (hasText) {
+      // Text replaces any file: one already provided, one still being read, and one that was
+      // rejected for its size along with its error message
+      this.#abortReads();
       this.$file.value = '';
       this.$data.value = '';
+      this.$filename.value = '';
+      this.clearError();
     }
 
     this.dispatchEvent('AttachmentTextUpdated', { text, hasText, isPatch, isGhpr });
@@ -824,10 +881,6 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
    */
   removeButtonOnClick() {
     this.resetFields();
-
-    this.actionsDisplayed = true;
-    this.editorDisplayed = false;
-    this.previewDisplayed = false;
   }
 
   /**
@@ -857,10 +910,35 @@ Bugzilla.AttachmentSelector = class AttachmentSelector {
    * @returns {boolean} `true` if the form is valid and can be submitted, `false` otherwise.
    */
   validate(event) {
+    // Nothing to validate when the selector is not in use, e.g. when the user opted out of adding
+    // an attachment on the New Bug page
+    if (this.$placeholder.closest('[hidden]')) {
+      return true;
+    }
+
+    if (this.sizeError) {
+      // Make sure the file size error is on screen: `updateRequirements(false)` may have hidden it
+      // since, and the check below must not overwrite it
+      this.$errorMessage.hidden = false;
+      this.$dropbox.classList.add('invalid');
+      event.preventDefault();
+
+      return false;
+    }
+
+    if (this.readingFile) {
+      this.$errorMessage.textContent = 'The file is still being read. Please try again.';
+      this.$errorMessage.hidden = false;
+      event.preventDefault();
+
+      return false;
+    }
+
     const invalid =
       this.required &&
+      !this.$file.files.length &&
       !this.$data.value.trim() &&
-      !this.$file.length &&
+      !this.$filename.value.trim() &&
       !this.$textarea.value.trim();
 
     this.$errorMessage.textContent = invalid ? 'You must provide an attachment.' : '';
@@ -1027,20 +1105,25 @@ Bugzilla.AttachmentForm = class AttachmentForm {
       this.description = isPatch ? 'patch' : isGhpr ? 'GitHub Pull Request' : '';
     }
 
-    this.$description.setAttribute('aria-required', hasText);
+    // `processFile()` runs this with `hasText: false`, so don’t let it clear the required state
+    // on a form that demands an attachment
+    this.$description.setAttribute('aria-required', this.required || hasText);
     this.$typeInput.value = isGhpr ? 'text/x-github-pull-request' : '';
     this.updateIsPatch(isPatch);
   }
 
   /**
-   * Called whenever an attachment is pasted. Update the Patch checkbox to be unchecked and disabled
-   * since we cannot reliably detect the content of pasted data.
+   * Called whenever an attachment is pasted. If it’s an image, update the Patch checkbox to be
+   * unchecked and disabled since the content cannot be inspected. Pasted text has already been
+   * handled by `onAttachmentTextUpdated()`, which detects patches, so leave that alone.
    * @param {object} params An object with the following properties:
    * @param {ClipboardItem[]} params.items An array of `ClipboardItem` objects representing the
    * pasted data.
    */
   onAttachmentPasted({ items }) {
-    this.updateIsPatch(false, true);
+    if (items.some((item) => item.types.includes('image/png'))) {
+      this.updateIsPatch(false, true);
+    }
   }
 
   /**
@@ -1229,7 +1312,9 @@ Bugzilla.AttachmentForm = class AttachmentForm {
       event.preventDefault();
     }
 
-    return !invalid;
+    // The selector listens for the same events, but validate it here as well so callers that
+    // invoke this method directly get the combined result
+    return this.selector.validate(event) && !invalid;
   }
 };
 

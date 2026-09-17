@@ -1833,7 +1833,7 @@ input.requestee {
 }
 
 [aria-invalid="true"],
-input:invalid,
+input:user-invalid,
 .attention {
   border-color: var(--invalid-control-border-color) !important;
   box-shadow: 0 0 4px var(--error-message-foreground-color) !important;
@@ -2779,6 +2779,29 @@ div.bz_comment_text pre {
 }
 
 .markdown-body blockquote {
+  margin: 0;
+}
+
+.markdown-body details {
+  margin-bottom: 10px;
+}
+
+.markdown-body details > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body summary {
+  cursor: pointer;
+}
+
+/* A heading is a block, which would drop it below the disclosure triangle. */
+.markdown-body summary h1,
+.markdown-body summary h2,
+.markdown-body summary h3,
+.markdown-body summary h4,
+.markdown-body summary h5,
+.markdown-body summary h6 {
+  display: inline-block;
   margin: 0;
 }
 
