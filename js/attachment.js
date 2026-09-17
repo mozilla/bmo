@@ -1113,14 +1113,17 @@ Bugzilla.AttachmentForm = class AttachmentForm {
   }
 
   /**
-   * Called whenever an attachment is pasted. Update the Patch checkbox to be unchecked and disabled
-   * since we cannot reliably detect the content of pasted data.
+   * Called whenever an attachment is pasted. If it’s an image, update the Patch checkbox to be
+   * unchecked and disabled since the content cannot be inspected. Pasted text has already been
+   * handled by `onAttachmentTextUpdated()`, which detects patches, so leave that alone.
    * @param {object} params An object with the following properties:
    * @param {ClipboardItem[]} params.items An array of `ClipboardItem` objects representing the
    * pasted data.
    */
   onAttachmentPasted({ items }) {
-    this.updateIsPatch(false, true);
+    if (items.some((item) => item.types.includes('image/png'))) {
+      this.updateIsPatch(false, true);
+    }
   }
 
   /**
