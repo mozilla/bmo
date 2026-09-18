@@ -352,6 +352,12 @@ the content of the attachment
 
 sub data {
   my $self = shift;
+
+  # Attachment data can be deleted via the web UI, which zeroes attach_size
+  # and removes the stored object. Don't ask the storage backend for a key
+  # that no longer exists; net storage throws on a missing key.
+  return '' if !$self->datasize;
+
   return $self->{data} //= $self->current_storage->get_data();
 }
 

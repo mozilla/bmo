@@ -18,9 +18,11 @@ use warnings;
 use lib qw(lib ../../lib ../../local/lib/perl5);
 
 use Bugzilla;
+use Bugzilla::Attachment;
+use Bugzilla::User;
 use Data::Dumper;
 use List::Util qw(first);
-use MIME::Base64 qw(decode_base64);
+use MIME::Base64 qw(decode_base64 encode_base64);
 use QA::Util qw(get_config);
 use QA::Tests qw(STANDARD_BUG_TESTS PRIVATE_BUG_USER);
 use QA::REST::Util qw(api_headers);
@@ -186,5 +188,64 @@ foreach my $test (@tests) {
   is($data,               $content,      'data is correct');
   is($attachment->{size}, length($data), "size matches data's size");
 }
+#############################
+# Deleted Attachment Tests  #
+#############################
+
+# Deleting an attachment through the web UI zeroes attach_size and removes
+# the stored object, so asking for its data must not fail the request that
+# happens to include it.
+
+my $admin_headers = api_headers($config->{admin_user_api_key});
+
+$t->post_ok(
+  $url
+    . 'rest/bug' => $admin_headers => json => {
+    product     => 'Firefox',
+    component   => 'General',
+    summary     => 'Test bug for deleted attachment data',
+    type        => 'defect',
+    version     => 'unspecified',
+    severity    => 'normal',
+    description => 'This bug exists to test deleted attachment data.',
+    }
+)->status_is(200)->json_has('/id');
+my $deleted_bug_id = $t->tx->res->json->{id};
+ok($deleted_bug_id, "Created bug $deleted_bug_id to hold a deleted attachment");
+
+$t->post_ok(
+  $url
+    . "rest/bug/$deleted_bug_id/attachment" => $admin_headers => json => {
+    summary      => 'attachment to be deleted',
+    content_type => 'text/plain',
+    data         => encode_base64('this data will be removed'),
+    file_name    => 'to-be-deleted.txt',
+    is_patch     => 0,
+    is_private   => 0,
+    }
+)->status_is(201);
+my ($deleted_att_id) = keys %{$t->tx->res->json->{attachments}};
+ok($deleted_att_id, "Created attachment $deleted_att_id");
+
+# Remove the data the same way attachment.cgi's delete action does.
+Bugzilla->set_user(Bugzilla::User->check($config->{admin_user_login}));
+Bugzilla::Attachment->new($deleted_att_id)->remove_from_db();
+
+$t->get_ok($url . "rest/bug/attachment/$deleted_att_id" => $admin_headers)
+  ->status_is(200, 'Deleted attachment is still fetchable by id');
+my $deleted_att = $t->tx->res->json->{attachments}->{$deleted_att_id};
+is($deleted_att->{data}, '', 'Deleted attachment data is an empty string');
+is($deleted_att->{size}, 0,  'Deleted attachment size is 0');
+
+# The original failure: include_fields=_all on a bug carrying a deleted
+# attachment threw net_storage_get_failed and lost the whole response.
+$t->get_ok(
+  $url . "rest/bug/$deleted_bug_id?include_fields=_all" => $admin_headers)
+  ->status_is(200, 'include_fields=_all succeeds with a deleted attachment');
+my $all_bug = $t->tx->res->json->{bugs}->[0];
+my $all_att = first { $_->{id} == $deleted_att_id } @{$all_bug->{attachments}};
+ok($all_att, 'Deleted attachment is still listed under include_fields=_all');
+is($all_att->{data}, '', 'Deleted attachment data is empty under _all');
+is($all_att->{size}, 0,  'Deleted attachment size is 0 under _all');
 
 done_testing();
