@@ -13,9 +13,10 @@ use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Token;
 use Bugzilla::User::APIKey;
-use Bugzilla::Util qw(with_writable_database);
+use Bugzilla::Util qw(i_am_webservice with_writable_database);
 
 use Mojo::Util qw(secure_compare);
+use URI;
 
 sub register {
   my ($self, $app, $conf) = @_;
@@ -31,6 +32,69 @@ sub register {
       else {
         return Bugzilla->user;
       }
+    }
+  );
+
+  $app->helper(
+    'bugzilla.redirect_to_password_reset' => sub {
+      my ($c, $user) = @_;
+
+      # Drop any pending Mojo login continuation. Otherwise Bugzilla->login()
+      # on the reset page consumes it and bounces the user straight back to
+      # where they came from (e.g. /oauth/authorize) before they get a chance
+      # to set a new password.
+      delete $c->session->{override_login_target};
+      delete $c->session->{cgi_params};
+
+      # reset_password.cgi only honours prev_url when it carries a valid
+      # signature, so sign it the same way Bugzilla->login() does.
+      my $abs_url  = $c->req->url->to_abs;
+      my $self_url = $abs_url->to_string;
+      my $redir_url
+        = URI->new(Bugzilla->localconfig->basepath . 'reset_password.cgi');
+      $redir_url->query_form(
+        prev_url     => $self_url,
+        prev_url_sig => issue_hash_sig('prev_url:' . $user->id, $self_url),
+      );
+
+      $c->redirect_to($redir_url->as_string);
+      return undef;
+    }
+  );
+
+  # A credential minted while the account was usable must not outlive the
+  # account being shut off. Bugzilla::Auth::login() enforces this for the
+  # legacy stack (which is what produces account_disabled on rest.cgi and in
+  # the web UI); every authentication path on the native Mojo stack has to
+  # funnel through here so they all refuse the same accounts the same way.
+  #
+  # Returns the user when the account may be used, or undef when the caller
+  # has already been redirected.
+  $app->helper(
+    'bugzilla.assert_account_usable' => sub {
+      my ($c, $user) = @_;
+
+      if (!$user->is_enabled) {
+        ThrowUserError('account_disabled', {disabled_reason => $user->disabledtext});
+      }
+
+      # Likewise for an account confined to a password reset, mirroring
+      # Bugzilla::login().
+      if ($user->password_change_required) {
+
+        # We cannot show the password reset UI for API calls, so treat those
+        # as a disabled account. i_am_webservice() predates the native REST
+        # stack and does not know about USAGE_MODE_MOJO_REST.
+        if (i_am_webservice() || Bugzilla->usage_mode == USAGE_MODE_MOJO_REST) {
+          ThrowUserError('account_disabled',
+            {disabled_reason => $user->password_change_reason});
+        }
+
+        # Otherwise send them to the page that lets them fix it.
+        return $c->bugzilla->redirect_to_password_reset($user);
+      }
+
+      return $user;
     }
   );
 
@@ -145,6 +209,19 @@ sub register {
 
       if ($user_id) {
         my $user = Bugzilla::User->check({id => $user_id, cache => 1});
+
+        # Native /rest routes start in USAGE_MODE_REST (see
+        # Bugzilla::App::Controller::API::_prepare_rest_request) and only some
+        # handlers switch to USAGE_MODE_MOJO_REST before authenticating. The
+        # legacy REST error path needs Bugzilla->_json_server, which only
+        # rest.cgi ever creates, so normalize before raising anything below.
+        if ($usage_mode == USAGE_MODE_REST) {
+          Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
+          $usage_mode = USAGE_MODE_MOJO_REST;
+        }
+
+        $c->bugzilla->assert_account_usable($user) or return undef;
+
         Bugzilla->set_user($user);
         return $user;
       }
