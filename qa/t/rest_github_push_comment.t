@@ -22,6 +22,12 @@ my $api_key = $config->{admin_user_api_key};
 my $url     = Bugzilla->localconfig->urlbase;
 my $secret  = $config->{github_automation_user_api_key};
 
+# push_comment appends a trailer attributing the comment to the webhook bot
+# account whose API key signed the request. In this test that is the
+# github-automation account itself (it owns the signing key above).
+my $comment_trailer
+  = "\n\n(via GitHub webhook, authenticated as $config->{github_automation_user_login})";
+
 my $t = Test::Mojo->new();
 
 # Create a new test bug for linking to PR
@@ -138,7 +144,8 @@ my $comment_text
   = 'Authored by '
   . $payload->{commits}->[0]->{author}->{name} . "\n"
   . $payload->{commits}->[0]->{url} . "\n[releases_v110] "
-  . $payload->{commits}->[0]->{message};
+  . $payload->{commits}->[0]->{message}
+  . $comment_trailer;
 
 # Retrieve the new comment from the bug to make sure it was created correctly
 $t->get_ok(
@@ -201,7 +208,8 @@ $comment_text
   . 'Authored by https://github.com/'
   . $payload->{commits}->[1]->{author}->{username} . "\n"
   . $payload->{commits}->[1]->{url} . "\n[master] "
-  . $payload->{commits}->[1]->{message};
+  . $payload->{commits}->[1]->{message}
+  . $comment_trailer;
 
 # Retrieve the new comment from the bug to make sure it was created correctly
 $t->get_ok(
@@ -258,7 +266,8 @@ $comment_text
   = 'Authored by https://github.com/'
   . $payload->{commits}->[0]->{author}{username} . "\n"
   . $payload->{commits}->[0]->{url} . "\n[master] "
-  . $payload->{commits}->[0]->{message};
+  . $payload->{commits}->[0]->{message}
+  . $comment_trailer;
 
 # Retrieve the new comment from the bug to make sure it was created correctly
 $t->get_ok(
@@ -312,7 +321,8 @@ $comment_text
   = 'Authored by https://github.com/'
   . $payload->{commits}->[0]->{author}->{username} . "\n"
   . $payload->{commits}->[0]->{url} . "\n[master] "
-  . $payload->{commits}->[0]->{message};
+  . $payload->{commits}->[0]->{message}
+  . $comment_trailer;
 
 # Retrieve the new comment from the bug to make sure it was created correctly
 $t->get_ok(

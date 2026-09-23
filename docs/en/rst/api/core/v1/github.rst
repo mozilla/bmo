@@ -10,11 +10,22 @@ and be automatically redirected to the pull request.
 
 **Github Setup Instructions**
 
-* Create or identify a Bugzilla bot account to own this webhook. The bot
-  account should be least-privileged — grant it only the permissions needed
-  for the integration.
+* Create or identify a Bugzilla bot account to own this webhook.
 * A BMO admin must add that bot account to the ``github-webhook-bot`` group
-  via the Users admin UI (``/editusers.cgi``).
+  via the Users admin UI (``/editusers.cgi``). Membership in this group is a
+  privileged grant: it lets any of the account's (non-sticky) API keys drive
+  this endpoint, so only add bots whose owners are trusted.
+* The attachment and its comment are written as the shared
+  ``github-automation@bmo.tld`` account, but **this endpoint only acts on
+  publicly visible bugs**. The target bug is checked against the
+  (unauthenticated) request user before the automation account is adopted, so a
+  pull request title naming a confidential bug is rejected with
+  ``github_pr_bug_not_found`` no matter which bot key signed it.
+* The one exception is the cleanup pass that obsoletes the same pull request
+  attachment on *other* bugs. That pass is scoped to the bugs the signing bot
+  account can see, so a bot with security group memberships can obsolete an
+  attachment on (and add the accompanying comment to) a confidential bug it
+  has access to.
 * Log in as the bot account and go to Preferences > API Keys.
 * Create a new API key with a descriptive label (e.g.
   ``github-webhook-mozilla-bteam-bmo``). Copy the key value — it will only
@@ -36,10 +47,21 @@ and be automatically redirected to the pull request.
 * Make sure at the bottom that "Active" is checked on.
 * Save the webhook.
 
+.. warning::
+  The bug id, title, and repository all come from the (signed) request body, so
+  a leaked key is a general attachment-creation credential, not one scoped to a
+  single repository: it can attach a pull request link to, and comment on, any
+  publicly visible bug. Its reach into confidential bugs is limited to
+  obsoleting an existing pull request attachment on a bug the signing bot
+  account can see. Keep webhook bots out of security groups they do not need,
+  and treat every such key as a credential.
+
 .. note::
   If a webhook secret is ever compromised, revoke the affected API key from the
-  bot account's Preferences > API Keys page. Only that single webhook is affected —
-  all other bot accounts' webhooks continue to work without any changes.
+  bot account's Preferences > API Keys page. Revoking one key does not affect any
+  other bot's webhook. Every authenticated webhook action is logged with, and the
+  resulting bug comment attributes, the bot account whose key signed the request,
+  so misuse of a leaked key is traceable.
 
 .. note::
   Past pull requests will not automatically get a link created in the bug. New pull
@@ -132,11 +154,23 @@ repositories, a Firefox status flag may be set to FIXED.
 
 **Github Setup Instructions**
 
-* Create or identify a Bugzilla bot account to own this webhook. The bot
-  account should be least-privileged — grant it only the permissions needed
-  for the integration.
+* Create or identify a Bugzilla bot account to own this webhook.
 * A BMO admin must add that bot account to the ``github-webhook-bot`` group
-  via the Users admin UI (``/editusers.cgi``).
+  via the Users admin UI (``/editusers.cgi``). Membership in this group is a
+  privileged grant: it lets any of the account's (non-sticky) API keys drive
+  this endpoint, so only add bots whose owners are trusted.
+* The bug changes themselves are made as the shared
+  ``github-automation@bmo.tld`` account, but **only for bugs the signing bot
+  account can see**. A bug referenced in a commit message that the bot cannot
+  see is silently skipped. So the bot account's own visibility decides which
+  bugs its webhook can touch: a bot that must comment on bugs in a given
+  security group has to be a member of that group.
+* Note that group membership is not the only thing that grants visibility. A
+  confidential bug is also visible to its assignee, its QA contact, and (when
+  the product allows it) its reporter or a user on its CC list. A bot with no
+  group memberships is therefore not strictly limited to public bugs, so avoid
+  leaving webhook bot accounts as the assignee, QA contact, or a CC of
+  confidential bugs.
 * Log in as the bot account and go to Preferences > API Keys.
 * Create a new API key with a descriptive label (e.g.
   ``github-webhook-mozilla-bteam-bmo-push``). Copy the key value — it will only
@@ -159,10 +193,26 @@ repositories, a Firefox status flag may be set to FIXED.
 * Make sure at the bottom that "Active" is checked on.
 * Save the webhook.
 
+.. warning::
+  The bug ids and repository name come from the (signed) request body, and the
+  commit messages that supply those bug ids can be written by anyone able to
+  land on a monitored branch. A leaked key is therefore a general
+  bug-modification credential, not one scoped to a single repository — but its
+  reach is bounded by what the signing bot account can see. Keep webhook bots
+  out of security groups they do not need.
+
 .. note::
   If a webhook secret is ever compromised, revoke the affected API key from the
-  bot account's Preferences > API Keys page. Only that single webhook is affected —
-  all other bot accounts' webhooks continue to work without any changes.
+  bot account's Preferences > API Keys page. Revoking one key does not affect any
+  other bot's webhook. Every authenticated webhook action is logged with, and the
+  resulting bug comment attributes, the bot account whose key signed the request,
+  so misuse of a leaked key is traceable.
+
+.. note::
+  The legacy global ``github_pr_signature_secret`` parameter identifies no bot
+  account, so requests signed with it are limited to public bugs. Deployments
+  that need this endpoint to comment on confidential bugs must migrate to
+  per-bot API keys and clear that parameter.
 
 .. note::
   The API endpoint looks at the commit messages for the bug ID so

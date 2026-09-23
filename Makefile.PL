@@ -88,7 +88,6 @@ my %requires = (
   'Moo'                                 => '2.002004',
   'MooX::StrictConstructor'             => '0.008',
   'Mozilla::CA'                         => '20160104',
-  'Net::CIDR'                           => '0',
   'Net::DNS'                            => '0',
   'Package::Stash'                      => '0.37',
   'Parse::CPAN::Meta'                   => '1.44',

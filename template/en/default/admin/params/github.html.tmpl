@@ -35,8 +35,11 @@
     "under Preferences > API Keys, and use that API key as the GitHub " _
     "webhook secret. Individual keys can then be revoked without affecting " _
     "other integrations. Clear this field once all webhooks are migrated. " _
-    "Note: Bugzilla API keys also grant full REST API access as the bot " _
-    "account, so the bot should be least-privileged and the key treated as a credential."
+    "Note: a 'github-webhook-bot' API key lets these endpoints write as " _
+    "'github-automation@bmo.tld'. push_comment is limited to the bugs the " _
+    "signing bot account can see; pull_request only attaches to publicly " _
+    "visible bugs. So only add trusted bots to the group, keep them out of " _
+    "security groups they do not need, and treat each key as a credential."
 
   github_push_comment_enabled =>
     "Enable the ability for Github pushes to add a comment to a related bug report."
