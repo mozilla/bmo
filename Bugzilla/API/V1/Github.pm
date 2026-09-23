@@ -320,7 +320,9 @@ sub push_comment {
   # The scoping identity is resolved by _verify_signature.
   my $webhook_user = $webhook_auth->{user};
 
-  my @denied_bugs = grep { !$webhook_user->can_see_bug($_) } keys %update_bugs;
+  my %visible_bugs
+    = map { $_ => 1 } @{$webhook_user->visible_bugs([keys %update_bugs])};
+  my @denied_bugs = grep { !$visible_bugs{$_} } keys %update_bugs;
   if (@denied_bugs) {
     delete @update_bugs{@denied_bugs};
     WARN(sprintf(
