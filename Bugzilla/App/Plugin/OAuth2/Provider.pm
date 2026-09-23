@@ -56,6 +56,9 @@ sub register {
         # native authentication path, so a disabled account produces
         # account_disabled here rather than being silently downgraded to an
         # anonymous request (which callers report as login_required).
+        if (Bugzilla->usage_mode == USAGE_MODE_REST) {
+          Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
+        }
         $c->bugzilla->assert_account_usable($user) or return undef;
 
         Bugzilla->set_user($user);
