@@ -3032,7 +3032,12 @@ sub _set_product {
 
       if (!$verified) {
         $vars{verify_bug_groups} = 1;
-        $vars{old_groups}        = $invalid_groups
+
+        # Every bug in @idlist is moved by this page, not just $self, so the
+        # group checkboxes have to reflect all of them (bug 2062223).
+        $vars{bug_group_status}
+          = $self->get_group_membership_status({bug_ids => \@idlist});
+        $vars{old_groups} = $invalid_groups
           || $self->get_invalid_groups({bug_ids => \@idlist, product => $product});
       }
 
@@ -3421,15 +3426,23 @@ sub remove_group {
       ThrowUserError('group_invalid_removal', $args);
     }
 
-    # OtherControl people can remove groups only during a product change,
-    # and only when they are non-Mandatory and non-NA.
+    # You have to be a member of a group to remove it from a bug.
+    #
+    # A product change used to relax this for non-members whose othercontrol
+    # was Shown or Default, which let anyone who could see a restricted bug
+    # through a role (assignee or QA contact) declassify it by bundling a
+    # product change into the same update as an explicit groups.remove. The
+    # ControlMap table in Bugzilla::Constants only gives othercontrol authority
+    # to restrict a bug to the group on entry, never to lift a restriction that
+    # is already in place, so there is nothing for the product change to
+    # relax here (bug 2062223).
+    #
+    # Automatic cleanup of groups that are invalid in the destination product
+    # is unaffected: _set_product() removes those only after switching
+    # product_obj, so group_is_valid() above is already false for them and this
+    # whole block is skipped.
     if (!Bugzilla->user->in_group($group->name)) {
-      if (!$self->{_old_product_name}
-        || $controls->{othercontrol} == CONTROLMAPMANDATORY
-        || $controls->{othercontrol} == CONTROLMAPNA)
-      {
-        ThrowUserError('group_invalid_removal', $args);
-      }
+      ThrowUserError('group_invalid_removal', $args);
     }
   }
 
@@ -5202,6 +5215,28 @@ sub get_invalid_groups {
     (@idlist, $product->id, CONTROLMAPNA, CONTROLMAPNA)
   );
   return Bugzilla::Group->new_from_list($gids);
+}
+
+# Returns { group_id => 'all' | 'some' } describing how many of the given bugs
+# are currently restricted to each group; groups no bug is in are absent. The
+# verify-new-product page uses this so a product move never silently drops a
+# restriction that only some of the selected bugs carry (bug 2062223).
+sub get_group_membership_status {
+  my ($invocant, $params) = @_;
+  my @idlist = @{$params->{bug_ids}};
+  return {} unless @idlist;
+  my $rows = Bugzilla->dbh->selectall_arrayref(
+    'SELECT group_id, COUNT(DISTINCT bug_id)
+           FROM bug_group_map
+          WHERE bug_id IN (' . join(',', ('?') x @idlist) . ')
+       GROUP BY group_id', undef, @idlist
+  );
+  my %status;
+  foreach my $row (@$rows) {
+    my ($group_id, $bug_count) = @$row;
+    $status{$group_id} = $bug_count == scalar(@idlist) ? 'all' : 'some';
+  }
+  return \%status;
 }
 
 ################################################################################
