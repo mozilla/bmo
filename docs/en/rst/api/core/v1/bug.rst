@@ -319,6 +319,7 @@ field name in ``include_fields``.
 * Bug ID Fields: (int)
 * Multiple-Selection Fields: (array of strings)
 * Date/Time Fields: (datetime)
+* Date Fields: (string) In the format ``YYYY-MM-DD``.
 
 **Errors**
 
@@ -1013,7 +1014,8 @@ work_time              double   The number of hours worked on this bug as part
 
 You can also set the value of any custom field by passing its name as
 a parameter, and the value to set the field to. For multiple-selection
-fields, the value should be an array of strings.
+fields, the value should be an array of strings. For date fields, the value
+should be a string in the format ``YYYY-MM-DD``.
 
 Flag change object:
 
