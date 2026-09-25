@@ -316,7 +316,6 @@ sub WS_DISPATCH {
     'Bugzilla'         => 'Bugzilla::WebService::Bugzilla',
     'Bug'              => 'Bugzilla::WebService::Bug',
     'User'             => 'Bugzilla::WebService::User',
-    'Group'            => 'Bugzilla::WebService::Group',
     %hook_dispatch
   };
   return $dispatch;
