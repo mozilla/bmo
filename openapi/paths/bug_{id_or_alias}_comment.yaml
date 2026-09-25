@@ -1,0 +1,159 @@
+get:
+  summary: Get all comments for a bug
+  description: >-
+    This allows you to get all comments for a particular bug using the bug ID or
+    alias.
+  operationId: get_bug_comments
+  parameters:
+    - $ref: ../components/parameters/BugIdOrAlias.yaml
+    - name: new_since
+      in: query
+      description: If specified, the method will only return comments newer than this time.
+      schema:
+        type: string
+        format: date-time
+  responses:
+    "200":
+      description: A list of Comments
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              bugs:
+                description: >
+                  This is an object, where the keys are the numeric IDs of the
+                  bugs, and the value is a object with a single key, comments,
+                  which is an array of comments.
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    comments:
+                      type: array
+                      items:
+                        $ref: ../components/schemas/Comment.yaml
+              comments:
+                type: object
+          example:
+            bugs:
+              "35":
+                comments:
+                  - time: "2000-07-25T13:50:04Z"
+                    text: test bug to fix problem in removing from cc list.
+                    bug_id: 35
+                    count: 0
+                    attachment_id: null
+                    is_private: false
+                    tags: []
+                    creator: user@bugzilla.org
+                    creation_time: "2000-07-25T13:50:04Z"
+                    id: 75
+            comments: {}
+    default:
+      description: |
+        Various error responses, including:
+
+        * 100 (Invalid Bug Alias)
+          If you specified an alias and there is no bug with that alias.
+        * 101 (Invalid Bug ID)
+          The bug_id you specified doesn't exist in the database.
+        * 102 (Access Denied)
+          You do not have access to the bug_id you specified.
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Comments
+post:
+  summary: Create a comment on a bug
+  description: >-
+    This allows you to add a comment to a bug in Bugzilla. All comments created
+    via the API will be considered Markdown (specifically GitHub Flavored
+    Markdown).
+  operationId: create_bug_comment
+  parameters:
+    - $ref: ../components/parameters/BugIdOrAlias.yaml
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          type: object
+          properties:
+            ids:
+              description: List of integer bug IDs to add the comment to.
+              type: array
+              items:
+                type: integer
+            comment:
+              description: >-
+                The comment to append to the bug. If this is empty or all
+                whitespace, an error will be thrown saying that you did not set
+                the ``comment`` parameter.
+              type: string
+            is_private:
+              description: >-
+                If set to true, the comment is private, otherwise it is assumed
+                to be public.
+              type: boolean
+            is_markdown:
+              description: If true, the comment will be rendered as markdown.
+              type: boolean
+              default: false
+            work_time:
+              description: >-
+                Adds this many hours to the "Hours Worked" on the bug. If you
+                are not in the time tracking group, this value will be ignored.
+              type: number
+          additionalProperties: false
+          required:
+            - comment
+        example:
+          ids:
+            - 123
+            - 456
+          comment: This is an additional comment
+          is_private: false
+          is_markdown: true
+          work_time: 2.5
+  responses:
+    "200":
+      description: ID of the newly-created comment
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              id:
+                type: integer
+          example:
+            id: 789
+    default:
+      description: |
+        Various error responses, including:
+
+        * 54 (Hours Worked Too Large)
+          You specified a "work_time" larger than the maximum allowed value of
+          "99999.99".
+        * 100 (Invalid Bug Alias)
+          If you specified an alias and there is no bug with that alias.
+        * 101 (Invalid Bug ID)
+          The id you specified doesn't exist in the database.
+        * 109 (Bug Edit Denied)
+          You did not have the necessary rights to edit the bug.
+        * 113 (Can't Make Private Comments)
+          You tried to add a private comment, but don't have the necessary rights.
+        * 114 (Comment Too Long)
+          You tried to add a comment longer than the maximum allowed length
+          (65,535 characters).
+        * 140 (Markdown Disabled)
+          You tried to set the "is_markdown" flag to true but the Markdown feature
+          is not enabled.
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Comments

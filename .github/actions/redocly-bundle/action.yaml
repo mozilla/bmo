@@ -1,0 +1,22 @@
+name: redocly bundle
+description: "Bundle a multi-file API description to a single file."
+inputs:
+  apis:
+    description: "List of API description root filenames or names assigned in the `apis` section of your Redocly configuration file. Default values are all names defined in the `apis` section within your configuration file."
+    required: true
+  output:
+    description: "Name or folder for the bundle file. If you don't specify the file extension, `.yaml` is used by default. If the specified folder doesn't exist, it's created automatically. If the file specified as the bundler's output already exists, it's overwritten."
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-node@main
+      with:
+        node-version: 20
+    - name: install redocly
+      shell: bash
+      run: npm install @redocly/cli -g
+    - name: bundle openapi spec
+      shell: bash
+      run: |
+        redocly bundle ${{ inputs.apis }} ${{ inputs.output && '--output' }} ${{ inputs.output }}

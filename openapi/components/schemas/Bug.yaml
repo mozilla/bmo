@@ -1,0 +1,331 @@
+type: object
+properties:
+  actual_time:
+    description: >-
+      The total number of hours that this bug has taken so far. If you are not
+      in the time-tracking group, this field will not be included in the return
+      value.
+    type: number
+  alias:
+    description: >-
+      The unique alias of this bug. A `null` value will be returned if this bug
+      has no alias.
+    type:
+      - string
+      - null
+  assigned_to:
+    description: The login name of the user to whom the bug is assigned.
+    type: string
+  assigned_to_detail:
+    $ref: ./User.yaml
+  blocks:
+    description: The IDs of bugs that are "blocked" by this bug.
+    type: array
+    items:
+      type: integer
+  cc:
+    description: The login names of users on the CC list of this bug.
+    type: array
+    items:
+      type: string
+  cc_detail:
+    description: >-
+      Array of objects containing detailed user information for each of the cc
+      list members.
+    type: array
+    items:
+      $ref: ./User.yaml
+  classification:
+    description: The name of the current classification the bug is in.
+    type: string
+  component:
+    description: The name of the current component of this bug.
+    type: string
+  creation_time:
+    description: When the bug was created.
+    type: string
+    format: date-time
+  creator:
+    description: The login name of the person who filed this bug (the reporter).
+    type: string
+  creator_detail:
+    $ref: ./User.yaml
+  deadline:
+    description: The day that this bug is due to be completed, in the format `YYYY-MM-DD`.
+    type: string
+    format: date
+  depends_on:
+    description: The IDs of bugs that this bug "depends on".
+    type: array
+    items:
+      type: integer
+  dupe_of:
+    description: >-
+      The bug ID of the bug that this bug is a duplicate of. If this bug isn't a
+      duplicate of any bug, this will be null.
+    type:
+      - integer
+      - null
+  duplicates:
+    description: The ids of bugs that are marked as duplicate of this bug.
+    type: array
+    items:
+      type: integer
+  estimated_time:
+    description: >-
+      The number of hours that it was estimated that this bug would take. If you
+      are not in the time-tracking group, this field will not be included in the
+      return value.
+    type: number
+  flags:
+    description: >-
+      An array of objects containing the information about flags currently set
+      for the bug.
+    type: array
+    items:
+      $ref: ./Flag.yaml
+  groups:
+    description: The names of all the groups that this bug is in.
+    type: array
+    items:
+      type: string
+  id:
+    description: The unique numeric ID of this bug.
+    type: integer
+  is_cc_accessible:
+    description: >-
+      If true, this bug can be accessed by members of the CC list, even if they
+      are not in the groups the bug is restricted to.
+    type: boolean
+  is_confirmed:
+    description: >-
+      ``true`` if the bug has been confirmed. Usually this means that the bug
+      has at some point been moved out of the ``UNCONFIRMED`` status and into
+      another open status.
+    type: boolean
+  is_open:
+    description: '`true` if this bug is open, ``false`` if it is closed.'
+    type: boolean
+  is_creator_accessible:
+    description: >-
+      If `true`, this bug can be accessed by the creator of the bug, even if
+      they are not a member of the groups the bug is restricted to.
+    type: boolean
+  keywords:
+    description: Each keyword that is on this bug.
+    type: array
+    items:
+      type: string
+  last_change_time:
+    description: When the bug was last changed.
+    type: string
+    format: date-time
+  comment_count:
+    description: Number of comments associated with the bug.
+    type: integer
+  op_sys:
+    description: The name of the operating system that the bug was filed against.
+    type: string
+  platform:
+    description: The name of the platform (hardware) that the bug was filed against.
+    type: string
+  priority:
+    description: The priority of the bug.
+    type: string
+  product:
+    description: The name of the product this bug is in.
+    type: string
+  qa_contact:
+    description: The login name of the current QA Contact on the bug.
+    type: string
+  qa_contact_detail:
+    description: An object containing detailed user information for the qa_contact.
+    $ref: ./User.yaml
+  regressed_by:
+    description: The IDs of bugs that introduced this bug.
+    type: array
+    items:
+      type: integer
+  regressions:
+    description: The IDs of bugs that are introduced by this bug.
+    type: array
+    items:
+      type: integer
+  remaining_time:
+    description: >-
+      The number of hours of work remaining until work on this bug is complete.
+      If you are not in the time-tracking group, this field will not be included
+      in the return value.
+    type: number
+  resolution:
+    description: The current resolution of the bug, or an empty string if the bug is open.
+    type: string
+  see_also:
+    description: The URLs in the See Also field on the bug.
+    type: array
+    items:
+      type: string
+  severity:
+    description: The current severity of the bug.
+    type: string
+  status:
+    description: The current status of the bug.
+    type: string
+  summary:
+    description: The summary of this bug.
+    type: string
+  target_milestone:
+    description: >-
+      The milestone that this bug is supposed to be fixed by, or for closed
+      bugs, the milestone that it was fixed for.
+    type: string
+  type:
+    description: The type of the bug.
+    type: string
+  update_token:
+    description: >-
+      The token that you would have to pass to the ``process_bug.cgi`` page in
+      order to update this bug. This changes every time the bug is updated. This
+      field is not returned to logged-out users.
+    type: string
+  url:
+    description: >-
+      A URL that demonstrates the problem described in the bug, or is somehow
+      related to the bug report.
+    type: string
+  version:
+    description: The version the bug was reported against.
+    type: string
+  whiteboard:
+    description: The value of the "status whiteboard" field on the bug.
+    type: string
+  attachments:
+    description: >
+      Each array item is an Attachment object. See [Get
+      Attachment](#tag/Attachments/paths/~1bug~1attachment~1{attachment_id}/get)
+      for details of the object.
+
+
+      > **Note:**
+        This field its only returned by specifying `_extra` or the field name in the `include_fields` parameter.
+    type: array
+    items:
+      $ref: ./Attachment.yaml
+  comments:
+    description: >
+      Each array item is a Comment object. See [Get
+      Comment](#tag/Comments/paths/~1bug~1comment~1{comment_id}/get) for details
+      of the object.
+
+
+      > **Note:**
+        This field its only returned by specifying `_extra` or the field name in the `include_fields` parameter.
+    type: array
+    items:
+      $ref: ./Comment.yaml
+  counts:
+    description: |
+      An object containing the counts of various items.
+
+      > **Note:**
+        This field its only returned by specifying `_extra` or the field name in the `include_fields` parameter.
+    type: object
+    properties:
+      attachments:
+        description: The number of attachments.
+        type: integer
+      cc:
+        description: The number of carbon copies (CC).
+        type: integer
+      comments:
+        description: The number of comments.
+        type: integer
+      keywords:
+        description: The number of keywords.
+        type: integer
+      blocks:
+        description: The number of blocks.
+        type: integer
+      depends_on:
+        description: The number of dependencies.
+        type: integer
+      regressed_by:
+        description: The number of items causing regression.
+        type: integer
+      regressions:
+        description: The number of regressions.
+        type: integer
+      duplicates:
+        description: The number of duplicate items.
+        type: integer
+  description:
+    description: |
+      The description (initial comment) of the bug.
+
+      > **Note:**
+        This field its only returned by specifying `_extra` or the field name in the `include_fields` parameter.
+    type: string
+  filed_via:
+    description: |
+      How the bug was filed, e.g. `standard_form`.
+
+      > **Note:**
+        This field its only returned by specifying `_extra` or the field name in the `include_fields` parameter.
+    type: string
+  history:
+    description: >
+      Each array item is a History object. See [Get
+      History](#tag/Comments/paths/~1bug~1comment~1{comment_id}/get) for details
+      of the object.
+
+
+      > **Note:**
+        This field its only returned by specifying `_extra` or the field name in the `include_fields` parameter.
+    type: array
+    items:
+      $ref: ./BugHistory.yaml
+  tags:
+    description: >
+      Each array item is a tag name. Note that tags are personal to the
+      currently logged in user and are not the same as comment tags.
+
+
+      > **Note:**
+        This field its only returned by specifying `_extra` or the field name in the `include_fields` parameter.
+    type: array
+    items:
+      type: string
+  triage_owner:
+    description: |
+      The login name of the Triage Owner of the bug's component.
+
+      > **Note:**
+        This field its only returned by specifying `_extra` or the field name in the `include_fields` parameter.
+    type: string
+  triage_owner_detail:
+    description: >
+      An object containing detailed user information for the `triage_owner`. To
+      see the keys included in the user detail object, see below.
+
+
+      > **Note:**
+        This field its only returned by specifying `_extra` or the field name in the `include_fields` parameter.
+    type: object
+  last_change_time_non_bot:
+    description: |
+      When the bug was last changed human and not a bot.
+
+      > **Note:**
+        This field its only returned by specifying `_extra` or the field name in the `include_fields` parameter.
+    type: string
+    format: date-time
+additionalProperties:
+  description: >
+    Every custom field in this installation will also be included in the return
+    value. Most fields are returned as strings. However, some field types have
+    different return values.
+
+
+    Normally custom fields are returned by default similar to normal bug fields
+    or you can specify only custom fields by using ``_custom`` in
+    ``include_fields``.

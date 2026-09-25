@@ -1,0 +1,14 @@
+{
+    "lspconfig": {
+        "yamlls": {
+            "yaml": {
+                "schemas": {
+                     "https://github.com/OAI/OpenAPI-Specification/raw/main/schemas/v3.1/schema.json#/$defs/path-item": "openapi/paths/*.yaml",
+                     "https://github.com/OAI/OpenAPI-Specification/raw/main/schemas/v3.1/schema.json#/$defs/parameter": "openapi/components/parameters/*.yaml",
+                     "https://github.com/OAI/OpenAPI-Specification/raw/main/schemas/v3.1/schema.json#/$defs/schema": "openapi/components/schema/*.yaml",
+                     "https://json.schemastore.org/github-workflow.json": ".github/workflows/*.yml",
+                }
+            }
+        }
+    }
+}

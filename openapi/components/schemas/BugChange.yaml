@@ -1,0 +1,17 @@
+type: object
+properties:
+  field_name:
+    description: The name of the bug field that has changed.
+    type: string
+  removed:
+    description: The previous value of the bug field which has been deleted by the change.
+    type: string
+  added:
+    description: The new value of the bug field which has been added by the change.
+    type: string
+  attachment_id:
+    description: >-
+      The ID of the attachment that was changed. This only appears if the change
+      was to an attachment, otherwise `attachment_id` will not be present in
+      this object.
+    type: integer

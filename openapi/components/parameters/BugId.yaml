@@ -1,0 +1,9 @@
+name: id
+in: query
+description: The numeric ID of the bug.
+schema:
+  oneOf:
+    - type: integer
+    - type: array
+      items:
+        type: integer

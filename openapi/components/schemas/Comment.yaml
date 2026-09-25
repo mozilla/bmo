@@ -1,0 +1,58 @@
+type: object
+properties:
+  id:
+    description: The globally unique ID for the comment.
+    type: integer
+  bug_id:
+    description: The ID of the bug that this comment is on.
+    type: integer
+  attachment_id:
+    description: >-
+      If the comment was made on an attachment, this will be the ID of that
+      attachment. Otherwise it will be null.
+    type:
+      - integer
+      - null
+  count:
+    description: >-
+      The number of the comment local to the bug. The Description is 0, comments
+      start with 1.
+    type: integer
+  text:
+    description: >-
+      The body of the comment, including any special text (such as “this bug was
+      marked as a duplicate of…”).
+    type: string
+  raw_text:
+    description: The body of the comment without any special additional text.
+    type: string
+  creator:
+    description: The login name of the comment’s author.
+    type: string
+  time:
+    description: The time (in Bugzilla’s timezone) that the comment was added.
+    type: string
+    format: date-time
+    deprecated: true
+  creation_time:
+    description: >
+      This is exactly same as the ``time`` key. Use this field instead of
+      ``time`` for consistency with other methods including [Get
+      Bug](#tag/Bugs/paths/~1bug~1{id_or_alias}/get) and [Get
+      Attachment](#tag/Attachments/paths/~1bug~1attachment~1{attachment_id}/get).
+
+
+      For compatibility, ``time`` is still usable. However, please note that
+      ``time`` may be deprecated and removed in a future release.
+    type: string
+    format: date-time
+  is_private:
+    description: >-
+      ``true`` if this comment is private (only visible to a certain group
+      called the "insidergroup"), ``false`` otherwise.
+    type: boolean
+  is_markdown:
+    description: >-
+      ``true`` if this comment is private (only visible to a certain group
+      called the "insidergroup"), ``false``
+    type: boolean

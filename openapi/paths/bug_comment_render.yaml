@@ -1,0 +1,48 @@
+post:
+  summary: Render comment as HTML
+  description: Returns the HTML rendering of the provided comment text.
+  operationId: render_comment
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          type: object
+          properties:
+            text:
+              description: Comment text to render.
+              type: string
+            id:
+              description: The ID of the bug to render the comment against.
+              type: integer
+          additionalProperties: false
+          required:
+            - text
+        example:
+          id: 2345
+          text: This issue has been fixed in bug 1234.
+  responses:
+    '200':
+      description: Text containing the HTML rendering
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              html:
+                type: string
+          example:
+            html: >-
+              This issue has been fixed in <a class="bz_bug_link
+              bz_status_RESOLVED bz_closed" title="RESOLVED FIXED - some issue
+              that was fixed" href="show_bug.cgi?id=1234">bug 1234</a>.
+    default:
+      description: >
+        Various error responses, including those thrown by [Get
+        Bug](#tag/Bugs/paths/~1bug~1{id_or_alias}/get).
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Comments

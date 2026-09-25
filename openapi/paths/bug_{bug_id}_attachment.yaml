@@ -1,0 +1,190 @@
+get:
+  summary: Get all attachments for a bug
+  description: This allows you to get all current attachments for a bug.
+  operationId: get_bug_attachments
+  parameters:
+    - name: bug_id
+      in: path
+      description: Integer bug ID.
+      required: true
+      schema:
+        type: integer
+  responses:
+    '200':
+      description: A list of Attachments
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              bugs:
+                description: >
+                  This is an object that has integer bug IDs for keys and the
+                  values are arrays of objects as attachments.
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    $ref: ../components/schemas/Attachment.yaml
+              attachments:
+                type: object
+                const: {}
+          example:
+            bugs:
+              '1345':
+                - (attachment)
+                - (attachment)
+            attachments: {}
+    default:
+      description: >-
+        This method can throw all the same errors as [Get
+        Bug](#tag/Bugs/paths/~1bug~1{id_or_alias}/get).
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Attachments
+post:
+  summary: Create attachment on a bug
+  description: This allows you to add an attachment to a bug in Bugzilla.
+  operationId: create_bug_attachment
+  parameters:
+    - $ref: ../components/parameters/BugId.yaml
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          type: object
+          properties:
+            ids:
+              description: >-
+                The IDs or aliases of bugs that you want to add this attachment
+                to. The same attachment and comment will be added to all these
+                bugs.
+              type: array
+              items:
+                type:
+                  - string
+                  - integer
+            data:
+              description: >-
+                The content of the attachment. You must encode it in base64
+                using an appropriate client library such as ``MIME::Base64`` for
+                Perl.
+              type: string
+              format: base64
+            file_name:
+              description: >-
+                The "file name" that will be displayed in the UI for this
+                attachment and also downloaded copies will be given.
+              type: string
+            summary:
+              description: A short string describing the attachment.
+              type: string
+            content_type:
+              description: >-
+                The MIME type of the attachment, like ``text/plain`` or
+                ``image/png``.
+              type: string
+            comment:
+              description: A comment to add along with this attachment.
+              type: string
+            is_patch:
+              description: >-
+                ``true`` if Bugzilla should treat this attachment as a patch. If
+                you specify this, you do not need to specify a ``content_type``.
+                The ``content_type`` of the attachment will be forced to
+                ``text/plain``. Defaults to ``false`` if not specified.
+              type: boolean
+            is_private:
+              description: >-
+                ``true`` if the attachment should be private (restricted to the
+                "insidergroup"), ``false`` if the attachment should be public.
+                Defaults to ``false`` if not specified.
+              type: boolean
+            flags:
+              description: Flags objects to add to the attachment.
+              type: array
+              items:
+                $ref: ../components/schemas/NewFlag.yaml
+            bug_flags:
+              description: Flag objects to add to the attachment's bug.
+              type: array
+              items:
+                $ref: ../components/schemas/NewFlag.yaml
+          required:
+            - ids
+            - data
+            - file_name
+            - summary
+            - content_type
+        example:
+          ids:
+            - 35
+          is_patch: true
+          comment: This is a new attachment comment
+          summary: Test Attachment
+          content_type: text/plain
+          data: (Some base64 encoded content)
+          file_name: test_attachment.patch
+          obsoletes: []
+          is_private: false
+          flags:
+            - name: review
+              status: '?'
+              requestee: user@bugzilla.org
+              new: true
+  responses:
+    '200':
+      description: Attachment IDs created.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ids:
+                type: array
+                items:
+                  type: string
+          example:
+            ids:
+              - '2797'
+    default:
+      description: >
+        This method can throw all the same errors as [Get
+        Bug](#tag/Bugs/paths/~1bug~1{id_or_alias}/get), plus:
+
+
+        * 129 (Flag Status Invalid)
+          The flag status is invalid.
+        * 130 (Flag Modification Denied)
+          You tried to request, grant, or deny a flag but only a user with the required
+          permissions may make the change.
+        * 131 (Flag not Requestable from Specific Person)
+          You can't ask a specific person for the flag.
+        * 133 (Flag Type not Unique)
+          The flag type specified matches several flag types. You must specify
+          the type id value to update or add a flag.
+        * 134 (Inactive Flag Type)
+          The flag type is inactive and cannot be used to create new flags.
+        * 140 (Markdown Disabled)
+          You tried to set the "is_markdown" flag of the comment to true but the Markdown feature is not enabled.
+        * 600 (Attachment Too Large)
+          You tried to attach a file that was larger than Bugzilla will accept.
+        * 601 (Invalid MIME Type)
+          You specified a "content_type" argument that was blank, not a valid
+          MIME type, or not a MIME type that Bugzilla accepts for attachments.
+        * 603 (File Name Not Specified)
+          You did not specify a valid for the "file_name" argument.
+        * 604 (Summary Required)
+          You did not specify a value for the "summary" argument.
+        * 606 (Empty Data)
+          You set the "data" field to an empty string.
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Attachments

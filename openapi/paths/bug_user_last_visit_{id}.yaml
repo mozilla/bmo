@@ -1,0 +1,99 @@
+get:
+  summary: Get last visited timestamp for bug(s)
+  description: Retrieves the last-visited timestamp for the specified bug(s).
+  operationId: get_last_visited
+  parameters:
+    - name: id
+      in: path
+      description: An integer bug ID.
+      required: false
+      schema:
+        type: integer
+    - name: ids
+      in: query
+      description: One or more optional bug IDs to get.
+      required: false
+      schema:
+        type: array
+        items:
+          type: integer
+  responses:
+    "200":
+      description: Last visited timestamps retrieved successfully.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              type: object
+              properties:
+                id:
+                  description: The bug ID.
+                  type: integer
+                last_visit_ts:
+                  description: The timestamp the user last visited the bug.
+                  type: string
+                  format: date-time
+    default:
+      description: >
+        This method can throw any errors related to accessing the database or
+        handling the request.
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Bug User Last Visited
+post:
+  summary: Update last visited time for bug(s)
+  description: Updates the last-visited time for the specified bug(s) and current user.
+  operationId: update_last_visited
+  parameters:
+    - name: id
+      in: path
+      # QUESTION: Is this required? If not this should probably be a query parameter.
+      required: true
+      description: An integer bug ID.
+      schema:
+        type: integer
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          type: object
+          properties:
+            ids:
+              description: One or more bug IDs to update.
+              type: array
+              items:
+                type: integer
+  responses:
+    "200":
+      description: Last visited time updated successfully.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              type: object
+              properties:
+                id:
+                  description: The bug ID.
+                  type: integer
+                last_visit_ts:
+                  description: The timestamp the user last visited the bug.
+                  type: string
+                  format: date-time
+    default:
+      description: >
+        This method can throw the following error:
+
+        * 1300 (User Not Involved with Bug)
+          The caller's account is not involved with the bug ID provided.
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Bug User Last Visited

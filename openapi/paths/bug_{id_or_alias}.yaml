@@ -1,0 +1,204 @@
+get:
+  summary: Get information about a bug
+  description: Gets information about a particular bug using its ID or alias.
+  operationId: get_bug
+  parameters:
+    - $ref: ../components/parameters/BugIdOrAlias.yaml
+    - name: include_fields
+      in: query
+      description: >
+        Specify the fields to be included in the return value. 
+
+
+        Custom fields are included by default, similar to normal bug fields. To
+        include only custom fields, use `_custom` in include_fields. Extra
+        fields can be retrieved by specifying `_extra` or the field name in
+        include_fields.
+      schema:
+        type: array
+        items:
+          type: string
+  responses:
+    '200':
+      description: A list of Bugs
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              faults:
+                type: array
+              bugs:
+                type: array
+                items:
+                  $ref: ../components/schemas/Bug.yaml
+          example:
+            faults: []
+            bugs:
+              - assigned_to_detail:
+                  id: 2
+                  real_name: Test User
+                  nick: user
+                  name: user@bugzilla.org
+                  email: user@bugzilla.org
+                flags:
+                  - type_id: 11
+                    modification_date: '2014-09-28T21:03:47Z'
+                    name: blocker
+                    status: '?'
+                    id: 2906
+                    setter: user@bugzilla.org
+                    creation_date: '2014-09-28T21:03:47Z'
+                resolution: INVALID
+                id: 35
+                type: defect
+                qa_contact: ''
+                triage_owner: ''
+                version: '1.0'
+                status: RESOLVED
+                creator: user@bugzilla.org
+                cf_drop_down: '---'
+                summary: test bug
+                last_change_time: '2014-09-23T19:12:17Z'
+                platform: All
+                url: ''
+                classification: Unclassified
+                cc_detail:
+                  - id: 786
+                    real_name: Foo Bar
+                    nick: foo
+                    name: foo@bar.com
+                    email: foo@bar.com
+                priority: P1
+                is_confirmed: true
+                creation_time: '2000-07-25T13:50:04Z'
+                assigned_to: user@bugzilla.org
+                alias: null
+                cf_large_text: ''
+                groups: []
+                op_sys: All
+                cf_bug_id: null
+                depends_on: []
+                is_cc_accessible: true
+                is_open: false
+                cf_qa_list_4: '---'
+                keywords: []
+                cc:
+                  - foo@bar.com
+                see_also: []
+                deadline: null
+                is_creator_accessible: true
+                whiteboard: ''
+                dupe_of: null
+                duplicates: []
+                target_milestone: '---'
+                cf_mulitple_select: []
+                component: SaltSprinkler
+                severity: critical
+                cf_date: null
+                product: FoodReplicator
+                creator_detail:
+                  id: 28
+                  real_name: hello
+                  nick: namachi
+                  name: user@bugzilla.org
+                  email: namachi@netscape.com
+                cf_free_text: ''
+                blocks: []
+                regressed_by: []
+                regressions: []
+                comment_count: 12
+    default:
+      description: |
+        Various error responses, including:
+
+        * 100 (Invalid Bug Alias)
+          If you specified an alias and there is no bug with that alias.
+        * 101 (Invalid Bug ID)
+          The bug_id you specified doesn't exist in the database.
+        * 102 (Access Denied)
+          You do not have access to the bug_id you specified.
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Bugs
+put:
+  summary: Update a Bug
+  description: >
+    Allows you to update the fields of a bug. Automatically sends emails out
+    about the changes.
+  operationId: update_bug
+  parameters:
+    - $ref: ../components/parameters/BugIdOrAlias.yaml
+  requestBody:
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/BugUpdate.yaml
+        example:
+          ids:
+            - 35
+          status: IN_PROGRESS
+          keywords:
+            add:
+              - funny
+              - stupid
+  responses:
+    '200':
+      description: A list of bugs that were updated
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              bugs:
+                type: array
+                items:
+                  $ref: ../components/schemas/UpdatedBug.yaml
+          example:
+            bugs:
+              - alias: null
+                changes:
+                  keywords:
+                    added: funny, stupid
+                    removed: ''
+                  status:
+                    added: IN_PROGRESS
+                    removed: CONFIRMED
+                id: 35
+                last_change_time: '2014-09-29T14:25:35Z'
+    default:
+      description: >
+        This method can throw all the same errors as [Get
+        Bug](#tag/Bugs/paths/~1bug~1{id_or_alias}/get), plus:
+
+
+        * 129 (Flag Status Invalid)
+          The flag status is invalid.
+        * 130 (Flag Modification Denied)
+          You tried to request, grant, or deny a flag but only a user with the required
+          permissions may make the change.
+        * 131 (Flag not Requestable from Specific Person)
+          You can't ask a specific person for the flag.
+        * 132 (Flag not Unique)
+          The flag specified has been set multiple times. You must specify the id
+          value to update the flag.
+        * 133 (Flag Type not Unique)
+          The flag type specified matches several flag types. You must specify
+          the type id value to update or add a flag.
+        * 134 (Inactive Flag Type)
+          The flag type is inactive and cannot be used to create new flags.
+        * 140 (Markdown Disabled)
+          You tried to set the "is_markdown" flag of the "comment" to true but Markdown feature is
+          not enabled.
+        * 601 (Invalid MIME Type)
+          You specified a "content_type" argument that was blank, not a valid
+          MIME type, or not a MIME type that Bugzilla accepts for attachments.
+        * 603 (File Name Not Specified)
+          You did not specify a valid for the "file_name" argument.
+        * 604 (Summary Required)
+          You did not specify a value for the "summary" argument.
+  tags:
+    - Bugs

@@ -1,0 +1,72 @@
+put:
+  summary: Update tags for a comment
+  description: Adds or removes tags from a comment.
+  operationId: update_comment_tags
+  parameters:
+    - name: comment_id
+      in: path
+      description: The ID of the comment to update.
+      required: true
+      schema:
+        type: integer
+      example: 75
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          type: object
+          properties:
+            comment_id:
+              description: The ID of the comment to update.
+              type: integer
+              required: true
+            add:
+              description: The tags to attach to the comment.
+              type: array
+              items:
+                type: string
+            remove:
+              description: The tags to detach from the comment.
+              type: array
+              items:
+                type: string
+          additionalProperties: false
+          required:
+            - comment_id
+        example:
+          add:
+            - spam
+            - bad
+  responses:
+    '200':
+      description: An array of strings containing the comment's updated tags.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              type: string
+          example:
+            - bad
+            - spam
+    default:
+      description: >
+        This method can throw all of the errors that [Get
+        Bug](#tag/Bugs/paths/~1bug~1{id_or_alias}/get) throws, plus:
+
+
+        * 125 (Comment Tagging Disabled)
+          Comment tagging support is not available or enabled.
+        * 126 (Invalid Comment Tag)
+          The comment tag provided was not valid (e.g. contains invalid characters).
+        * 127 (Comment Tag Too Short)
+          The comment tag provided is shorter than the minimum length.
+        * 128 (Comment Tag Too Long)
+          The comment tag provided is longer than the maximum length.
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Comments
