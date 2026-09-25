@@ -21,6 +21,7 @@ use Bugzilla::Keyword;
 use Bugzilla::Logging;
 use Bugzilla::Milestone;
 use Bugzilla::Product;
+use Bugzilla::Util qw(detaint_natural);
 use Bugzilla::Version;
 use List::MoreUtils qw(any first_value);
 
@@ -221,7 +222,10 @@ sub comment_tags {
   my $user     = Bugzilla->user;
   my $template = Bugzilla->template;
 
-  my $id      = $params->{id};
+  my $id = $params->{id};
+  detaint_natural($id)
+    || ThrowCodeError('param_must_be_numeric',
+    {function => 'BugModal.comment_tags', param => 'id'});
   my $comment = Bugzilla::Comment->new($id);
   ThrowUserError('comment_id_invalid', {id => $id}) if !$comment;
 
@@ -251,7 +255,10 @@ sub update_comment_tags {
     }
   );
 
-  my $id      = $params->{id};
+  my $id = $params->{id};
+  detaint_natural($id)
+    || ThrowCodeError('param_must_be_numeric',
+    {function => 'BugModal.update_comment_tags', param => 'id'});
   my $comment = Bugzilla::Comment->new($id);
   ThrowUserError('comment_id_invalid', {id => $id}) if !$comment;
 
