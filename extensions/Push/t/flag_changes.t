@@ -79,4 +79,18 @@ is(
   {}, 'a flag re-set by a different user is not a change'
 );
 
+is(
+  split_flagtypes(
+    'needinfo?(a@example.com), needinfo?(b@example.com)',
+    'needinfo+, needinfo?(d@example.com)'
+  ),
+  [
+    ['flag.needinfo', '? (a@example.com)', ''],
+    ['flag.needinfo', '? (b@example.com)', ''],
+    ['flag.needinfo', '',                  '+'],
+    ['flag.needinfo', '',                  '? (d@example.com)'],
+  ],
+  'several changes to one flag type are not paired'
+);
+
 done_testing;
