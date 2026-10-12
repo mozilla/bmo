@@ -199,8 +199,9 @@ sub _split_flagtypes {
     push @{$values{$name}{added}}, $value;
   }
 
-  # pair removed and added values of the same flag type in order, so a single
-  # flag changing state (eg. review? to review+) is still one change
+  # only pair when a flag type has exactly one removed and one added value, so a
+  # single flag changing state (eg. review? to review+) is still one change.
+  # otherwise we can't tell which removal goes with which addition.
   my @flag_changes;
   foreach my $name (sort keys %values) {
     my @removed = @{$values{$name}{removed} || []};
