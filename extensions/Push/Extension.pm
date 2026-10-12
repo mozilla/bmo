@@ -205,8 +205,12 @@ sub _split_flagtypes {
   foreach my $name (sort keys %values) {
     my @removed = @{$values{$name}{removed} || []};
     my @added   = @{$values{$name}{added}   || []};
-    while (@removed || @added) {
-      push @flag_changes, [$name, shift(@removed) // '', shift(@added) // ''];
+    if (@removed == 1 && @added == 1) {
+      push @flag_changes, [$name, $removed[0], $added[0]];
+    }
+    else {
+      push @flag_changes, map { [$name, $_, ''] } @removed;
+      push @flag_changes, map { [$name, '', $_] } @added;
     }
   }
   return @flag_changes;
