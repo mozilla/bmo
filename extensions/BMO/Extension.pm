@@ -782,6 +782,34 @@ sub object_columns {
   );
 }
 
+sub object_validators {
+  my ($self, $args) = @_;
+  my ($class, $validators) = @$args{qw(class validators)};
+  return unless $class->isa('Bugzilla::Bug');
+  $validators->{cf_crash_data_url} = \&_check_crash_data_url;
+}
+
+sub _check_crash_data_url {
+  my ($invocant, $url) = @_;
+  my $prefix = 'https://crash-stats.mozilla.org/search/?';
+  $url = defined $url ? trim($url) : '';
+  return $url if $url eq '' || index($url, $prefix) == 0;
+  ThrowUserError('crash_data_url_invalid', {url => $url, prefix => $prefix});
+}
+
+# Check after both fields have been validated so simultaneous edits work.
+sub _check_crash_data_url_has_signature {
+  my ($signature, $url) = @_;
+  ThrowUserError('crash_data_url_without_signature')
+    if ($url // '') ne '' && ($signature // '') eq '';
+}
+
+sub webservice_error_codes {
+  my ($self, $args) = @_;
+  $args->{error_map}->{crash_data_url_invalid}           = 112;  # Bug URL errors
+  $args->{error_map}->{crash_data_url_without_signature} = 112;
+}
+
 sub object_update_columns {
   my ($self, $args) = @_;
   return unless $args->{object}->isa('Bugzilla::Product');
@@ -1111,6 +1139,9 @@ sub bug_end_of_create_validators {
   my ($self, $args) = @_;
   my $params = $args->{params};
 
+  _check_crash_data_url_has_signature($params->{cf_crash_signature},
+    $params->{cf_crash_data_url});
+
   # silently drop changes to the triaged keyword from users without permissions
   # to triage
   return if Bugzilla->user->can_triage;
@@ -1147,6 +1178,14 @@ sub object_start_of_update {
   my ($self,    $args)    = @_;
   my ($new_bug, $old_bug) = @$args{qw( object old_object )};
   return unless $new_bug->isa('Bugzilla::Bug');
+
+  # Allow unrelated edits even if an existing URL lacks a signature.
+  if (any { ($new_bug->$_ // '') ne ($old_bug->$_ // '') }
+    qw(cf_crash_signature cf_crash_data_url))
+  {
+    _check_crash_data_url_has_signature($new_bug->cf_crash_signature,
+      $new_bug->cf_crash_data_url);
+  }
 
   # if either the assignee or status has changed
   return
@@ -1454,6 +1493,20 @@ sub install_update_db {
     Bugzilla::Field->create({
       name        => 'cf_crash_signature',
       description => 'Crash Signature',
+      type        => FIELD_TYPE_TEXTAREA,
+      mailhead    => 0,
+      enter_bug   => 1,
+      obsolete    => 0,
+      custom      => 1,
+      buglist     => 0,
+    });
+  }
+
+  # Use MEDIUMTEXT to support search URLs longer than 255 characters.
+  unless (Bugzilla::Field->new({name => 'cf_crash_data_url'})) {
+    Bugzilla::Field->create({
+      name        => 'cf_crash_data_url',
+      description => 'Crash Data URL',
       type        => FIELD_TYPE_TEXTAREA,
       mailhead    => 0,
       enter_bug   => 1,

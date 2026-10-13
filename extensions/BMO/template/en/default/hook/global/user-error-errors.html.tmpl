@@ -60,4 +60,13 @@
   [% title = "Missing Bug Severity" %]
   Severity of S1-S4 is required to mark a [% terms.bug %] as triaged.
 
+[% ELSIF error == "crash_data_url_invalid" %]
+  [% title = "Invalid Crash Data URL" %]
+  <code>[% url FILTER html %]</code> is not a valid Crash Data URL: it must be a
+  Socorro search URL starting with <code>[% prefix FILTER html %]</code>.
+
+[% ELSIF error == "crash_data_url_without_signature" %]
+  [% title = "Missing Crash Signature" %]
+  A Crash Data URL can only be set on [% terms.abug %] with a crash signature.
+
 [% END %]
