@@ -26,6 +26,22 @@ my $secret  = $config->{github_automation_user_api_key};
 
 my $t = Test::Mojo->new();
 
+# pull_request attributes both the attachment-created comment and the
+# moved/obsoleted comment to the webhook bot account whose API key signed the
+# request. In this test that is the github-automation account itself.
+my $attribution
+  = "(via GitHub webhook, authenticated as $config->{github_automation_user_login})";
+
+# Return the text of the most recent comment on a bug.
+sub last_comment_text {
+  my ($bug_id) = @_;
+  $t->get_ok(
+    $url . "rest/bug/$bug_id/comment" => {'X-Bugzilla-API-Key' => $api_key})
+    ->status_is(200);
+  my $comments = $t->tx->res->json->{bugs}->{$bug_id}->{comments};
+  return $comments->[-1]->{text};
+}
+
 # Create a new test bug for linking to PR
 my $new_bug = {
   product     => 'Firefox',
@@ -156,6 +172,11 @@ my $attach_data = $t->tx->res->json->{attachments}->{$attach_id}->{data};
 $attach_data = decode_base64($attach_data);
 ok($attach_data eq 'https://github.com/mozilla-bteam/bmo/pull/1');
 
+# The attachment-created comment must name the webhook credential so the
+# identity behind the github-automation change is visible in bug history.
+like(last_comment_text($bug_id), qr/\Q$attribution\E/,
+  'attachment-created comment is attributed to the webhook credential');
+
 # Bug already had the same github attachment so don't add twice
 $t->post_ok(
   $url
@@ -213,6 +234,13 @@ ok($attach_data_2 eq 'https://github.com/mozilla-bteam/bmo/pull/1');
 $t->get_ok(
   $url . "rest/bug/attachment/$attach_id" => {'X-Bugzilla-API-Key' => $api_key})
   ->status_is(200)->json_is("/attachments/$attach_id/is_obsolete", true);
+
+# The new bug's attachment comment and the old bug's moved/obsoleted comment
+# must both carry the attribution trailer.
+like(last_comment_text($bug_id_2), qr/\Q$attribution\E/,
+  'attachment-created comment on the second bug is attributed');
+like(last_comment_text($bug_id), qr/\Q$attribution\E/,
+  'moved/obsoleted attachment comment is attributed');
 
 # Test that ping events (when the webhook is first created) are successful
 # a valid signature is also provided

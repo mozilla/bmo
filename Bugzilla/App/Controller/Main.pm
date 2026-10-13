@@ -20,7 +20,8 @@ sub setup_routes {
   $r->get('/testagent.cgi')->to('Main#testagent');
 
   $r->add_type('hex32' => qr/[[:xdigit:]]{32}/);
-  $r->post('/announcement/hide/<checksum:hex32>')->to('Main#announcement_hide');
+  $r->post('/announcement/hide/<checksum:hex32>')
+    ->to('Main#announcement_hide', request_limit_format => 'json');
 }
 
 sub root {

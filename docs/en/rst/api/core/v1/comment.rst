@@ -39,6 +39,9 @@ include_fields   array     Pass ``_collapsed_comments`` to include comments that
                            ``_default``, so use
                            ``include_fields=_default,_collapsed_comments`` to get
                            the usual comment fields as well.
+skip_private     boolean   If true, inaccessible or invalid bugs are omitted
+                           instead of causing an error. This parameter is
+                           experimental.
 ===============  ========  ======================================================
 
 Comments that are collapsed in the web UI -- those tagged with one of the tags
@@ -58,12 +61,15 @@ bug entirely unless ``_collapsed_comments`` is requested. Comments requested by
            {
              "time": "2000-07-25T13:50:04Z",
              "text": "test bug to fix problem in removing from cc list.",
+             "raw_text": "test bug to fix problem in removing from cc list.",
              "bug_id": 35,
              "count": 0,
              "attachment_id": null,
              "is_private": false,
              "tags": [],
+             "collapsed": false,
              "creator": "user@bugzilla.org",
+             "author": "user@bugzilla.org",
              "creation_time": "2000-07-25T13:50:04Z",
              "reactions": {
               "+1": 3,
@@ -78,21 +84,23 @@ bug entirely unless ``_collapsed_comments`` is requested. Comments requested by
      "comments": {}
    }
 
+This example assumes comment tagging and comment reactions are enabled.
+
 Two items are returned:
 
 ``bugs`` This is used for bugs specified in ``ids``. This is an object,
 where the keys are the numeric IDs of the bugs, and the value is
-a object with a single key, ``comments``, which is an array of comments.
+an object with a single key, ``comments``, which is an array of comments.
 (The format of comments is described below.)
 
 Any individual bug will only be returned once, so if you specify an ID
 multiple times in ``ids``, it will still only be returned once.
 
 ``comments`` Each individual comment requested in ``comment_ids`` is
-returned here, in a object where the numeric comment ID is the key,
+returned here, in an object where the numeric comment ID is the key,
 and the value is the comment. (The format of comments is described below.)
 
-A "comment" as described above is a object that contains the following items:
+A "comment" as described above is an object that contains the following items:
 
 ================  ========  =====================================================
 name              type      description
@@ -103,14 +111,18 @@ attachment_id     int       If the comment was made on an attachment, this will
                             be the ID of that attachment. Otherwise it will be
                             null.
 count             int       The number of the comment local to the bug. The
-                            Description is 0, comments start with 1.
+                            description is comment 0; subsequent comments start
+                            with 1.
 text              string    The body of the comment, including any special text
                             (such as "this bug was marked as a duplicate of...").
 raw_text          string    The body of the comment without any special
                             additional text.
 creator           string    The login name of the comment's author.
-time              datetime  The time (in Bugzilla's timezone) that the comment
-                            was added.
+author            string    A backwards-compatible alias for ``creator``. New
+                            clients should use ``creator``.
+tags              array     Tags attached to the comment. Only present when
+                            comment tagging is enabled.
+time              datetime  The time in UTC that the comment was added.
 creation_time     datetime  This is exactly same as the ``time`` key. Use this
                             field instead of ``time`` for consistency with other
                             methods including :ref:`rest_single_bug` and
@@ -123,8 +135,6 @@ creation_time     datetime  This is exactly same as the ``time`` key. Use this
 is_private        boolean   ``true`` if this comment is private (only visible to
                             a certain group called the "insidergroup"),
                             ``false`` otherwise.
-is_markdown       boolean   ``true`` if this comment is markdown. ``false`` if
-                            this comment is plaintext.
 edit_count        int       The number of times this comment has been edited.
                             ``0`` if the comment has never been edited.
 
@@ -133,7 +143,7 @@ edit_count        int       The number of times this comment has been edited.
                             edit-comments admin are only counted for members of
                             the edit-comments admins group.
 
-last_change_time  datetime  The time (in Bugzilla's timezone) of the most recent
+last_change_time  datetime  The time in UTC of the most recent
                             edit to this comment, or null if the comment has
                             never been edited.
 
@@ -143,7 +153,8 @@ last_change_time  datetime  The time (in Bugzilla's timezone) of the most recent
 
 reactions         object    An object containing reacted emoji names and
                             corresponding counts. To retrieve reacted users, use
-                            :ref:`rest_get_comment_reactions`.
+                            :ref:`rest_get_comment_reactions`. Only present when
+                            comment reactions are enabled.
 collapsed         boolean   ``true`` if this comment is collapsed in the web UI,
                             either because one of its tags is listed in the
                             ``collapsed_comment_tags`` parameter or because it was
@@ -171,8 +182,7 @@ it can also throw the following errors:
 Create Comments
 ---------------
 
-This allows you to add a comment to a bug in Bugzilla. All comments created via the
-API will be considered Markdown (specifically GitHub Flavored Markdown).
+This allows you to add a comment to a bug in Bugzilla.
 
 **Request**
 
@@ -185,31 +195,31 @@ To create a comment on a current bug.
 .. code-block:: js
 
    {
-     "ids" : [123,..],
      "comment" : "This is an additional comment",
      "is_private" : false,
-     "is_markdown" : true
+     "is_markdown" : true,
+     "comment_tags" : ["triaged"]
    }
 
-``ids`` is optional in the data example above and can be used to specify adding
-a comment to more than one bug at the same time.
-
-===========  =======  ===========================================================
-name         type     description
-===========  =======  ===========================================================
-**id**       int      The ID or alias of the bug to append a comment to.
-ids          array    List of integer bug IDs to add the comment to.
-**comment**  string   The comment to append to the bug. If this is empty
-                      or all whitespace, an error will be thrown saying that you
-                      did not set the ``comment`` parameter.
-is_private   boolean  If set to true, the comment is private, otherwise it is
-                      assumed to be public.
-is_markdown  boolean  If true, the comment will be rendered as markdown.
-                      Defaults to the system ``use_markdown`` setting.
-work_time    double   Adds this many hours to the "Hours Worked" on the bug.
-                      If you are not in the time tracking group, this value will
-                      be ignored.
-===========  =======  ===========================================================
+============  =======  ==========================================================
+name          type     description
+============  =======  ==========================================================
+**id**        int      The ID or alias of the bug to append a comment to.
+**comment**   string   The comment to append to the bug. If this is empty
+                       or all whitespace, an error will be thrown saying that you
+                       did not set the ``comment`` parameter.
+is_private    boolean  If set to true, the comment is private, otherwise it is
+                       assumed to be public.
+is_markdown   boolean  If true, marks the comment for Markdown rendering.
+                       Rendering also requires the system ``use_markdown``
+                       setting to be enabled.
+                       Defaults to the system ``use_markdown`` setting.
+comment_tags  array    Tags to add to the new comment. Tags are added only if
+                       the user has permission to tag comments.
+work_time     double   Adds this many hours to the "Hours Worked" on the bug.
+                       Changing this value requires time-tracking permission;
+                       unauthorized changes cause an error.
+============  =======  ==========================================================
 
 **Response**
 
@@ -241,9 +251,14 @@ id    int   ID of the newly-created comment.
 * 114 (Comment Too Long)
   You tried to add a comment longer than the maximum allowed length
   (65,535 characters).
-* 140 (Markdown Disabled)
-  You tried to set the "is_markdown" flag to true but the Markdown feature
-  is not enabled.
+* 115 (Illegal Change)
+  You tried to change ``work_time`` without the necessary permission.
+* 126 (Invalid Comment Tag)
+  A tag in ``comment_tags`` was not valid (e.g. contains invalid characters).
+* 127 (Comment Tag Too Long)
+  A tag in ``comment_tags`` is longer than the maximum length.
+* 128 (Comment Tag Too Short)
+  A tag in ``comment_tags`` is shorter than the minimum length.
 
 .. _rest_get_comment_reactions:
 
@@ -339,6 +354,10 @@ This method can throw all of the errors that :ref:`rest_comments` throws, plus:
 
 * 137 (Invalid Comment Reaction)
   The comment reaction provided is not supported.
+* 138 (Comment Reactions Closed)
+  The bug has been closed for too long to allow comment reaction changes.
+* 139 (Comment Reactions Restricted)
+  You are not allowed to react to comments on this bug.
 
 .. _rest_search_comment_tags:
 
@@ -346,6 +365,8 @@ Search Comment Tags
 -------------------
 
 Searches for tags which contain the provided substring.
+
+You must be logged in and have permission to tag comments.
 
 **Request**
 
@@ -366,7 +387,7 @@ name       type    description
 =========  ======  =====================================================
 **query**  string  Only tags containing this substring will be returned.
 limit      int     If provided will return no more than ``limit`` tags.
-                   Defaults to ``10``.
+                   Defaults to ``7``.
 =========  ======  =====================================================
 
 **Response**
@@ -393,9 +414,11 @@ Update Comment Tags
 
 Adds or removes tags from a comment.
 
+You must be logged in and have permission to tag comments.
+
 **Request**
 
-To update the tags comments attached to a comment:
+To update the tags attached to a comment:
 
 .. code-block:: text
 
@@ -406,7 +429,6 @@ Example:
 .. code-block:: js
 
    {
-     "comment_id" : 75,
      "add" : ["spam", "bad"]
    }
 
@@ -435,12 +457,14 @@ This method can throw all of the errors that :ref:`rest_single_bug` throws, plus
 
 * 125 (Comment Tagging Disabled)
   Comment tagging support is not available or enabled.
+* 110 (Comment Is Private)
+  You tried to tag a private comment without permission to view it.
 * 126 (Invalid Comment Tag)
   The comment tag provided was not valid (e.g. contains invalid characters).
-* 127 (Comment Tag Too Short)
-  The comment tag provided is shorter than the minimum length.
-* 128 (Comment Tag Too Long)
+* 127 (Comment Tag Too Long)
   The comment tag provided is longer than the maximum length.
+* 128 (Comment Tag Too Short)
+  The comment tag provided is shorter than the minimum length.
 
 .. _rest_render_comment:
 
@@ -476,9 +500,8 @@ id              int     The ID of the bug to render the comment against.
 .. code-block:: js
 
    {
-     "html" : "This issue has been fixed in <a class=\"bz_bug_link
-          bz_status_RESOLVED  bz_closed\" title=\"RESOLVED FIXED - some issue that was fixed\" href=\"show_bug.cgi?id=1234\">bug 1234</a>."
-   ]
+     "html" : "This issue has been fixed in <a class=\"bz_bug_link bz_status_RESOLVED bz_closed\" title=\"RESOLVED FIXED - some issue that was fixed\" href=\"show_bug.cgi?id=1234\">bug 1234</a>."
+   }
 
 ====  ======  ===================================
 name  type    description

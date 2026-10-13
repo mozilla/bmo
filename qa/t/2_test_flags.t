@@ -328,8 +328,7 @@ $sel->title_like(qr/^$bug1_id /);
 # 1. going back does not keep panels expanded
 # 2. to get the requestee field to display for the addl flags,
 #    we have to set to X and then back to ? for each one.
-$sel->click_ok('action-menu-btn',   'Expand action menu');
-$sel->click_ok('action-expand-all', 'Expand all modal panels');
+expand_all_modules($sel);
 $sel->select_ok("flag_type-$flagtype1_id", "value=X");
 $sel->select_ok("flag_type-$flagtype1_id", "label=?");
 $sel->type_ok("requestee_type-$flagtype1_id", $config->{admin_user_login});

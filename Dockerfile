@@ -1,4 +1,3 @@
-
 # Generate the third-party front-end libraries (jQuery, Prism, mermaid, ...)
 # from the versions pinned in package-lock.json. These files are not committed
 # to the repository; this stage is their only source. Node lives only here, so

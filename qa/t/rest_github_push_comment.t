@@ -22,6 +22,12 @@ my $api_key = $config->{admin_user_api_key};
 my $url     = Bugzilla->localconfig->urlbase;
 my $secret  = $config->{github_automation_user_api_key};
 
+# push_comment appends a trailer attributing the comment to the webhook bot
+# account whose API key signed the request. In this test that is the
+# github-automation account itself (it owns the signing key above).
+my $comment_trailer
+  = "\n\n(via GitHub webhook, authenticated as $config->{github_automation_user_login})";
+
 my $t = Test::Mojo->new();
 
 # Create a new test bug for linking to PR
@@ -138,7 +144,8 @@ my $comment_text
   = 'Authored by '
   . $payload->{commits}->[0]->{author}->{name} . "\n"
   . $payload->{commits}->[0]->{url} . "\n[releases_v110] "
-  . $payload->{commits}->[0]->{message};
+  . $payload->{commits}->[0]->{message}
+  . $comment_trailer;
 
 # Retrieve the new comment from the bug to make sure it was created correctly
 $t->get_ok(
@@ -201,7 +208,8 @@ $comment_text
   . 'Authored by https://github.com/'
   . $payload->{commits}->[1]->{author}->{username} . "\n"
   . $payload->{commits}->[1]->{url} . "\n[master] "
-  . $payload->{commits}->[1]->{message};
+  . $payload->{commits}->[1]->{message}
+  . $comment_trailer;
 
 # Retrieve the new comment from the bug to make sure it was created correctly
 $t->get_ok(
@@ -258,7 +266,8 @@ $comment_text
   = 'Authored by https://github.com/'
   . $payload->{commits}->[0]->{author}{username} . "\n"
   . $payload->{commits}->[0]->{url} . "\n[master] "
-  . $payload->{commits}->[0]->{message};
+  . $payload->{commits}->[0]->{message}
+  . $comment_trailer;
 
 # Retrieve the new comment from the bug to make sure it was created correctly
 $t->get_ok(
@@ -312,7 +321,8 @@ $comment_text
   = 'Authored by https://github.com/'
   . $payload->{commits}->[0]->{author}->{username} . "\n"
   . $payload->{commits}->[0]->{url} . "\n[master] "
-  . $payload->{commits}->[0]->{message};
+  . $payload->{commits}->[0]->{message}
+  . $comment_trailer;
 
 # Retrieve the new comment from the bug to make sure it was created correctly
 $t->get_ok(
@@ -398,5 +408,59 @@ $t->post_ok(
     'X-GitHub-Event'      => 'push'
     } => json => $payload
 )->status_is(200)->json_has("/bugs/$bug_id_3/id");
+
+# An automation update must not clear restrict_comments on the bug it touches.
+
+$new_bug = {
+  product     => 'Firefox',
+  component   => 'General',
+  summary     => 'Test GitHub Push Commenting (restrict_comments)',
+  type        => 'defect',
+  version     => 'unspecified',
+  severity    => 'blocker',
+  description => 'This is a new test bug',
+};
+
+$t->post_ok(
+  $url . 'rest/bug' => {'X-Bugzilla-API-Key' => $api_key} => json => $new_bug)
+  ->status_is(200)->json_has('/id');
+
+my $bug_id_4 = $t->tx->res->json->{id};
+
+$t->put_ok($url
+    . "rest/bug/$bug_id_4" => {'X-Bugzilla-API-Key' => $api_key} => json =>
+    {restrict_comments => 1})->status_is(200);
+
+$payload = {
+  ref        => 'refs/heads/master',
+  repository => {
+    full_name      => 'mozilla-mobile/firefox-android',
+    default_branch => 'master',
+  },
+  commits => [{
+    author => {username => 'foobar', name => 'Foo Bar'},
+    url => 'https://github.com/mozilla-bteam/bmo/commit/abcdefghijklmnopqrstuvwxyz',
+    message => "Bug $bug_id_4 - Test Github Push Comment (restrict_comments)",
+  }]
+};
+
+$t->post_ok(
+  $url
+    . 'rest/github/push_comment' => {
+    'X-Hub-Signature-256' => generate_payload_signature($secret, $payload),
+    'X-GitHub-Event'      => 'push'
+    } => json => $payload
+)->status_is(200)->json_has("/bugs/$bug_id_4/id");
+
+$comment_id = $t->tx->res->json->{bugs}->{$bug_id_4}->{id};
+
+# restrict_comments is not exposed by the REST bug API, so assert its effect:
+# a user outside restrict_comments_group still cannot react to the comment.
+$t->put_ok($url
+    . "rest/bug/comment/$comment_id/reactions" =>
+    {'X-Bugzilla-API-Key' => $config->{unprivileged_user_api_key}} => json =>
+    {add => ['-1']})->status_is(400)
+  ->json_is('/message' =>
+    'You are not allowed to react to comments on this bug.');
 
 done_testing();

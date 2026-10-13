@@ -26,8 +26,13 @@ $(function() {
 
         that.data('counter', that.data('counter') - 1);
         hideNotifications(this);
-        if (document.activeElement != this)
-            that.devbridgeAutocomplete('hide');
+        // devbridge-autocomplete 2.x calls onSearchComplete before rendering
+        // suggestions, so defer the hide until after they have been shown
+        var input = this;
+        setTimeout(function() {
+            if (document.activeElement !== input)
+                that.devbridgeAutocomplete('hide');
+        }, 0);
         if (that.data('error')) {
             searchError.call(that[0], null, null, null, that.data('error'));
             that.data('error', '');

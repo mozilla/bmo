@@ -14,9 +14,10 @@ use Bugzilla::Bug;
 use Bugzilla::BugMail;
 use Bugzilla::Constants;
 use Bugzilla::Group;
+use Bugzilla::Logging;
 use Bugzilla::Milestone;
 use Bugzilla::User;
-use Bugzilla::Util qw(fetch_product_versions);
+use Bugzilla::Util qw(clean_text fetch_product_versions remote_ip);
 
 use Bugzilla::Extension::TrackingFlags::Flag;
 use Bugzilla::Extension::TrackingFlags::Flag::Bug;
@@ -49,7 +50,8 @@ sub pull_request {
   }
 
   # Verify that signature is correct based on shared secret
-  if (!$self->_verify_signature) {
+  my $webhook_auth = $self->_verify_signature;
+  if (!$webhook_auth) {
     return $self->code_error('github_mismatch_signatures');
   }
 
@@ -59,7 +61,7 @@ sub pull_request {
     return $self->render(json => {error => 0});
   }
 
-  # Validate JSON input 
+  # Validate JSON input
   my $payload = $self->req->json;
   my @errors  = joi->object->props(
     action       => joi->string->required,
@@ -112,10 +114,26 @@ sub pull_request {
     }
   }
 
-  # Create new attachment using pull request URL as attachment content
+  # Record which webhook credential authenticated this privileged request so
+  # that abuse of a leaked bot key remains attributable after the fact.
+  INFO(sprintf(
+    'github pull_request webhook authenticated as %s (%s) from %s: bug %s, repo %s',
+    $webhook_auth->{login}, $webhook_auth->{via}, remote_ip(),
+    $bug->id, clean_text($repository)
+  ));
+
+  # The identity whose bug visibility scopes this request (see _verify_signature).
+  my $webhook_user = $webhook_auth->{user};
+
+  # Create new attachment using pull request URL as attachment content.
+  # /rest has no login middleware, so there is no authenticated user to write
+  # as; we adopt the shared github-automation account. The bug was already
+  # gated above against the caller -- anonymous here -- so this only ever runs
+  # for public bugs. Only the groups (not bless_groups) are elevated because
+  # the webhook never manages group memberships: it only files attachments,
+  # comments, and flags.
   my $auto_user = Bugzilla::User->check({name => 'github-automation@bmo.tld'});
-  $auto_user->{groups}       = [Bugzilla::Group->get_all];
-  $auto_user->{bless_groups} = [Bugzilla::Group->get_all];
+  $auto_user->{groups} = [Bugzilla::Group->get_all];
   Bugzilla->set_user($auto_user);
 
   my $timestamp = Bugzilla->dbh->selectrow_array("SELECT NOW()");
@@ -131,9 +149,11 @@ sub pull_request {
     mimetype    => 'text/x-github-pull-request',
   });
 
-  # Insert a comment about the new attachment into the database.
+  # Insert a comment about the new attachment into the database. Attribute it to
+  # the webhook credential that triggered the action so the identity behind the
+  # github-automation change is visible in bug history, not just server logs.
   $bug->add_comment(
-    '',
+    "(via GitHub webhook, authenticated as $webhook_auth->{login})",
     {
       type        => CMT_ATTACHMENT_CREATED,
       extra_data  => $attachment->id,
@@ -154,13 +174,26 @@ sub pull_request {
     # data doesn't match this URL, skip it
     next if $attachment->data ne $html_url;
 
+    # Bugzilla->user is the all-groups automation user at this point, so it can
+    # see every bug. Check visibility as the original caller instead, otherwise
+    # we would obsolete attachments and comment on bugs the caller cannot see.
+    if (!$webhook_user->can_see_bug($attachment->bug_id)) {
+      WARN( 'github pull_request: not obsoleting attachment '
+          . $attachment->id
+          . ' on bug '
+          . $attachment->bug_id
+          . ': caller cannot see that bug');
+      next;
+    }
+
     $other_bugs{$attachment->bug_id}++;
     my $moved_comment
       = "GitHub pull request attachment was moved to bug "
       . $bug->id
       . ". Setting attachment "
       . $attachment->id
-      . " to obsolete.";
+      . " to obsolete.\n"
+      . "(via GitHub webhook, authenticated as $webhook_auth->{login})";
     $attachment->set_is_obsolete(1);
     $attachment->bug->add_comment(
       $moved_comment,
@@ -194,7 +227,8 @@ sub push_comment {
   }
 
   # Verify that signature is correct based on shared secret
-  if (!$self->_verify_signature) {
+  my $webhook_auth = $self->_verify_signature;
+  if (!$webhook_auth) {
     return $self->code_error('github_mismatch_signatures');
   }
 
@@ -204,7 +238,7 @@ sub push_comment {
     return $self->render(json => {error => 0});
   }
 
-  # Validate JSON input 
+  # Validate JSON input
   my $payload = $self->req->json;
   my @errors  = joi->object->props(
     ref => joi->string->required,
@@ -278,15 +312,53 @@ sub push_comment {
     push @{$update_bugs{$bug_id}}, {text => $comment_text};
   }
 
-  # If no bugs were found, then we return an error
+  # Restrict this request to the bugs the authenticated webhook credential can
+  # actually see. The bug ids above come from commit messages, which anyone able
+  # to land on a monitored branch controls, and the write loop below runs as
+  # github-automation@bmo.tld with every group -- so without this gate a commit
+  # message naming a confidential bug id would comment on and resolve that bug.
+  # The scoping identity is resolved by _verify_signature.
+  my $webhook_user = $webhook_auth->{user};
+
+  my %visible_bugs
+    = map { $_ => 1 } @{$webhook_user->visible_bugs([keys %update_bugs])};
+  my @denied_bugs = grep { !$visible_bugs{$_} } keys %update_bugs;
+  if (@denied_bugs) {
+    delete @update_bugs{@denied_bugs};
+    WARN(sprintf(
+      'github push_comment webhook authenticated as %s (%s) from %s: '
+        . 'ignoring bug(s) %s not visible to that account, repo %s',
+      $webhook_auth->{login}, $webhook_auth->{via},
+      remote_ip(),            join(',', sort { $a <=> $b } @denied_bugs),
+      clean_text($repository)
+    ));
+  }
+
+  # If no bugs were found, then we return an error. Bugs dropped by the
+  # visibility gate above land here too, so a bug the credential cannot see is
+  # indistinguishable from one that does not exist -- the response cannot be
+  # used as an oracle for confidential bug ids.
   if (!keys %update_bugs) {
     return $self->code_error('github_push_comment_bug_not_found');
   }
 
-  # Set current user to automation so we can add comments to private bugs
+  # Record which webhook credential authenticated this privileged request so
+  # that abuse of a leaked bot key remains attributable after the fact.
+  INFO(sprintf(
+    'github push_comment webhook authenticated as %s (%s) from %s: bugs %s, repo %s',
+    $webhook_auth->{login}, $webhook_auth->{via},
+    remote_ip(),            join(',', sort { $a <=> $b } keys %update_bugs),
+    clean_text($repository)
+  ));
+
+  # /rest has no login middleware, so there is no authenticated user to write
+  # as; we adopt the shared github-automation account. %update_bugs was already
+  # narrowed to bugs the signing bot can see, so this elevation only spares the
+  # bot from needing edit rights -- it does not widen which bugs are reachable.
+  # Only the groups (not bless_groups) are elevated because the webhook never
+  # manages group memberships: it only adds comments and sets flags.
   my $auto_user = Bugzilla::User->check({name => 'github-automation@bmo.tld'});
-  $auto_user->{groups}       = [Bugzilla::Group->get_all];
-  $auto_user->{bless_groups} = [Bugzilla::Group->get_all];
+  $auto_user->{groups} = [Bugzilla::Group->get_all];
   Bugzilla->set_user($auto_user);
 
   my $dbh = Bugzilla->dbh;
@@ -303,6 +375,11 @@ sub push_comment {
     foreach my $comment (@{$update_bugs{$bug_id}}) {
       $comment_text .= $comment->{text} . "\n\n";
     }
+
+    # Attribute the automated comment to the webhook credential that triggered
+    # it, so the bot behind a github-automation action is visible in bug history
+    # (not just server logs) and any leaked-key abuse is traceable on the bug.
+    $comment_text .= "(via GitHub webhook, authenticated as $webhook_auth->{login})";
 
     # Set all parameters
     my $set_all = {
@@ -379,38 +456,61 @@ sub push_comment {
   return $self->render(json => {error => 0, bugs => \%update_bugs});
 }
 
+# Verify the request signature and identify which webhook credential signed it.
+# Returns a hashref describing the authenticated credential on success, or undef
+# on failure:
+#   user  - the Bugzilla::User whose bug visibility scopes this request
+#   login - identity string for logs and bug comments
+#   via   - which credential matched, for logs
+# Callers still perform the privileged bug mutations as the shared
+# github-automation account, but must gate bug access on {user} and log the
+# identity so that abuse of a leaked bot key remains attributable after the fact.
+#
+# This must be called *before* set_user($auto_user): the legacy-secret path
+# captures Bugzilla->user, which afterwards is the all-groups automation account.
 sub _verify_signature {
   my ($self)             = @_;
   my $payload            = $self->req->body;
   my $received_signature = $self->req->headers->header('X-Hub-Signature-256');
 
-  return 0 if !$received_signature;
+  return undef if !$received_signature;
 
   # Fast path: check legacy shared secret first during migration period.
   # Operators should migrate to per-bot API keys and clear this parameter.
+  # The legacy secret carries no bot identity, so it is scoped to the
+  # (unauthenticated) request user and is limited to public bugs.
   my $legacy_secret = Bugzilla->params->{github_pr_signature_secret};
   if ($legacy_secret) {
     my $expected = 'sha256=' . hmac_sha256_hex($payload, $legacy_secret);
-    return 1 if secure_compare($expected, $received_signature);
+    return {
+      user  => Bugzilla->user,
+      login => 'shared-secret',
+      via   => 'legacy shared secret',
+      }
+      if secure_compare($expected, $received_signature);
   }
 
-  # Fetch all non-revoked, non-sticky API keys for users in the github-webhook-bot group.
-  # Each bot account uses its own Bugzilla API key as the GitHub webhook secret,
-  # so individual keys can be revoked without affecting other integrations.
-  # Sticky keys are excluded because they are IP-bound and not appropriate for
-  # webhook use from GitHub's IP ranges.
+  # Fetch all non-revoked, non-sticky API keys for enabled users in the
+  # github-webhook-bot group. Each bot account uses its own Bugzilla API key as
+  # the GitHub webhook secret, so individual keys can be revoked without
+  # affecting other integrations. Sticky keys are excluded because they are
+  # IP-bound and not appropriate for webhook use from GitHub's IP ranges.
+  # Disabled accounts are excluded to match Bugzilla::Auth, which rejects a
+  # disabled user after credential verification; without this, disabling a
+  # compromised bot would leave its webhook keys working.
   my $dbh  = Bugzilla->dbh;
   my $keys = $dbh->selectall_arrayref(
-    "SELECT uak.id, uak.api_key
+    "SELECT uak.id, uak.api_key, uak.user_id, p.login_name
        FROM user_api_keys uak
        INNER JOIN user_group_map ugm ON ugm.user_id = uak.user_id
+       INNER JOIN profiles p ON p.userid = uak.user_id
        INNER JOIN " . $dbh->quote_identifier('groups') . " g ON g.id = ugm.group_id
       WHERE g.name = 'github-webhook-bot'
+        AND p.is_enabled = 1
         AND uak.revoked = 0
         AND uak.sticky = 0
         AND ugm.isbless = 0
-        AND ugm.grant_type = " . GRANT_DIRECT,
-    {Slice => {}}
+        AND ugm.grant_type = " . GRANT_DIRECT, {Slice => {}}
   );
 
   foreach my $key_row (@{$keys}) {
@@ -419,13 +519,17 @@ sub _verify_signature {
       # Track key usage so operators can see which key last authenticated a webhook request
       $dbh->do(
         "UPDATE user_api_keys SET last_used = LOCALTIMESTAMP(0), last_used_ip = ? WHERE id = ?",
-        undef, $self->tx->remote_address, $key_row->{id}
+        undef, remote_ip(), $key_row->{id}
       );
-      return 1;
+      return {
+        user  => Bugzilla::User->new({id => $key_row->{user_id}, cache => 1}),
+        login => $key_row->{login_name},
+        via   => 'api key id ' . $key_row->{id},
+      };
     }
   }
 
-  return 0;
+  return undef;
 }
 
 # If the ref matches a certain branch pattern for the repo we are interested
@@ -435,7 +539,7 @@ sub _set_status_flag {
 
   # In order to determine the appropriate status flag for the default
   # branch, we have to find out what the current *nightly* Firefox version is.
-  # fetch_product_versions() calls an API endpoint maintained by rel-eng that 
+  # fetch_product_versions() calls an API endpoint maintained by rel-eng that
   # returns all of the current product versions so we can use that.
   my $version;
   if ($branch eq 'main' || $branch eq 'master') {

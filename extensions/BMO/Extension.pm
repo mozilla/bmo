@@ -330,7 +330,6 @@ sub bounty_attachment {
 }
 
 sub _attachment_is_bounty_attachment {
-  # Keep this in sync with Bugzilla/Attachment.pm
   my ($attachment) = @_;
 
   return 0 unless $attachment->filename eq 'bugbounty.data';

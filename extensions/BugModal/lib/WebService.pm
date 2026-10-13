@@ -21,6 +21,7 @@ use Bugzilla::Keyword;
 use Bugzilla::Logging;
 use Bugzilla::Milestone;
 use Bugzilla::Product;
+use Bugzilla::Util qw(detaint_natural);
 use Bugzilla::Version;
 use List::MoreUtils qw(any first_value);
 
@@ -221,7 +222,10 @@ sub comment_tags {
   my $user     = Bugzilla->user;
   my $template = Bugzilla->template;
 
-  my $id      = $params->{id};
+  my $id = $params->{id};
+  detaint_natural($id)
+    || ThrowCodeError('param_must_be_numeric',
+    {function => 'BugModal.comment_tags', param => 'id'});
   my $comment = Bugzilla::Comment->new($id);
   ThrowUserError('comment_id_invalid', {id => $id}) if !$comment;
 
@@ -251,7 +255,10 @@ sub update_comment_tags {
     }
   );
 
-  my $id      = $params->{id};
+  my $id = $params->{id};
+  detaint_natural($id)
+    || ThrowCodeError('param_must_be_numeric',
+    {function => 'BugModal.update_comment_tags', param => 'id'});
   my $comment = Bugzilla::Comment->new($id);
   ThrowUserError('comment_id_invalid', {id => $id}) if !$comment;
 
@@ -391,7 +398,7 @@ sub new_product {
 
   # find invalid groups
   push @groups,
-    map { {type => 'invalid', group => $_, checked => 0,} }
+    map { {type => 'invalid', group => $_, checked => 0, locked => 0,} }
     @{Bugzilla::Bug->get_invalid_groups(
       {bug_ids => [$bug->id], product => $product})};
 
@@ -408,7 +415,12 @@ sub new_product {
     {
       # mandatory, always checked
       push @groups,
-        {type => 'mandatory', group => $group_control->{group}, checked => 1,};
+        {
+        type    => 'mandatory',
+        group   => $group_control->{group},
+        checked => 1,
+        locked  => 0,
+        };
     }
     elsif (
       (
@@ -419,11 +431,12 @@ sub new_product {
       )
     {
       # optional, checked if..
-      my $group = $group_control->{group};
+      my $group    = $group_control->{group};
+      my $in_group = any { $_->id == $group->id } @$current_groups;
       my $checked =
 
         # same group as current product
-        (any { $_->id == $group->id } @$current_groups)
+        $in_group
 
         # member default
         || $group_control->{membercontrol} == CONTROLMAPDEFAULT
@@ -432,11 +445,18 @@ sub new_product {
         # or other default
         || $group_control->{othercontrol} == CONTROLMAPDEFAULT
         && !$user->in_group($group_control->{name});
+
+      # Only members of a group may lift a restriction that is already in
+      # place, so for everyone else the checkbox is locked and the group is
+      # left out of defined_groups (bug 2062223). Without this the user is
+      # offered a removal that remove_group() then rejects.
+      my $locked = $in_group && !$user->in_group($group_control->{name});
       push @groups,
         {
         type    => 'optional',
         group   => $group_control->{group},
         checked => $checked || 0,
+        locked  => $locked  || 0,
         };
     }
   }
@@ -455,6 +475,7 @@ sub new_product {
       type    => 'optional',
       group   => $product->default_security_group_obj,
       checked => 0,
+      locked  => 0,
       };
   }
 
@@ -480,6 +501,7 @@ sub new_product {
       name        => $g->{group}->name,
       description => $g->{group}->description,
       checked     => $g->{checked},
+      locked      => $g->{locked},
       };
   }
 

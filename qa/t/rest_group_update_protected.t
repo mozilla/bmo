@@ -135,4 +135,39 @@ $t->put_ok($url
   ->status_is(200)
   ->json_has('/groups', 'An admin can still update the admin group');
 
+#
+# 6. The deprecated ?api_key= query parameter authenticates the request
+#    without being passed on as a group field.
+#
+$t->put_ok($url
+    . "rest/group/$group_name?api_key=$admin_api_key" => json =>
+    {description => 'REST protected group test'})->status_is(200)->json_is(
+  '/groups/0/changes/description/added',
+  'REST protected group test',
+  'An API key in the query string is not a group field'
+    );
+
+#
+# 7. Nor are the other credential parameters the legacy API removed during
+#    login, while a key that is not a group field at all is still rejected.
+#
+$t->put_ok($url
+    . "rest/group/$group_name" => {'X-Bugzilla-API-Key' => $admin_api_key} =>
+    json => {
+    description            => 'REST protected group test again',
+    Bugzilla_token         => 'x',
+    Bugzilla_restrictlogin => 1,
+    restrictlogin          => 1,
+    })->status_is(200)->json_is(
+  '/groups/0/changes/description/added',
+  'REST protected group test again',
+  'Legacy credential parameters are not group fields'
+    );
+
+$t->put_ok($url
+    . "rest/group/$group_name" => {'X-Bugzilla-API-Key' => $admin_api_key} =>
+    json => {userregexp => 'x'})
+  ->status_is(400)
+  ->json_like('/message', qr/userregexp/, 'An unknown field is still rejected');
+
 done_testing();

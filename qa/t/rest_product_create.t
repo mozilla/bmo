@@ -19,6 +19,7 @@ use lib qw(lib ../../lib ../../local/lib/perl5);
 use Bugzilla;
 use QA::Util qw(get_config random_string);
 
+use Mojo::JSON qw(false);
 use Test::Mojo;
 use Test::More;
 
@@ -164,5 +165,24 @@ foreach my $test (@tests) {
   is($product->{has_unconfirmed}, $has_unco,
     "Product has the correct value for has_unconfirmed: $has_unco");
 }
+
+# Booleans passed in the query string arrive as the strings "true"/"false"
+# and must not all be treated as true.
+my $qs_name = random_string(20);
+$t->post_ok($url
+    . "rest/product?name=$qs_name&description=Created%20via%20query%20string"
+    . '&version=' . PROD_VERSION
+    . '&is_open=false&has_unconfirmed=false' =>
+    {'X-Bugzilla-API-Key' => $admin_api_key})->status_is(201);
+my $qs_id = $t->tx->res->json->{id};
+$t->get_ok($url . "rest/product/$qs_id" => {'X-Bugzilla-API-Key' => $admin_api_key})
+  ->status_is(200)->json_is('/products/0/is_active' => false)
+  ->json_is('/products/0/has_unconfirmed' => false);
+
+$t->post_ok($url
+    . 'rest/product?name=' . random_string(20)
+    . '&description=x&version=' . PROD_VERSION . '&is_open=maybe' =>
+    {'X-Bugzilla-API-Key' => $admin_api_key})->status_is(400)
+  ->json_like('/message' => qr/is_open must be true or false/);
 
 done_testing();

@@ -10,12 +10,12 @@ package Bugzilla::API::V1::Component;
 use 5.10.1;
 use Mojo::Base qw( Mojolicious::Controller );
 
-use Mojo::JSON qw(decode_json false true);
-use Try::Tiny;
+use Mojo::JSON qw(false true);
 
 use Bugzilla::Component;
 use Bugzilla::Constants;
-use Bugzilla::Util qw(email_filter trim);
+use Bugzilla::Util             qw(email_filter trim);
+use Bugzilla::WebService::Util qw(merge_request_params);
 
 sub setup_routes {
   my ($class, $r) = @_;
@@ -47,7 +47,7 @@ sub create {
     || return $self->user_error('auth_failure',
     {group => 'editcomponents', action => 'add', object => 'components'});
 
-  my ($params, $error) = $self->_get_params();
+  my ($params, $error) = merge_request_params($self);
   return $self->user_error($error) if $error;
 
   my $product = Bugzilla::Product->check({name => $self->param('product')});
@@ -95,21 +95,36 @@ sub update {
   my $component = Bugzilla::Component->check(
     {name => $self->param('component'), product => $product});
 
-  my ($params, $error) = $self->_get_params();
+  my ($params, $error) = merge_request_params($self);
   return $self->user_error($error) if $error;
+
+  # Whitelist the documented update fields; set_all() throws unknown_method
+  # for any stray key (e.g. Bugzilla_api_token, include_fields).
+  my %values = map { $_ => $params->{$_} }
+    grep { exists $params->{$_} }
+    qw(name description default_assignee default_qa_contact default_bug_type
+    is_active triage_owner team_name bug_description_template);
+
+  # A JSON body sends is_active as a real boolean, but the query string and a
+  # form body send the literal string "true" or "false", and check_boolean
+  # treats any non-empty string as true.
+  if (exists $values{is_active} && !ref $values{is_active}) {
+    my $is_active = lc($values{is_active} // '');
+    return $self->user_error('invalid_params',
+      {type_error => 'is_active must be true or false'})
+      if $is_active !~ /^(?:true|false|1|0)$/;
+    $values{is_active} = ($is_active eq 'true' || $is_active eq '1') ? 1 : 0;
+  }
 
   # If the user is only able to edit triage owner and nothing else,
   # then we only allow that field to be passed to set_all()
   if (!$user->in_group('editcomponents')) {
-    if (exists $params->{triage_owner}) {
-      $params = {triage_owner => $params->{triage_owner}};
-    }
-    else {
-      $params = {};
-    }
+    %values = exists $values{triage_owner}
+      ? (triage_owner => $values{triage_owner})
+      : ();
   }
 
-  $component->set_all($params);
+  $component->set_all(\%values);
   $component->update();
 
   return $self->render(json => $self->_component_to_hash($component));
@@ -141,19 +156,6 @@ sub _component_to_hash {
     team_name                => $component->team_name,
     bug_description_template => $component->bug_description_template,
   };
-}
-
-sub _get_params {
-  my ($self) = @_;
-  my $params = {};
-  my $error  = '';
-  try {
-    $params = decode_json($self->req->body);
-  }
-  catch {
-    $error = 'rest_malformed_json';
-  };
-  return ($params, $error);
 }
 
 1;

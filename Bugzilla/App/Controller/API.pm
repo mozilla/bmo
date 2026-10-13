@@ -20,7 +20,6 @@ use Bugzilla::Logging;
 use Bugzilla::WebService::Util qw(set_rest_cors_headers);
 
 use constant SUPPORTED_VERSIONS => qw(V1);
-use constant REQUEST_TOO_LARGE_ERROR => 'request_too_large';
 
 sub setup_routes {
   my ($class, $r) = @_;
@@ -73,14 +72,7 @@ sub setup_routes {
 sub _prepare_rest_request {
   my ($c) = @_;
   _insert_rest_headers($c);
-
-  if ($c->req->is_limit_exceeded) {
-    my $reason = $c->req->error->{message};
-    WARN("Rejected oversized request for native REST API: $reason");
-    Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
-    return $c->user_error(REQUEST_TOO_LARGE_ERROR);
-  }
-
+  $c->stash->{request_limit_format} = 'rest';
   Bugzilla->usage_mode(USAGE_MODE_REST);
   return 1;
 }
@@ -89,10 +81,10 @@ sub _load_api_module {
   my ($routes, $module) = @_;
   try {
     require_module($module);
-    my $controller = $module->new;
-    if ($controller->can('setup_routes')) {
-      $controller->setup_routes($routes);
-    }
+
+    # Helper modules such as Bugzilla::API::V1::Util live in the same
+    # namespace but are not controllers: nothing to instantiate or route.
+    $module->new->setup_routes($routes) if $module->can('setup_routes');
   }
   catch {
     WARN("$module could not be loaded: $_");

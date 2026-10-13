@@ -9,7 +9,7 @@
 [%#
   # product: product object
   # groups:
-  #   invalid   => [{ id, name, description, checked }...]
+  #   invalid   => [{ id, name, description, checked, locked }...]
   #   mandatory => "
   #   optional  => "
   #%]
@@ -42,18 +42,23 @@
         [% label FILTER html %]
       </div>
 
+      [%# A locked group is one the bug is already restricted to but the user is
+        # not a member of. Only members may lift an existing restriction, so the
+        # checkbox is disabled and the group is left out of defined_groups,
+        # which leaves the restriction in place. %]
       [% FOREACH g = groups.$type %]
+        [% is_disabled = disabled || g.locked %]
         <div>
-          [% IF g.checked %]
+          [% IF g.checked && !g.locked %]
             <input type="hidden" name="defined_groups" value="[% g.name FILTER html %]">
           [% END %]
           <input type="checkbox" value="[% g.name FILTER html %]"
             id="group_[% g.id FILTER none %]"
-            [%= IF enabled %]name="groups"[% END %]
+            [%= IF enabled && !g.locked %]name="groups"[% END %]
             [%= "checked" IF g.checked %]
-            [%= "disabled" IF disabled %]
+            [%= "disabled" IF is_disabled %]
             [%= 'data-mandatory="1"' IF type == "mandatory" %]>
-          <label for="group_[% g.id FILTER none %]" [%= IF disabled %]class="group-disabled"[% END %]>
+          <label for="group_[% g.id FILTER none %]" [%= IF is_disabled %]class="group-disabled"[% END %]>
             [% g.description FILTER html %]
           </label>
         </div>

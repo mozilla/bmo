@@ -52,6 +52,12 @@ The error contents look similar to:
      "code": 123
    }
 
+When BMO's request parser exceeds a message-size or body-buffer limit, the
+REST API returns ``413 Request Entity Too Large`` with error code ``58`` and
+the message ``The request is too large.`` rather than processing the truncated
+body. These limits depend on the server configuration. Reduce the payload size
+or split it into smaller requests where the API method supports batching.
+
 .. _rest-query-string-limit:
 
 BMO's Varnish front end rejects request targets longer than 8 KiB, including
@@ -114,8 +120,10 @@ Send only one authentication method with each request. BMO does not combine
 credentials or choose the strongest method when more than one is supplied.
 
 Most resources have been migrated off the legacy authentication path onto BMO's
-native REST framework, which accepts only a cookie, an ``X-Bugzilla-API-Key``
-header, or an OAuth2 bearer token. Legacy ``Bugzilla_login`` and
+native REST framework, which accepts a cookie, an ``X-Bugzilla-API-Key``
+header, or an OAuth2 bearer token (plus the deprecated ``Bugzilla_api_key``
+and ``api_key`` query parameters described in the warning below, kept only as
+a stopgap for undiscovered callers). Legacy ``Bugzilla_login`` and
 ``Bugzilla_password`` credentials are **not** accepted on these resources, even
 though the old WebService dispatcher underneath BMO still supports them for
 resources not yet migrated (currently ``Bug``, ``Group``, ``Product``, and

@@ -29,6 +29,8 @@
   #   those fields
   #
   # verify_bug_groups: If groups need to be confirmed in addition to fields.
+  # bug_group_status: hash; group id => 'all' or 'some', covering every bug
+  #   being moved, not just 'bug'. Groups no bug is in are absent.
   #%]
 
 [% PROCESS global/variables.none.tmpl %]
@@ -157,16 +159,36 @@
     <p>These groups are optional. You can decide to restrict [% terms.bugs %] to
     one or more of the following groups:<br>
     [% FOREACH group = optional_groups %]
-      <input type="hidden" name="defined_groups"
-             value="[% group.group.name FILTER html %]">
+      [%# A group any of the selected bugs is already in stays checked, so
+        # moving the product doesn't silently drop it. Only members of the
+        # group may lift an existing restriction, and a restriction held by
+        # only some of the selected bugs can't be expressed by a single
+        # checkbox -- in both cases the checkbox is locked, so neither "groups"
+        # nor "defined_groups" is submitted and every bug keeps the restriction
+        # it has. %]
+      [% status = bug_group_status.${group.group.id} %]
+      [% locked = status && (status == 'some' || !user.in_group(group.group.name)) %]
+      [% UNLESS locked %]
+        <input type="hidden" name="defined_groups"
+               value="[% group.group.name FILTER html %]">
+      [% END %]
       <input type="checkbox" id="group_[% group.group.id FILTER html %]"
              name="groups"
-             [% ' checked="checked"' IF ((group.membercontrol == constants.CONTROLMAPDEFAULT && user.in_group(group.group.name))
+             [% ' disabled="disabled"' IF locked %]
+             [% ' checked="checked"' IF (status
+                 || (group.membercontrol == constants.CONTROLMAPDEFAULT && user.in_group(group.group.name))
                  || (group.othercontrol == constants.CONTROLMAPDEFAULT && !user.in_group(group.group.name))
                  || cgi.param("groups").contains(group.group.name)) %]
              value="[% group.group.name FILTER html %]">
       <label for="group_[% group.group.id FILTER html %]">
         [% group.group.name FILTER html %]: [% group.group.description FILTER html %]
+        [% IF status == 'some' %]
+          <em>(only some of the selected [% terms.bugs %] are restricted to this
+          group; their restrictions are left unchanged)</em>
+        [% ELSIF locked %]
+          <em>(you are not a member of this group, so this restriction cannot be
+          removed here)</em>
+        [% END %]
       </label>
       <br>
     [% END %]

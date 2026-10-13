@@ -24,10 +24,7 @@ use Bugzilla::WebService::Util qw(fix_credentials set_rest_cors_headers taint_da
 # Load resource modules
 use Bugzilla::WebService::Server::REST::Resources::Bug;
 use Bugzilla::WebService::Server::REST::Resources::Bugzilla;
-use Bugzilla::WebService::Server::REST::Resources::Group;
-use Bugzilla::WebService::Server::REST::Resources::Product;
 use Bugzilla::WebService::Server::REST::Resources::User;
-use Bugzilla::WebService::Server::REST::Resources::BugUserLastVisit;
 
 use List::MoreUtils qw(uniq);
 use Scalar::Util qw(blessed reftype);

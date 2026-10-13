@@ -1220,7 +1220,6 @@ Bugzilla.AttachmentForm = class AttachmentForm {
       this.$typeManual.checked = true;
     } else {
       this.$typeList.checked = true;
-      this.$typeSelect.options[0].selected = true;
     }
   }
 
@@ -1277,6 +1276,10 @@ Bugzilla.AttachmentForm = class AttachmentForm {
     const mode = this.$typeInput.value ? 'manual' : 'list';
 
     this.selectContentTypeMode(mode);
+
+    if (mode === 'list') {
+      this.$typeSelect.options[0].selected = true;
+    }
   }
 
   /**

@@ -24,6 +24,7 @@ use Bugzilla::Extension::Push::Push;
 use Bugzilla::Extension::Push::Serialize;
 use Bugzilla::Extension::Push::Util;
 use Bugzilla::Install::Filesystem;
+use Bugzilla::Util qw(diff_arrays);
 
 use Encode;
 use Scalar::Util 'blessed';
@@ -144,24 +145,24 @@ sub _object_modified {
   }
 
   # make flagtypes changes easier to process
+  my @field_changes;
   if (exists $changes->{'flagtypes.name'}) {
-    _split_flagtypes($changes);
+    @field_changes = _split_flagtypes($changes);
   }
 
   # TODO split group changes?
 
   # restructure the changes hash
+  push @field_changes,
+    map { [$_, $changes->{$_}[0], $changes->{$_}[1]] } keys %$changes;
   my $changes_data = {timestamp => $args->{'timestamp'}, changes => [],};
-  foreach my $field_name (sort keys %$changes) {
+  foreach my $change (sort { $a->[0] cmp $b->[0] } @field_changes) {
+    my ($field_name, $removed, $added) = @$change;
     my $new_field_name = $field_name;
     $new_field_name =~ s/isprivate/is_private/;
 
     push @{$changes_data->{'changes'}},
-      {
-      field   => $new_field_name,
-      removed => $changes->{$field_name}[0],
-      added   => $changes->{$field_name}[1],
-      };
+      {field => $new_field_name, removed => $removed, added => $added,};
   }
 
   $self->_push_object('modify', $object, $change_set, $changes_data);
@@ -181,25 +182,39 @@ sub _should_push {
 }
 
 # changes to bug flags are presented in a single field 'flagtypes.name' split
-# into individual fields
+# into individual changes.  a flag type can be changed more than once in a
+# single update (eg. needinfo requested from several users), so each flag gets
+# its own change rather than being keyed by flag name.
 sub _split_flagtypes {
   my ($changes) = @_;
 
-  my @removed = _split_flagtype($changes->{'flagtypes.name'}->[0]);
-  my @added   = _split_flagtype($changes->{'flagtypes.name'}->[1]);
-  delete $changes->{'flagtypes.name'};
+  my ($removed, $added) = @{delete $changes->{'flagtypes.name'}};
+  my %values;
+  foreach my $ra (_split_flagtype($removed)) {
+    my ($name, $value) = @$ra;
+    push @{$values{$name}{removed}}, $value;
+  }
+  foreach my $ra (_split_flagtype($added)) {
+    my ($name, $value) = @$ra;
+    push @{$values{$name}{added}}, $value;
+  }
 
-  foreach my $ra (@removed, @added) {
-    $changes->{$ra->[0]} = ['', ''];
+  # only pair when a flag type has exactly one removed and one added value, so a
+  # single flag changing state (eg. review? to review+) is still one change.
+  # otherwise we can't tell which removal goes with which addition.
+  my @flag_changes;
+  foreach my $name (sort keys %values) {
+    my @removed = @{$values{$name}{removed} || []};
+    my @added   = @{$values{$name}{added}   || []};
+    if (@removed == 1 && @added == 1) {
+      push @flag_changes, [$name, $removed[0], $added[0]];
+    }
+    else {
+      push @flag_changes, map { [$name, $_, ''] } @removed;
+      push @flag_changes, map { [$name, '', $_] } @added;
+    }
   }
-  foreach my $ra (@removed) {
-    my ($name, $value) = @$ra;
-    $changes->{$name}->[0] = $value;
-  }
-  foreach my $ra (@added) {
-    my ($name, $value) = @$ra;
-    $changes->{$name}->[1] = $value;
-  }
+  return @flag_changes;
 }
 
 sub _split_flagtype {
@@ -219,50 +234,23 @@ sub _split_flagtype {
 
 # changes to attachment flags come in via flag_end_of_update which has a
 # completely different structure for reporting changes than
-# object_end_of_update.  this morphs flag to object updates.
+# object_end_of_update.  this morphs flag to object updates, using the same
+# 'flagtypes.name' format as bug flag changes.
 sub _morph_flag_updates {
   my ($args) = @_;
 
-  my @removed = _morph_flag_update($args->{'old_flags'});
-  my @added   = _morph_flag_update($args->{'new_flags'});
+  # strip the setter so a flag re-set by a different user isn't a change
+  my @old_flags = @{$args->{'old_flags'}};
+  my @new_flags = @{$args->{'new_flags'}};
+  s/^[^:]+:// foreach (@old_flags, @new_flags);
+
+  my ($removed, $added) = diff_arrays(\@old_flags, \@new_flags);
 
   my $changes = {};
-  foreach my $ra (@removed, @added) {
-    $changes->{$ra->[0]} = ['', ''];
+  if (@$removed || @$added) {
+    $changes->{'flagtypes.name'} = [join(', ', @$removed), join(', ', @$added)];
   }
-  foreach my $ra (@removed) {
-    my ($name, $value) = @$ra;
-    $changes->{$name}->[0] = $value;
-  }
-  foreach my $ra (@added) {
-    my ($name, $value) = @$ra;
-    $changes->{$name}->[1] = $value;
-  }
-
-  foreach my $flag (keys %$changes) {
-    if ($changes->{$flag}->[0] eq $changes->{$flag}->[1]) {
-      delete $changes->{$flag};
-    }
-  }
-
   $args->{'changes'} = $changes;
-}
-
-sub _morph_flag_update {
-  my ($values) = @_;
-  my @result;
-  foreach my $orig_change (@$values) {
-    my $change = $orig_change;    # work on a copy
-    $change =~ s/^[^:]+://;
-    my $requestee = '';
-    if ($change =~ s/\(([^\)]+)\)$//) {
-      $requestee = $1;
-    }
-    my ($name, $value) = $change =~ /^(.+)(.)$/;
-    $value .= " ($requestee)" if $requestee;
-    push @result, ["flag.$name", $value];
-  }
-  return @result;
 }
 
 #
@@ -292,8 +280,11 @@ sub _push_object {
   $rh_event->{'change_set'}  = $change_set;
   $rh_event->{'routing_key'} = "$name.$message_type";
   if (exists $rh_event->{'changes'}) {
-    $rh_event->{'routing_key'}
-      .= ':' . join(',', map { $_->{'field'} } @{$rh_event->{'changes'}});
+    # a field can have more than one change (eg. multiple flags of one type)
+    my %seen;
+    $rh_event->{'routing_key'} .= ':'
+      . join(',',
+      grep { !$seen{$_}++ } map { $_->{'field'} } @{$rh_event->{'changes'}});
   }
   $rh->{'event'} = $rh_event;
 

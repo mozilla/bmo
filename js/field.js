@@ -477,8 +477,13 @@ $(function() {
         that.data('counter', that.data('counter') - 1);
         if (that.data('counter') === 0)
             that.removeClass('autocomplete-running');
-        if (document.activeElement != this)
-            that.devbridgeAutocomplete('hide');
+        // devbridge-autocomplete 2.x calls onSearchComplete before rendering
+        // suggestions, so defer the hide until after they have been shown
+        var input = this;
+        setTimeout(function() {
+            if (document.activeElement !== input)
+                that.devbridgeAutocomplete('hide');
+        }, 0);
     }
 
     var options_user = {

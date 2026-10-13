@@ -42,6 +42,7 @@ sub startup {
   $self->plugin('Bugzilla::App::Plugin::Glue');
   $self->plugin('Bugzilla::App::Plugin::Login');
   $self->plugin('Bugzilla::App::Plugin::Error');
+  $self->plugin('Bugzilla::App::Plugin::RequestLimit');
   $self->plugin('Bugzilla::App::Plugin::Hostage')
     unless $ENV{BUGZILLA_DISABLE_HOSTAGE};
   $self->plugin('Bugzilla::App::Plugin::SizeLimit')

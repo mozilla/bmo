@@ -59,7 +59,8 @@ use constant REPORT_FIELDS =>
 
 sub setup_routes {
   my ($class, $r) = @_;
-  $r->post('/csp_report')->to('CSPReport#report');
+  $r->post('/csp_report')
+    ->to('CSPReport#report', request_limit_format => 'empty');
 }
 
 sub report {

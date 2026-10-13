@@ -127,4 +127,29 @@ foreach my $user (sort keys %$tests) {
   }
 }
 
+my $admin_headers = {'X-Bugzilla-API-Key' => $config->{admin_user_api_key}};
+
+# A product can be fetched by id or by name in the path.
+$t->get_ok($url . "rest/product/$public" => $admin_headers)->status_is(200)
+  ->json_is('/products/0/name' => 'Another Product');
+$t->get_ok($url . 'rest/product/Another Product' => $admin_headers)
+  ->status_is(200)->json_is('/products/0/id' => $public);
+
+# include_fields accepts a comma-separated list.
+$t->get_ok($url . "rest/product/$public?include_fields=id,name" => $admin_headers)
+  ->status_is(200);
+is_deeply([sort keys %{$t->tx->res->json->{products}[0]}],
+  ['id', 'name'], 'include_fields=id,name returns only those fields');
+
+# At least one of ids, names or type is required.
+$t->get_ok($url . 'rest/product' => $admin_headers)->status_is(400)
+  ->json_like('/message' => qr/requires\s+that you set one of the following/);
+
+# An unknown type is rejected.
+$t->get_ok($url . 'rest/product?type=bogus' => $admin_headers)
+  ->status_is(400)->json_like('/message' => qr/'bogus' is invalid/);
+
+$t->options_ok($url . 'rest/product')->status_is(200)
+  ->header_is('Allow' => 'GET, POST');
+
 done_testing();

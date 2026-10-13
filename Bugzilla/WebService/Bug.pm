@@ -56,11 +56,11 @@ sub DATE_FIELDS {
     update   => []
   };
 
-  # Add date related custom fields
+  # Add datetime custom fields. Date-only fields are left out so they are
+  # passed through as YYYY-MM-DD, since converting them would append a time
+  # component that _check_date_field rejects.
   foreach my $field (Bugzilla->active_custom_fields({skip_extensions => 1})) {
-    next
-      unless ($field->type == FIELD_TYPE_DATETIME
-      || $field->type == FIELD_TYPE_DATE);
+    next unless $field->type == FIELD_TYPE_DATETIME;
     push(@{$fields->{create}}, $field->name);
     push(@{$fields->{update}}, $field->name);
   }
@@ -1168,6 +1168,9 @@ sub update_attachment {
   my @attachments = ();
   my %bugs        = ();
   foreach my $id (@$ids) {
+    detaint_natural($id)
+      || ThrowCodeError('param_must_be_numeric',
+      {function => 'Bug.update_attachment', param => 'ids'});
     my $attachment = Bugzilla::Attachment->new($id)
       || ThrowUserError("invalid_attach_id", {attach_id => $id});
     my $bug = $attachment->bug;
@@ -1497,6 +1500,9 @@ sub get_comment_reactions {
   my $user = Bugzilla->user;
   my $comment_id = $params->{comment_id} // ThrowCodeError('param_required',
     {function => 'Bug.get_comment_reactions', param => 'comment_id'});
+  detaint_natural($comment_id)
+    || ThrowCodeError('param_must_be_numeric',
+    {function => 'Bug.get_comment_reactions', param => 'comment_id'});
   my $comment = Bugzilla::Comment->new($comment_id) || return [];
 
   $comment->bug->check_is_visible();
@@ -1515,6 +1521,9 @@ sub update_comment_reactions {
   my ($self, $params) = @_;
   my $user = Bugzilla->login(LOGIN_REQUIRED);
   my $comment_id = $params->{comment_id} // ThrowCodeError('param_required',
+    {function => 'Bug.update_comment_reactions', param => 'comment_id'});
+  detaint_natural($comment_id)
+    || ThrowCodeError('param_must_be_numeric',
     {function => 'Bug.update_comment_reactions', param => 'comment_id'});
   my $comment = Bugzilla::Comment->new($comment_id) || return [];
 
@@ -1563,6 +1572,9 @@ sub update_comment_tags {
   );
 
   my $comment_id = $params->{comment_id} // ThrowCodeError('param_required',
+    {function => 'Bug.update_comment_tags', param => 'comment_id'});
+  detaint_natural($comment_id)
+    || ThrowCodeError('param_must_be_numeric',
     {function => 'Bug.update_comment_tags', param => 'comment_id'});
 
   my $comment = Bugzilla::Comment->new($comment_id) || return [];
@@ -1918,8 +1930,15 @@ sub _format_cf_value {
   if ($field->type == FIELD_TYPE_BUG_ID) {
     return $self->type('int', $value);
   }
-  elsif ($field->type == FIELD_TYPE_DATETIME || $field->type == FIELD_TYPE_DATE) {
+  elsif ($field->type == FIELD_TYPE_DATETIME) {
     return defined($value) ? $self->type('dateTime', $value) : undef;
+  }
+  elsif ($field->type == FIELD_TYPE_DATE) {
+
+    # Date-only fields are returned as YYYY-MM-DD, the same format they are
+    # accepted in, like deadline. Converting them to dateTime would append
+    # a time and time zone that the value does not have.
+    return defined($value) ? $self->type('string', $value) : undef;
   }
   elsif ($field->type == FIELD_TYPE_MULTI_SELECT) {
     return [map { $self->type('string', $_) } @{$value}];
@@ -2263,8 +2282,7 @@ This is an array of hashes, representing the legal values for
 select-type (drop-down and multiple-selection) fields. This is also
 populated for the C<component>, C<version>, C<target_milestone>, and C<keywords>
 fields, but not for the C<product> field (you must use
-L<Product.get_accessible_products|Bugzilla::WebService::Product/get_accessible_products>
-for that.
+C<GET /rest/product_accessible> for that).
 
 For fields that aren't select-type fields, this will simply be an empty
 array.

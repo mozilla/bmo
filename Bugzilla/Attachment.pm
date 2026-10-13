@@ -352,6 +352,12 @@ the content of the attachment
 
 sub data {
   my $self = shift;
+
+  # Attachment data can be deleted via the web UI, which zeroes attach_size
+  # and removes the stored object. Don't ask the storage backend for a key
+  # that no longer exists; net storage throws on a missing key.
+  return '' if !$self->datasize;
+
   return $self->{data} //= $self->current_storage->get_data();
 }
 
@@ -606,22 +612,13 @@ sub get_attachments_by_bug {
   my $dbh  = Bugzilla->dbh;
 
   # By default, private attachments are not accessible, unless the user
-  # is in the insider group, submitted the attachment, or it's a bounty
-  # attachment and they reported the bug.
+  # is in the insider group or submitted the attachment.
   my $and_restriction = '';
   my @values          = ($bug->id);
 
   unless ($user->is_insider) {
-    $and_restriction = 'AND (isprivate = 0 OR submitter_id = ?';
+    $and_restriction = 'AND (isprivate = 0 OR submitter_id = ?)';
     push(@values, $user->id);
-    if ($user->id == $bug->reporter->id) {
-
-      # Keep these conditions in sync with _attachment_is_bounty_attachment
-      # in extensions/BMO/Extension.pm
-      $and_restriction
-        .= " OR (filename = 'bugbounty.data' AND mimetype = 'text/plain')";
-    }
-    $and_restriction .= ')';
   }
 
   # BMO - allow loading of just non-obsolete attachments

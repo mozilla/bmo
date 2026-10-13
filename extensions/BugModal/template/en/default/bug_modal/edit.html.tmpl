@@ -65,7 +65,7 @@
   END;
 
   FOREACH attachment IN bug.attachments;
-    NEXT IF attachment.isprivate && !(user.is_insider || attachment.attacher.id == user.id || (attachment.is_bounty_attachment && bug.reporter.id == user.id)) ;
+    NEXT IF attachment.isprivate && !(user.is_insider || attachment.attacher.id == user.id) ;
     is_external = attachment_hide_types.${attachment.contenttype} ? 1 : 0;
     IF is_external;
       external_attachments_total = external_attachments_total + 1;

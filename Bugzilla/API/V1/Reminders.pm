@@ -9,10 +9,10 @@ package Bugzilla::API::V1::Reminders;
 
 use 5.10.1;
 use Mojo::Base qw( Mojolicious::Controller );
-use Mojo::JSON qw( decode_json );
 
 use Bugzilla::Constants;
 use Bugzilla::Reminder;
+use Bugzilla::WebService::Util qw(merge_request_params);
 
 use Try::Tiny;
 
@@ -63,13 +63,8 @@ sub add {
   return $self->render(json => {})
     if !$user->in_group(Bugzilla->params->{reminders_group});
 
-  my $params = {};
-  try {
-    $params = decode_json($self->req->body);
-  }
-  catch {
-    return $self->user_error('rest_malformed_json');
-  };
+  my ($params, $error) = merge_request_params($self);
+  return $self->user_error($error) if $error;
 
   my $bug_id      = $params->{bug_id};
   my $note        = $params->{note};

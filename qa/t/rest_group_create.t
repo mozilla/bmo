@@ -120,4 +120,39 @@ foreach my $test (@tests) {
   }
 }
 
+# A form body sends is_active as the string "true" or "false": "false" must
+# not be stored as true, on create or on update.
+my %admin = ('X-Bugzilla-API-Key' => $config->{admin_user_api_key});
+
+$t->post_ok($url
+    . 'rest/group' => \%admin => form =>
+    {name => random_string(20), description => DESCRIPTION, is_active => 'false'})
+  ->status_is(201);
+my $group_id = $t->tx->res->json->{id};
+
+$t->get_ok($url . "rest/group/$group_id" => \%admin)->status_is(200);
+ok(!$t->tx->res->json->{groups}[0]{is_active},
+  'is_active=false in a form body creates an inactive group');
+
+$t->put_ok(
+  $url . "rest/group/$group_id" => \%admin => form => {is_active => 'true'})
+  ->status_is(200)
+  ->json_is('/groups/0/changes/is_active/added', '1');
+
+$t->put_ok(
+  $url . "rest/group/$group_id" => \%admin => form => {is_active => 'false'})
+  ->status_is(200)
+  ->json_is('/groups/0/changes/is_active/added', '0');
+
+$t->put_ok(
+  $url . "rest/group/$group_id" => \%admin => form => {is_active => 'maybe'})
+  ->status_is(400)
+  ->json_like('/message' => qr/is_active must be true or false/);
+
+$t->post_ok($url
+    . 'rest/group' => \%admin => form =>
+    {name => random_string(20), description => DESCRIPTION, is_active => 'maybe'})
+  ->status_is(400)
+  ->json_like('/message' => qr/is_active must be true or false/);
+
 done_testing();

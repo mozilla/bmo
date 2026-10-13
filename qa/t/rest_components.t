@@ -14,6 +14,7 @@ use Bugzilla;
 use QA::Util qw(get_config);
 
 use MIME::Base64 qw(encode_base64 decode_base64);
+use Mojo::JSON qw(false true);
 use Test::Mojo;
 use Test::More;
 
@@ -41,6 +42,15 @@ $t->post_ok($url . 'rest/component/Firefox' => json => $new_component)
   ->json_is(
   '/message' => 'You must log in before using this part of Bugzilla.');
 
+# Authenticated but unprivileged. This message is 110 characters long, so an
+# exact match also pins that native REST errors are not wrapped at 72 columns.
+$t->post_ok($url
+    . 'rest/component/Firefox' =>
+    {'X-Bugzilla-API-Key' => $config->{unprivileged_user_api_key}} => json =>
+    $new_component)->status_is(401)->json_is('/message' =>
+  "Sorry, you aren't a member of the 'editcomponents' group, and so you are not authorized to add new components."
+  );
+
 # Now try as authenticated user using API key. But a required field is missing (default_assignee).
 $t->post_ok($url
     . 'rest/component/Firefox' => {'X-Bugzilla-API-Key' => $api_key} => json =>
@@ -66,6 +76,14 @@ $t->post_ok($url
   ->json_is('/message' =>
     'The Firefox product already has a component named TestComponent.');
 
+# Fields may also be passed entirely via the query string, with no JSON body.
+$t->post_ok($url
+    . 'rest/component/Firefox?name=QueryStringComponent'
+    . '&description=Created%20via%20query%20string'
+    . '&default_assignee=admin%40mozilla.test&team_name=Mozilla' =>
+    {'X-Bugzilla-API-Key' => $api_key})->status_is(200)
+  ->json_is('/name' => 'QueryStringComponent');
+
 ### Section 2: Make updates to the component
 
 my $update = {
@@ -88,12 +106,52 @@ $t->put_ok($url
   ->json_is('/description'      => 'Updated description')
   ->json_is('/default_assignee' => 'permanent_user@mozilla.test');
 
+# A query-string parameter is also accepted on PUT, and wins over a matching
+# parameter in the JSON body.
+$t->put_ok($url
+    . 'rest/component/Firefox/TestComponent?description=Query%20String%20Wins' =>
+    {'X-Bugzilla-API-Key' => $api_key} =>
+    json => {description => 'Should Not Be Used'})->status_is(200)
+  ->json_is('/description' => 'Query String Wins');
+
 # Retrieve the new component and verify
 $t->get_ok($url
     . 'rest/component/Firefox/TestComponent' =>
     {'X-Bugzilla-API-Key' => $api_key})->status_is(200)
   ->json_is('/triage_owner' => 'admin@mozilla.test')
-  ->json_is('/description'  => 'Updated description');
+  ->json_is('/description'  => 'Query String Wins');
+
+# A form-urlencoded body and the query string may both carry the same field;
+# the query string wins and the value stays a plain string (it used to be
+# merged into an arrayref and stored as "ARRAY(0x...)").
+$t->put_ok($url
+    . 'rest/component/Firefox/TestComponent?description=Query%20Beats%20Form' =>
+    {'X-Bugzilla-API-Key' => $api_key} =>
+    form => {description => 'Form Body Loses'})->status_is(200)
+  ->json_is('/description' => 'Query Beats Form');
+
+# A malformed JSON body is rejected instead of being treated as an empty,
+# successful update.
+$t->put_ok($url
+    . 'rest/component/Firefox/TestComponent' =>
+    {'X-Bugzilla-API-Key' => $api_key} => '{"description": ')
+  ->status_is(400)->json_is('/code' => 32000)
+  ->json_like('/message' => qr/JSON data used for the request was malformed/);
+
+# is_active from the query string is the string "true"/"false", which must be
+# coerced rather than treated as a truthy string.
+$t->put_ok($url
+    . 'rest/component/Firefox/TestComponent?is_active=false' =>
+    {'X-Bugzilla-API-Key' => $api_key})->status_is(200)
+  ->json_is('/is_active' => false);
+$t->put_ok($url
+    . 'rest/component/Firefox/TestComponent?is_active=true' =>
+    {'X-Bugzilla-API-Key' => $api_key})->status_is(200)
+  ->json_is('/is_active' => true);
+$t->put_ok($url
+    . 'rest/component/Firefox/TestComponent?is_active=maybe' =>
+    {'X-Bugzilla-API-Key' => $api_key})->status_is(400)
+  ->json_like('/message' => qr/is_active must be true or false/);
 
 # Update an existing user and give edittriageowners permissions
 my $user_update = {groups => {add => ['edittriageowners']}};

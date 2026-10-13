@@ -21,6 +21,8 @@ use Storable qw(dclone);
 use URI::Escape qw(uri_unescape);
 use Type::Params qw( compile );
 use Types::Standard -all;
+use Mojo::JSON qw(decode_json);
+use Try::Tiny;
 
 use base qw(Exporter);
 
@@ -38,6 +40,19 @@ our @EXPORT_OK = qw(
   params_to_objects
   fix_credentials
   set_rest_cors_headers
+  merge_request_params
+  strip_request_params
+);
+
+# Parameters that describe the request rather than the object it acts on:
+# field selection, plus every spelling of a credential the legacy layer
+# accepted and removed during login. Native controllers do not log in through
+# that code, so nothing removes them from the merged params.
+use constant REQUEST_PARAMS => qw(
+  include_fields exclude_fields
+  Bugzilla_api_key Bugzilla_api_token Bugzilla_login Bugzilla_password
+  Bugzilla_restrictlogin Bugzilla_token
+  api_key login password restrictlogin token
 );
 
 sub set_rest_cors_headers {
@@ -297,6 +312,54 @@ sub params_to_objects {
   return \@objects;
 }
 
+sub merge_request_params {
+  my ($c, $list_params) = @_;
+
+  # $c->req->params already covers the query string plus, for POST/PUT, an
+  # application/x-www-form-urlencoded or multipart body. Layer a JSON body
+  # underneath that, so params work from either the query string or a JSON
+  # request body. Query-string/form-body values win on a key collision,
+  # matching the legacy REST layer (see fix_credentials/_retrieve_json_params
+  # in Bugzilla::WebService::Server::REST) and the documented behavior in
+  # docs/en/rst/api/core/v1/general.rst.
+  #
+  # A param's type must not depend on how many times it was sent: ->to_hash
+  # returns a scalar for one occurrence and an arrayref for two. Callers
+  # therefore declare which params are lists; those always come back as
+  # arrayrefs, everything else always as a scalar.
+  my %is_list = map { $_ => 1 } @{$list_params || []};
+  my $params  = {};
+  for my $name (@{$c->req->params->names}) {
+    $params->{$name}
+      = $is_list{$name} ? $c->req->every_param($name) : $c->req->param($name);
+  }
+
+  # Only decode a body that wasn't already parsed as form params, otherwise a
+  # form-urlencoded or multipart request would be rejected as malformed JSON.
+  # The legacy REST layer gets this for free: CGI.pm only populates
+  # POSTDATA/PUTDATA for non-form content types.
+  # Read the body once: for a file-backed request asset each ->body call
+  # re-slurps it from disk.
+  my $body = $c->req->body;
+  if (length $body && !@{$c->req->body_params->names}) {
+    my $body_params;
+    my $error;
+    try { $body_params = decode_json($body); }
+    catch { $error = 'rest_malformed_json'; };
+    return (undef, $error) if $error;
+    $params = {%$body_params, %$params} if ref $body_params eq 'HASH';
+  }
+
+  return ($params, undef);
+}
+
+sub strip_request_params {
+  my ($params, @also) = @_;
+  my %values = %$params;
+  delete @values{REQUEST_PARAMS, @also};
+  return \%values;
+}
+
 sub fix_credentials {
   my ($params, $cgi) = @_;
 
@@ -398,6 +461,34 @@ parameters passed to a WebService method (the first parameter to this function).
 Helps make life simpler for WebService methods that internally create objects
 via both "ids" and "names" fields. Also de-duplicates objects that were loaded
 by both "ids" and "names". Returns an arrayref of objects.
+
+=head2 merge_request_params
+
+Takes a Mojolicious controller and returns a two-element list
+C<($params, $error)>, merging its query string/form-body params with a
+decoded JSON request body, if any. Query-string/form-body values win on a
+key collision. For use by native Mojo REST controllers that need to accept
+parameters from either the query string or a JSON body on non-GET
+requests.
+
+An optional second argument is an arrayref of parameter names that are
+lists, e.g. C<merge_request_params($c, ['ids'])>. Those are always returned
+as arrayrefs, however many times they appear in the request; every other
+parameter is always returned as a scalar. Declaring them is required because
+a parameter's type must not depend on the number of occurrences sent.
+
+If the request has a non-empty body that fails to decode as JSON, C<$params>
+is C<undef> and C<$error> is set to C<rest_malformed_json>; callers should
+pass it to C<user_error>. Otherwise C<$error> is C<undef>.
+
+=head2 strip_request_params
+
+Takes the hashref returned by L</merge_request_params> and returns a copy
+without the C<REQUEST_PARAMS> keys (C<include_fields>, C<exclude_fields> and
+the authentication parameters), plus any further names passed after it, e.g.
+C<strip_request_params($params, qw(ids names))>. For controllers that hand
+what is left to C<set_all>, which raises C<unknown_method> on any key that is
+not a field of the object.
 
 =head2 fix_credentials
 

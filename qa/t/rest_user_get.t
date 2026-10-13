@@ -229,4 +229,23 @@ $t->get_ok(rest_get_url($url, 'rest/user',
 is(scalar keys %{$t->tx->res->json->{users}[0]}, 1, 'Only one field returned');
 ok(exists $t->tx->res->json->{users}[0]{name}, '...and that field is the "name" field');
 
+####################
+# Permissive Tests #
+####################
+
+# Without permissive, one unknown name fails the whole request.
+$t->get_ok(rest_get_url($url, 'rest/user',
+  {names => [$get_user, 'no-such-user@mozilla.test']}) => $anon)->status_isnt(200);
+
+# With permissive, the unknown name is reported in faults instead.
+$t->get_ok(rest_get_url($url, 'rest/user',
+  {names => [$get_user, 'no-such-user@mozilla.test'], permissive => 1}) => $anon)
+  ->status_is(200)
+  ->json_is('/users/0/name'   => $get_user)
+  ->json_is('/faults/0/name'  => 'no-such-user@mozilla.test')
+  ->json_is('/faults/0/error' => Mojo::JSON->true)
+  ->json_like('/faults/0/message' => qr/no-such-user\@mozilla\.test/);
+is(scalar @{$t->tx->res->json->{users}},  1, 'permissive: one user returned');
+is(scalar @{$t->tx->res->json->{faults}}, 1, 'permissive: one fault returned');
+
 done_testing();

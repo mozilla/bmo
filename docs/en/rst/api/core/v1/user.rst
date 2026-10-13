@@ -434,9 +434,8 @@ querying your own account, even if you are in the editusers group.
 Who Am I
 --------
 
-Allows for validating a user's API key, token, or username and password.
-If successfully authenticated, it returns simple information about the
-logged in user.
+Allows for validating a user's API key. If successfully authenticated, it
+returns simple information about the logged in user.
 
 **Request**
 

@@ -814,6 +814,26 @@ my @fields = (
     obsolete    => 0,
     values      => [qw(one two three)],
   },
+  {
+    name        => 'cf_qa_date',
+    description => 'QA Date',
+    type        => FIELD_TYPE_DATE,
+    sortkey     => 300,
+    mailhead    => 0,
+    enter_bug   => 1,
+    custom      => 1,
+    obsolete    => 0,
+  },
+  {
+    name        => 'cf_qa_datetime',
+    description => 'QA DateTime',
+    type        => FIELD_TYPE_DATETIME,
+    sortkey     => 400,
+    mailhead    => 0,
+    enter_bug   => 1,
+    custom      => 1,
+    obsolete    => 0,
+  },
 );
 
 print "creating custom fields...\n";
