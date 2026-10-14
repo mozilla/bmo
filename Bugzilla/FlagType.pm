@@ -155,6 +155,10 @@ sub update {
 
   # Clear existing flags for bugs/attachments in categories no longer on
   # the list of inclusions or that have been added to the list of exclusions.
+  # force_retarget() doesn't touch the bug row, so nothing else sends bugmail
+  # for the flags it clears here; remember the affected bugs and send it once
+  # the transaction has committed (bug 1883428).
+  my %retargeted_bug_ids;
   my $flag_ids = $dbh->selectcol_arrayref(
     'SELECT DISTINCT flags.id
                                                FROM flags
@@ -170,6 +174,7 @@ sub update {
                                                 AND i.type_id IS NULL', undef,
     $self->id
   );
+  $retargeted_bug_ids{$_} = 1 foreach @{_bug_ids_for_flags($flag_ids)};
   Bugzilla::Flag->force_retarget($flag_ids);
 
   $flag_ids = $dbh->selectcol_arrayref(
@@ -186,6 +191,7 @@ sub update {
                                                   OR e.component_id IS NULL)',
     undef, $self->id
   );
+  $retargeted_bug_ids{$_} = 1 foreach @{_bug_ids_for_flags($flag_ids)};
   Bugzilla::Flag->force_retarget($flag_ids);
 
   # Silently remove requestees from flags which are no longer
@@ -209,7 +215,30 @@ sub update {
     {type => $self, changed => $changes});
 
   $dbh->bz_commit_transaction();
+
+  # An inclusion/exclusion edit can touch many bugs, so queue the bugmail
+  # rather than run a full Send() per bug inside this request.
+  my @bug_ids = sort { $a <=> $b } keys %retargeted_bug_ids;
+  if (@bug_ids && Bugzilla->get_param_with_override('use_mailer_queue')) {
+    Bugzilla->job_queue->insert('bug_mail_send',
+      {bug_ids => \@bug_ids, changer_id => Bugzilla->user->id});
+  }
+  elsif (@bug_ids) {
+
+    # Bugzilla::BugMail uses this module, so load it lazily.
+    require Bugzilla::BugMail;
+    Bugzilla::BugMail::Send($_, {changer => Bugzilla->user}) foreach @bug_ids;
+  }
+
   return $changes;
+}
+
+sub _bug_ids_for_flags {
+  my ($flag_ids) = @_;
+  return [] if !@$flag_ids;
+  my $dbh = Bugzilla->dbh;
+  return $dbh->selectcol_arrayref(
+    'SELECT DISTINCT bug_id FROM flags WHERE ' . $dbh->sql_in('id', $flag_ids));
 }
 
 ###############################
