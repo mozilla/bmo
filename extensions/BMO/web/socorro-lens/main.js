@@ -247,6 +247,13 @@ function getSignaturesFromURL(search, match) {
   return result;
 }
 
+function getExtraParamsFromURL(search) {
+  var url = (new URLSearchParams(search)).get('url');
+  return CrashDataUrl.getFilters(url).map(function (filter) {
+    return "&" + filter;
+  }).join("");
+}
+
 function draw() {
   var channel = document.querySelector('select[name="channel"]').selectedOptions[0].value;
   items = MG.convert.date(items, 'date');
@@ -304,6 +311,7 @@ function redraw(channel) {
 function loadGraph(search, match = 'exact') {
   // Get all signatures from the Bugzilla page
   var signatures = getSignaturesFromURL(search, match);
+  var extra = getExtraParamsFromURL(search);
   // Initialize chart data
   // NOTE: Our Socorro query will request 179 days' worth of data: starting
   // 180 calendar-days ago, ending at (**and not including**) yesterday.
@@ -335,9 +343,9 @@ function loadGraph(search, match = 'exact') {
       var processed_data = 0;
       // Set the report URL, this will be used to load the data report on click
       if (!globals.url[i]) globals.url[i] = "";
-      globals.url[i] = globals.url_base + signatures[i];
+      globals.url[i] = globals.url_base + signatures[i] + extra;
       // Iterate through the Socorro data and create the chart data object
-      var url = "https://crash-stats.mozilla.org/api/SuperSearch/?" + signatures[i] + "&date=%3E%3D" + start_date + "&date=%3C%3D" + end_date + "&_histogram.date=release_channel&_histogram_interval=1d&_results_number=0";
+      var url = "https://crash-stats.mozilla.org/api/SuperSearch/?" + signatures[i] + extra + "&date=%3E%3D" + start_date + "&date=%3C%3D" + end_date + "&_histogram.date=release_channel&_histogram_interval=1d&_results_number=0";
       url = url.replace("/?&signature", "/?signature");
       d3.json(url, function (data) {
         if (data.total > 0) {

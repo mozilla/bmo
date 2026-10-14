@@ -2740,6 +2740,11 @@ sub set_all {
   # do that here, because if they *did* change the assignee, qa, or CC,
   # then we don't want to check the original ones, only the new ones.
   $self->_check_strict_isolation() if $product_changed;
+
+  # BMO - allow extensions to validate the final values. Unlike
+  # object_end_of_set_all, this runs after custom fields have been set.
+  Bugzilla::Hook::process('bug_end_of_set_all',
+    {bug => $self, params => $params});
 }
 
 # Helper for set_all that helps with fields that have an "add/remove"

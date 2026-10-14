@@ -1047,16 +1047,23 @@ sub create {
       'default_authorizer' => sub { return Bugzilla::Auth->new() },
 
       'socorro_lens_url' => sub {
-        my ($sigs) = @_;
+        my ($sigs, $crash_data_url) = @_;
 
         # strip [@ ] from sigs
         my @sigs = map {/^\[\@\s*(.+?)\s*\]$/} @$sigs;
 
         return '' unless @sigs;
 
+        my @query = ('id' => 'socorro-lens.html', 's' => join("\\", @sigs));
+
+        # Pass the search URL to socorro-lens for filtering.
+        push @query, 'url' => $crash_data_url
+          if defined $crash_data_url
+          && $crash_data_url =~ m{^https://crash-stats\.mozilla\.org/search/\?};
+
         # use a URI object to encode the query string part.
         my $uri = URI->new(Bugzilla->localconfig->urlbase . 'page.cgi');
-        $uri->query_form({'id' => 'socorro-lens.html', 's' => join("\\", @sigs)});
+        $uri->query_form(\@query);
         return $uri;
       },
     },
