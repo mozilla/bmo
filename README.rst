@@ -339,7 +339,7 @@ only in that stage, so the runtime image stays Node-free.
 This means a Dependabot pull request that bumps a library is complete on its own — there is nothing
 to regenerate and commit, and CI tests the upgraded library as-is. Because a library's stylesheet is
 generated from the same package as its script, the two cannot drift apart, so review upgrades for
-visual changes as well as behavioural ones. Treat major bumps (jquery 4.x, mermaid 11.x,
+visual changes as well as behavioural ones. Treat major bumps (jquery 4.x, mermaid 13.x,
 devbridge-autocomplete 2.x) as manual, tested reviews.
 
 To add a new library:

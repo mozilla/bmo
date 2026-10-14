@@ -22,7 +22,7 @@ updates:
       # Dependabot does not respect the caret ranges in package.json -- for a
       # major release it rewrites `^3.7.1` to `^4.0.0`. Major bumps of these
       # libraries need hand testing against the client, so suppress them here
-      # and do them as deliberate, standalone bugs: jquery 4.x, mermaid 11.x,
+      # and do them as deliberate, standalone bugs: jquery 4.x, mermaid 13.x,
       # devbridge-autocomplete 2.x. Security updates are unaffected --
       # `update-types` only gates version updates.
       - dependency-name: "jquery"
