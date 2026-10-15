@@ -44,69 +44,6 @@ sub _rest_resources {
         }
       }
     },
-    qr{^/bug/([^/]+)/comment$},
-    {
-      GET => {
-        method => 'comments',
-        params => sub {
-          return {ids => [$_[0]]};
-        }
-      },
-      POST => {
-        method => 'add_comment',
-        params => sub {
-          return {id => $_[0]};
-        },
-        success_code => STATUS_CREATED
-      }
-    },
-    qr{^/bug/comment/(\d+)$},
-    {
-      GET => {
-        method => 'comments',
-        params => sub {
-          return {comment_ids => [$_[0]]};
-        }
-      }
-    },
-    qr{^/bug/comment/([^/]+)/reactions$},
-    {
-      GET => {
-        method => 'get_comment_reactions',
-        params => sub {
-          return {comment_id => $_[0]};
-        },
-      },
-    },
-    qr{^/bug/comment/([^/]+)/reactions$},
-    {
-      PUT => {
-        method => 'update_comment_reactions',
-        params => sub {
-          return {comment_id => $_[0]};
-        },
-      },
-    },
-    qr{^/bug/comment/tags/([^/]+)$},
-    {
-      GET => {
-        method => 'search_comment_tags',
-        params => sub {
-          return {query => $_[0]};
-        },
-      },
-    },
-    qr{^/bug/comment/([^/]+)/tags$},
-    {
-      PUT => {
-        method => 'update_comment_tags',
-        params => sub {
-          return {comment_id => $_[0]};
-        },
-      },
-    },
-    qr{^/bug/comment/render$},
-    {POST => {method => 'render_comment',},},
     qr{^/bug/([^/]+)/history$},
     {
       GET => {

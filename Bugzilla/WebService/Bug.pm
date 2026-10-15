@@ -14,7 +14,6 @@ use warnings;
 use base qw(Bugzilla::WebService);
 
 use Bugzilla::Comment;
-use Bugzilla::Comment::TagWeights;
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Field;
@@ -49,7 +48,6 @@ use constant PRODUCT_SPECIFIC_FIELDS => qw(version target_milestone component);
 
 sub DATE_FIELDS {
   my $fields = {
-    comments => ['new_since'],
     create   => [],
     history  => ['new_since'],
     search   => ['last_change_time', 'creation_time'],
@@ -72,7 +70,6 @@ use constant BASE64_FIELDS => {add_attachment => ['data'],};
 
 use constant READ_ONLY => qw(
   attachments
-  comments
   fields
   get
   history
@@ -82,23 +79,16 @@ use constant READ_ONLY => qw(
 
 use constant PUBLIC_METHODS => qw(
   add_attachment
-  add_comment
   attachments
-  comments
   create
   fields
   get
   history
   legal_values
   possible_duplicates
-  render_comment
   search
-  search_comment_tags
   update
   update_attachment
-  get_comment_reactions
-  update_comment_reactions
-  update_comment_tags
   update_see_also
 );
 
@@ -314,119 +304,8 @@ sub _legal_field_values {
   return \@result;
 }
 
-sub comments {
-  my ($self, $params) = validate(@_, 'ids', 'comment_ids');
-
-  if (!(defined $params->{ids} || defined $params->{comment_ids})) {
-    ThrowCodeError('params_required',
-      {function => 'Bug.comments', params => ['ids', 'comment_ids']});
-  }
-
-  my $bug_ids      = $params->{ids}         || [];
-  my $comment_ids  = $params->{comment_ids} || [];
-  my $skip_private = $params->{skip_private} ? 1 : 0;
-
-  my $dbh  = Bugzilla->switch_to_shadow_db();
-  my $user = Bugzilla->user;
-
-  unless (Bugzilla->user->id) {
-    Bugzilla->check_rate_limit("get_comments", remote_ip());
-  }
-
-  if ($skip_private) {
-    # Cache permissions for bugs. This highly reduces the number of calls to the DB.
-    # visible_bugs() is only able to handle bug IDs, so we have to skip aliases.
-    my @int = grep { $_ =~ /^\d+$/ } @$bug_ids;
-    $user->visible_bugs(\@int);
-  }
-
-  my %bugs;
-  my @bug_comments;
-  foreach my $bug_id (@$bug_ids) {
-    my $bug;
-
-    if ($skip_private) {
-      $bug = Bugzilla::Bug->new({id => $bug_id, cache => 1});
-      next if $bug->error || !$user->can_see_bug($bug->id);
-    } else {
-      $bug = Bugzilla::Bug->check($bug_id);
-    }
-
-    # We want the API to always return comments in the same order.
-
-    my $comments
-      = $bug->comments({order => 'oldest_to_newest', after => $params->{new_since}
-      });
-    push(@bug_comments, [$bug, $comments]);
-  }
-
-  # Preload every requested bug's comments in one query, otherwise a bulk
-  # request would run one aggregation query per bug.
-  $self->_preload_comment_edit_info([map { @{$_->[1]} } @bug_comments]);
-
-  my $want_collapsed = _wants_collapsed_comments($params);
-
-  foreach my $bug_comment (@bug_comments) {
-    my ($bug, $comments) = @$bug_comment;
-    my @result;
-    foreach my $comment (@$comments) {
-      next if $comment->is_private && !$user->is_insider;
-      next if $comment->collapsed && !$want_collapsed;
-      push(@result, $self->_translate_comment($comment, $params));
-    }
-    $bugs{$bug->id}{'comments'} = \@result;
-  }
-
-  my %comments;
-  if (scalar @$comment_ids) {
-    my @ids = map { trim($_) } @$comment_ids;
-    my $comment_data = Bugzilla::Comment->new_from_list(\@ids);
-
-    # See if we were passed any invalid comment ids.
-    my %got_ids = map { $_->id => 1 } @$comment_data;
-    foreach my $comment_id (@ids) {
-      if (!$got_ids{$comment_id}) {
-        ThrowUserError('comment_id_invalid', {id => $comment_id});
-      }
-    }
-
-    # Now make sure that we can see all the associated bugs.
-    my %got_bug_ids = map { $_->bug_id => 1 } @$comment_data;
-    Bugzilla::Bug->check($_) foreach (keys %got_bug_ids);
-
-    $self->_preload_comment_edit_info($comment_data);
-
-    foreach my $comment (@$comment_data) {
-      if ($comment->is_private && !$user->is_insider) {
-        ThrowUserError('comment_is_private', {id => $comment->id});
-      }
-      $comments{$comment->id} = $self->_translate_comment($comment, $params);
-    }
-  }
-
-  return {bugs => \%bugs, comments => \%comments};
-}
-
-sub render_comment {
-  my ($self, $params) = @_;
-
-  unless (defined $params->{text}) {
-    ThrowCodeError('params_required',
-      {function => 'Bug.render_comment', params => ['text']});
-  }
-
-  Bugzilla->switch_to_shadow_db();
-  my $bug = $params->{id} ? Bugzilla::Bug->check($params->{id}) : undef;
-
-  my $html
-    = Bugzilla->params->{use_markdown}
-    ? Bugzilla->markdown->render_html($params->{text}, $bug)
-    : Bugzilla::Template::quoteUrls($params->{text}, $bug);
-
-  return {html => $html};
-}
-
-# Helper for every method that returns comments. Fetches the revision metadata
+# Helper for the comments field of get, search and possible_duplicates
+# (Bugzilla::API::V1::BugComment has its own copy). Fetches the revision metadata
 # (number of edits and the timestamp of the most recent edit) for a set of
 # comments using a single query, and stashes it on each comment object for
 # _translate_comment.
@@ -490,7 +369,8 @@ sub _wants_collapsed_comments {
   return grep { $_ eq '_collapsed_comments' } @{$params->{include_fields} || []};
 }
 
-# Helper for Bug.comments
+# Helper for Bug.get (comments field). Bugzilla::API::V1::BugComment has its
+# own copy until the rest of this module is migrated.
 sub _translate_comment {
   my ($self, $comment, $filters, $types, $prefix) = @_;
   my $attach_id = $comment->is_about_attachment ? $comment->extra_data : undef;
@@ -1284,64 +1164,6 @@ sub update_attachment {
   return {attachments => \@result};
 }
 
-sub add_comment {
-  my ($self, $params) = @_;
-
-  # BMO: Don't allow updating of bugs if disabled
-  if (Bugzilla->params->{disable_bug_updates}) {
-    ThrowErrorPage(
-      'bug/process/updates-disabled.html.tmpl',
-      'Bug updates are currently disabled.'
-    );
-  }
-
-  #The user must login in order add a comment
-  Bugzilla->login(LOGIN_REQUIRED);
-
-  # Check parameters
-  defined $params->{id} || ThrowCodeError('param_required', {param => 'id'});
-  my $comment = $params->{comment};
-  (defined $comment && trim($comment) ne '')
-    || ThrowCodeError('param_required', {param => 'comment'});
-
-  my $bug = Bugzilla::Bug->check($params->{id});
-
-  Bugzilla->user->can_edit_product($bug->product_id)
-    || ThrowUserError("product_edit_denied", {product => $bug->product});
-
-  # Backwards-compatibility for versions before 3.6
-  if (defined $params->{private}) {
-    $params->{is_private} = delete $params->{private};
-  }
-
-  # Append comment
-  $bug->add_comment(
-    $comment,
-    {
-      isprivate => $params->{is_private},
-      work_time => $params->{work_time},
-      is_markdown => (
-        defined $params->{is_markdown}
-          ? ($params->{is_markdown} ? 1 : 0)
-          : (Bugzilla->params->{use_markdown} ? 1 : 0)
-      )
-    }
-  );
-
-  # Add comment tags
-  $bug->set_all({comment_tags => $params->{comment_tags}})
-    if defined $params->{comment_tags};
-
-  $bug->update();
-
-  my $new_comment_id = $bug->{added_comments}[0]->id;
-
-  # Send mail.
-  Bugzilla::BugMail::Send($bug->bug_id, {changer => Bugzilla->user});
-
-  return {id => $self->type('int', $new_comment_id)};
-}
-
 sub update_see_also {
   my ($self, $params) = @_;
 
@@ -1477,154 +1299,6 @@ sub flag_types {
   }
 
   return $flag_types;
-}
-
-sub _get_comment_reactions_with_users {
-  my ($self, $comment) = @_;
-  my $reactions_with_users = $comment->reactions_with_users();
-
-  foreach my $reaction (keys %$reactions_with_users) {
-    $reactions_with_users->{$reaction}
-      = [map { $self->_user_to_hash($_) } @{$reactions_with_users->{$reaction}}];
-  }
-
-  return $reactions_with_users;
-}
-
-sub get_comment_reactions {
-  if (!Bugzilla->params->{use_comment_reactions}) {
-    ThrowUserError('comment_reaction_disabled');
-  }
-
-  my ($self, $params) = @_;
-  my $user = Bugzilla->user;
-  my $comment_id = $params->{comment_id} // ThrowCodeError('param_required',
-    {function => 'Bug.get_comment_reactions', param => 'comment_id'});
-  detaint_natural($comment_id)
-    || ThrowCodeError('param_must_be_numeric',
-    {function => 'Bug.get_comment_reactions', param => 'comment_id'});
-  my $comment = Bugzilla::Comment->new($comment_id) || return [];
-
-  $comment->bug->check_is_visible();
-  if ($comment->is_private && !$user->is_insider) {
-    ThrowUserError('comment_is_private', {id => $comment_id});
-  }
-
-  return $self->_get_comment_reactions_with_users($comment);
-}
-
-sub update_comment_reactions {
-  if (!Bugzilla->params->{use_comment_reactions}) {
-    ThrowUserError('comment_reaction_disabled');
-  }
-
-  my ($self, $params) = @_;
-  my $user = Bugzilla->login(LOGIN_REQUIRED);
-  my $comment_id = $params->{comment_id} // ThrowCodeError('param_required',
-    {function => 'Bug.update_comment_reactions', param => 'comment_id'});
-  detaint_natural($comment_id)
-    || ThrowCodeError('param_must_be_numeric',
-    {function => 'Bug.update_comment_reactions', param => 'comment_id'});
-  my $comment = Bugzilla::Comment->new($comment_id) || return [];
-
-  $comment->bug->check_is_visible();
-  if ($comment->is_private && !$user->is_insider) {
-    ThrowUserError('comment_is_private', {id => $comment_id});
-  }
-
-  if ($comment->bug->is_closed_for({months => 3})) {
-    ThrowUserError('comment_reaction_closed');
-  }
-
-  if ($comment->bug->restrict_comments
-    && !$user->in_group(Bugzilla->params->{'restrict_comments_group'}))
-  {
-    ThrowUserError('comment_reaction_restricted');
-  }
-
-  my $dbh = Bugzilla->dbh;
-  $dbh->bz_start_transaction();
-  foreach my $reaction (@{$params->{add} || []}) {
-    $comment->add_reaction($reaction);
-  }
-  foreach my $reaction (@{$params->{remove} || []}) {
-    $comment->remove_reaction($reaction);
-  }
-  $comment->update();
-  $dbh->bz_commit_transaction();
-
-  return $self->_get_comment_reactions_with_users($comment);
-}
-
-sub update_comment_tags {
-  my ($self, $params) = @_;
-
-  my $user = Bugzilla->login(LOGIN_REQUIRED);
-  Bugzilla->params->{'comment_taggers_group'}
-    || ThrowUserError("comment_tag_disabled");
-  $user->can_tag_comments || ThrowUserError(
-    "auth_failure",
-    {
-      group  => Bugzilla->params->{'comment_taggers_group'},
-      action => "update",
-      object => "comment_tags"
-    }
-  );
-
-  my $comment_id = $params->{comment_id} // ThrowCodeError('param_required',
-    {function => 'Bug.update_comment_tags', param => 'comment_id'});
-  detaint_natural($comment_id)
-    || ThrowCodeError('param_must_be_numeric',
-    {function => 'Bug.update_comment_tags', param => 'comment_id'});
-
-  my $comment = Bugzilla::Comment->new($comment_id) || return [];
-  $comment->bug->check_is_visible();
-  if ($comment->is_private && !$user->is_insider) {
-    ThrowUserError('comment_is_private', {id => $comment_id});
-  }
-
-  my $dbh = Bugzilla->dbh;
-  $dbh->bz_start_transaction();
-  foreach my $tag (@{$params->{add} || []}) {
-    $comment->add_tag($tag) if defined $tag;
-  }
-  foreach my $tag (@{$params->{remove} || []}) {
-    $comment->remove_tag($tag) if defined $tag;
-  }
-  $comment->update();
-  $dbh->bz_commit_transaction();
-
-  return $comment->tags;
-}
-
-sub search_comment_tags {
-  my ($self, $params) = @_;
-
-  Bugzilla->login(LOGIN_REQUIRED);
-  Bugzilla->params->{'comment_taggers_group'}
-    || ThrowUserError("comment_tag_disabled");
-  Bugzilla->user->can_tag_comments || ThrowUserError(
-    "auth_failure",
-    {
-      group  => Bugzilla->params->{'comment_taggers_group'},
-      action => "search",
-      object => "comment_tags"
-    }
-  );
-
-  my $query = $params->{query};
-  $query // ThrowCodeError('param_required', {param => 'query'});
-  my $limit = $params->{limit} || 7;
-  detaint_natural($limit)
-    || ThrowCodeError('param_must_be_numeric',
-    {param => 'limit', function => 'Bug.search_comment_tags'});
-
-
-  my $tags
-    = Bugzilla::Comment::TagWeights->match({
-    WHERE => {'tag LIKE ?' => "\%$query\%",}, LIMIT => $limit,
-    });
-  return [map { $_->tag } @$tags];
 }
 
 ##############################
@@ -2749,229 +2423,6 @@ C<summary>.
 =back
 
 
-=head2 comments
-
-B<STABLE>
-
-=over
-
-=item B<Description>
-
-This allows you to get data about comments, given a list of bugs
-and/or comment ids.
-
-=item B<REST>
-
-To get all comments for a particular bug using the bug ID or alias:
-
-GET /bug/<id_or_alias>/comment
-
-To get a specific comment based on the comment ID:
-
-GET /bug/comment/<comment_id>
-
-The returned data format is the same as below.
-
-=item B<Params>
-
-B<Note>: At least one of C<ids> or C<comment_ids> is required.
-
-In addition to the parameters below, this method also accepts the
-standard L<include_fields|Bugzilla::WebService/include_fields> and
-L<exclude_fields|Bugzilla::WebService/exclude_fields> arguments.
-
-=over
-
-=item C<ids>
-
-C<array> An array that can contain both bug IDs and bug aliases.
-All of the comments (that are visible to you) will be returned for the
-specified bugs.
-
-=item C<comment_ids>
-
-C<array> An array of integer comment_ids. These comments will be
-returned individually, separate from any other comments in their
-respective bugs.
-
-=item C<new_since>
-
-C<dateTime> If specified, the method will only return comments I<newer>
-than this time. This only affects comments returned from the C<ids>
-argument. You will always be returned all comments you request in the
-C<comment_ids> argument, even if they are older than this date.
-
-=item C<_collapsed_comments>
-
-Comments that are collapsed in the web UI -- those tagged with one of the tags
-listed in the C<collapsed_comment_tags> parameter (C<spam>, C<abusive>, etc), and
-those authored by treeherder -- are left out of the comments returned for C<ids>
-entirely. Passing
-C<_collapsed_comments> in C<include_fields> includes them in the response.
-
-As with the other underscore-prefixed C<include_fields> values, it does not
-imply C<_default>, so use C<include_fields=_default,_collapsed_comments> to get
-the usual comment fields as well.
-
-Comments requested by C<comment_ids> are always returned, collapsed or not.
-
-=item C<skip_private> B<EXPERIMENTAL>
-
-C<boolean> Normally, if you request any inaccessible or invalid bug ids, this
-method will throw an error. If this parameter is C<True>, these bugs will just
-be skipped. In the future, error objects will be returned instead, just like
-C<Bug.get> with the C<permissive> parameter provided.
-
-=back
-
-=item B<Returns>
-
-Two items are returned:
-
-=over
-
-=item C<bugs>
-
-This is used for bugs specified in C<ids>. This is a hash,
-where the keys are the numeric ids of the bugs, and the value is
-a hash with a single key, C<comments>, which is an array of comments.
-(The format of comments is described below.)
-
-Note that any individual bug will only be returned once, so if you
-specify an id multiple times in C<ids>, it will still only be
-returned once.
-
-=item C<comments>
-
-Each individual comment requested in C<comment_ids> is returned here,
-in a hash where the numeric comment id is the key, and the value
-is the comment. (The format of comments is described below.)
-
-=back
-
-A "comment" as described above is a hash that contains the following
-keys:
-
-=over
-
-=item id
-
-C<int> The globally unique ID for the comment.
-
-=item bug_id
-
-C<int> The ID of the bug that this comment is on.
-
-=item attachment_id
-
-C<int> If the comment was made on an attachment, this will be the
-ID of that attachment. Otherwise it will be null.
-
-=item text
-
-C<string> The body of the comment, including any special text (such as
-"this bug was marked as a duplicate of...").
-
-=item raw_text
-
-C<string> The body of the comment without any special additional text.
-
-=item creator
-
-C<string> The login name of the comment's author.
-
-Also returned as C<author>, for backwards-compatibility with older
-Bugzillas. (However, this backwards-compatibility will go away in Bugzilla
-5.0.)
-
-=item time
-
-C<dateTime> The time (in Bugzilla's timezone) that the comment was added.
-
-=item creation_time
-
-C<dateTime> This is exactly same as the C<time> key. Use this field instead of
-C<time> for consistency with other methods including L</get> and L</attachments>.
-For compatibility, C<time> is still usable. However, please note that C<time>
-may be deprecated and removed in a future release.
-
-=item is_private
-
-C<boolean> True if this comment is private (only visible to a certain
-group called the "insidergroup"), False otherwise.
-
-=item edit_count
-
-C<int> The number of times this comment has been edited. C<0> if the comment
-has never been edited.
-
-This key is only present for users who are allowed to edit other people's
-comments. Revisions that have been hidden by an edit-comments admin are only
-counted for members of the edit-comments admins group.
-
-=item last_change_time
-
-C<dateTime> The time (in Bugzilla's timezone) of the most recent edit to this
-comment, or null if the comment has never been edited.
-
-This key is only present for users who are allowed to edit other people's
-comments, and follows the same rules as C<edit_count> for hidden revisions.
-
-=item collapsed
-
-C<boolean> True if this comment is collapsed in the web UI, either because one
-of its tags is listed in the C<collapsed_comment_tags> parameter or because it
-was authored by treeherder. False otherwise.
-
-This key is only present when comment tagging is enabled.
-
-=back
-
-=item B<Errors>
-
-This method can throw all the same errors as L</get>. In addition,
-it can also throw the following errors:
-
-=over
-
-=item 110 (Comment Is Private)
-
-You specified the id of a private comment in the C<comment_ids>
-argument, and you are not in the "insider group" that can see
-private comments.
-
-=item 111 (Invalid Comment ID)
-
-You specified an id in the C<comment_ids> argument that is invalid--either
-you specified something that wasn't a number, or there is no comment with
-that id.
-
-=back
-
-=item B<History>
-
-=over
-
-=item Added in Bugzilla B<3.4>.
-
-=item C<attachment_id> was added to the return value in Bugzilla B<3.6>.
-
-=item In Bugzilla B<4.0>, the C<author> return value was renamed to
-C<creator>.
-
-=back
-
-=item C<creation_time> was added in Bugzilla B<4.4>.
-
-=item REST API call added in Bugzilla B<5.0>.
-
-=item C<raw_text> was added in Bugzilla B<6.0>.
-
-=item C<edit_count> and C<last_change_time> were added in Bugzilla B<6.0>.
-
-=back
-
-
 =head2 get
 
 B<STABLE>
@@ -3098,8 +2549,8 @@ This is an B<extra> field returned only by specifying C<comments> or C<_extra>
 in C<include_fields>.
 
 Comments that are collapsed in the web UI are left out unless
-C<_collapsed_comments> is also passed in C<include_fields>, as described under
-L</comments>.
+C<_collapsed_comments> is also passed in C<include_fields>, as described for
+C<GET /rest/bug/E<lt>idE<gt>/comment> in the REST API documentation.
 
 =item C<component>
 
@@ -4622,112 +4073,6 @@ You did not specify a value for the C<summary> argument.
 
 =back
 
-=head2 add_comment
-
-B<STABLE>
-
-=over
-
-=item B<Description>
-
-This allows you to add a comment to a bug in Bugzilla.
-
-=item B<REST>
-
-To create a comment on a current bug:
-
-POST /bug/<bug_id>/comment
-
-The params to include in the POST body as well as the returned data format,
-are the same as below.
-
-=item B<Params>
-
-=over
-
-=item C<id> (int or string) B<Required> - The id or alias of the bug to append a
-comment to.
-
-=item C<comment> (string) B<Required> - The comment to append to the bug.
-If this is empty or all whitespace, an error will be thrown saying that
-you did not set the C<comment> parameter.
-
-=item C<is_private> (boolean) - If set to true, the comment is private,
-otherwise it is assumed to be public.
-
-=item C<work_time> (double) - Adds this many hours to the "Hours Worked"
-on the bug. If you are not in the time tracking group, this value will
-be ignored.
-
-=item C<comment_tags> (array) - Array of strings to add as comment tags for
-the new comment.
-
-=back
-
-=item B<Returns>
-
-A hash with one element, C<id> whose value is the id of the newly-created comment.
-
-=item B<Errors>
-
-=over
-
-=item 54 (Hours Worked Too Large)
-
-You specified a C<work_time> larger than the maximum allowed value of
-C<99999.99>.
-
-=item 100 (Invalid Bug Alias)
-
-If you specified an alias and either: (a) the Bugzilla you're querying
-doesn't support aliases or (b) there is no bug with that alias.
-
-=item 101 (Invalid Bug ID)
-
-The id you specified doesn't exist in the database.
-
-=item 109 (Bug Edit Denied)
-
-You did not have the necessary rights to edit the bug.
-
-=item 113 (Can't Make Private Comments)
-
-You tried to add a private comment, but don't have the necessary rights.
-
-=item 114 (Comment Too Long)
-
-You tried to add a comment longer than the maximum allowed length
-(65,535 characters).
-
-=back
-
-=item B<History>
-
-=over
-
-=item Added in Bugzilla B<3.2>.
-
-=item Modified to return the new comment's id in Bugzilla B<3.4>
-
-=item Modified to throw an error if you try to add a private comment
-but can't, in Bugzilla B<3.4>.
-
-=item Before Bugzilla B<3.6>, the C<is_private> argument was called
-C<private>, and you can still call it C<private> for backwards-compatibility
-purposes if you wish.
-
-=item Before Bugzilla B<3.6>, error 54 and error 114 had a generic error
-code of 32000.
-
-=item REST API call added in Bugzilla B<5.0>.
-
-=item In Bugzilla B<5.0>, the following items were added to the bugs return value: C<assigned_to_detail>, C<creator_detail>, C<qa_contact_detail>.
-
-=back
-
-=back
-
-
 =head2 update
 
 B<UNSTABLE>
@@ -4825,7 +4170,7 @@ C<hash>. A comment on the change. The hash may contain the following fields:
 =over
 
 =item C<body> C<string> The actual text of the comment.
-B<Note>: For compatibility with the parameters to L</add_comment>,
+B<Note>: For compatibility with the parameters to C<POST /rest/bug/E<lt>idE<gt>/comment>,
 you can also call this field C<comment>, if you want.
 
 =item C<is_private> C<boolean> Whether the comment is private or not.
@@ -4839,7 +4184,7 @@ to, an error will be thrown.
 C<hash> This is how you update the privacy of comments that are already
 on a bug. This is a hash, where the keys are the C<int> id of comments (not
 their count on a bug, like #1, #2, #3, but their globally-unique id,
-as returned by L</comments>) and the value is a C<boolean> which specifies
+as returned by C<GET /rest/bug/E<lt>idE<gt>/comment>) and the value is a C<boolean> which specifies
 whether that comment should become private (C<true>) or public (C<false>).
 
 The comment ids must be valid for the bug being updated. Thus, it is not
@@ -5163,7 +4508,7 @@ This may change in a future version of Bugzilla.
 =item B<Errors>
 
 This function can throw all of the errors that L</get>, L</create>,
-and L</add_comment> can throw, plus:
+and C<POST /rest/bug/E<lt>idE<gt>/comment> can throw, plus:
 
 =over
 
@@ -5395,46 +4740,3 @@ this bug.
 =back
 
 =back
-
-=head2 render_comment
-
-B<UNSTABLE>
-
-=over
-
-=item B<Description>
-
-Returns the HTML rendering of the provided comment text.
-
-=item B<Params>
-
-=over
-
-=item C<text>
-
-B<Required> C<strings> Text comment text to render.
-
-=item C<id>
-
-C<int> The ID of the bug to render the comment against.
-
-=back
-
-=item B<Returns>
-
-C<html> containing the HTML rendering.
-
-=item B<Errors>
-
-This method can throw all of the errors that L</get> throws.
-
-=item B<History>
-
-=over
-
-=item Added in Bugzilla B<5.0>.
-
-=back
-
-=back
-
