@@ -1385,11 +1385,19 @@ sub db_schema_abstract_schema {
       bmo_etl_cache_uniq_idx => {FIELDS => ['id', 'table_name'], TYPE => 'UNIQUE'}
     ],
   };
+  # value holds the id of the export run that owns the lock. updated_ts is a
+  # heartbeat; a lock that stops being updated was left by a run that died.
+  # name is always 'export'; its unique index allows only one lock row, so
+  # two runs starting at once cannot both take the lock.
   $args->{schema}->{bmo_etl_locked} = {
     FIELDS => [
+      name        => {TYPE => 'VARCHAR(20)', NOTNULL => 1, DEFAULT => "'export'"},
       value       => {TYPE => 'VARCHAR(20)', NOTNULL => 1,},
       creation_ts => {TYPE => 'DATETIME',},
+      updated_ts  => {TYPE => 'DATETIME',},
     ],
+    INDEXES =>
+      [bmo_etl_locked_name_idx => {FIELDS => ['name'], TYPE => 'UNIQUE'}],
   };
 
   # Recorded Future
@@ -1593,6 +1601,22 @@ sub install_update_db {
     $dbh->bz_add_column('bmo_etl_locked',
       'creation_ts' => {TYPE => 'DATETIME'});
   }
+
+  # Add bmo_etl_locked.updated_ts column
+  if (!$dbh->bz_column_info('bmo_etl_locked', 'updated_ts')) {
+    $dbh->bz_add_column('bmo_etl_locked', 'updated_ts' => {TYPE => 'DATETIME'});
+  }
+
+  # Add bmo_etl_locked.name column with a unique index so only one lock can
+  # exist. Old lock rows are cleared first so the index can be created; a run
+  # in progress notices its lock is gone and aborts without publishing.
+  if (!$dbh->bz_column_info('bmo_etl_locked', 'name')) {
+    $dbh->do('DELETE FROM bmo_etl_locked');
+    $dbh->bz_add_column('bmo_etl_locked',
+      'name' => {TYPE => 'VARCHAR(20)', NOTNULL => 1, DEFAULT => "'export'"});
+  }
+  $dbh->bz_add_index('bmo_etl_locked', 'bmo_etl_locked_name_idx',
+    {FIELDS => ['name'], TYPE => 'UNIQUE'});
 
   # Add unique index for id and table name for bmo_etl_cache
   $dbh->bz_add_index('bmo_etl_cache', 'bmo_etl_cache_uniq_idx',
