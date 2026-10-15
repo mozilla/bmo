@@ -116,37 +116,6 @@ sub _rest_resources {
         },
       }
     },
-    qr{^/bug/([^/]+)/attachment$},
-    {
-      GET => {
-        method => 'attachments',
-        params => sub {
-          return {ids => [$_[0]]};
-        }
-      },
-      POST => {
-        method => 'add_attachment',
-        params => sub {
-          return {ids => [$_[0]]};
-        },
-        success_code => STATUS_CREATED
-      }
-    },
-    qr{^/bug/attachment/([^/]+)$},
-    {
-      GET => {
-        method => 'attachments',
-        params => sub {
-          return {attachment_ids => [$_[0]]};
-        }
-      },
-      PUT => {
-        method => 'update_attachment',
-        params => sub {
-          return {ids => [$_[0]]};
-        }
-      }
-    },
     qr{^/field/bug$},
     {GET => {method => 'fields',}},
     qr{^/field/bug/([^/]+)$},
