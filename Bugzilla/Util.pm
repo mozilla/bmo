@@ -1073,7 +1073,9 @@ sub is_fake_recipient_address {
   return 0;
 }
 
-# We need to escape ([ and ]) characters for the mermaid summaries
+# Escape characters in bug summaries that mermaid would otherwise interpret:
+# ( ) [ ] " break the node syntax, < > allow HTML injection, and $ would let
+# a $$...$$ summary be rendered as math by KaTeX.
 sub mermaid_quote {
   my $text = shift;
   $text =~ s/[(]/#40;/g;
@@ -1083,6 +1085,7 @@ sub mermaid_quote {
   $text =~ s/"/#34;/g;
   $text =~ s/</#60;/g;
   $text =~ s/>/#62;/g;
+  $text =~ s/\$/#36;/g;
   return $text;
 }
 
