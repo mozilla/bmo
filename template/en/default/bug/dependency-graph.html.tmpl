@@ -89,6 +89,11 @@
   <script [% script_nonce FILTER none %]>
     mermaid.initialize({
       startOnLoad: false,
+      // Keep the Mermaid 10 appearance; 12 defaults to ELK, redux-color, neo
+      layout: 'dagre',
+      theme: 'default',
+      look: 'classic',
+      flowchart: { wrappingWidth: 200 },
       maxTextSize: [% graph_size FILTER json %] + 1000,
       maxEdges: [% graph_edges FILTER json %] + 100
     });                                               
