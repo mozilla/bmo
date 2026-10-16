@@ -93,6 +93,13 @@
   font-style: italic;
 }
 
+.text-editor .comment-text .mention-notice {
+  border-bottom: 1px solid var(--control-border-color);
+  padding-bottom: 8px;
+  color: var(--secondary-label-color);
+  font-size: var(--font-size-small);
+}
+
 .text-editor footer:not([hidden]) {
   padding: 8px 4px;
   font-size: var(--font-size-small);
