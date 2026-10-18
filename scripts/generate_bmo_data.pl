@@ -717,6 +717,26 @@ qe-verify: - ➜ the bug will not/can not be verified manually',
     cc_list          => '',
     inclusions       => ['Firefox:']
   },
+
+  # Uplift approval flags set by PhabBugz on revision attachments. Only
+  # enabled for Firefox :: General so the other products and components
+  # exercise the "flag not enabled here" case. esr115 is disabled globally.
+  (
+    map {
+      +{
+        name             => "approval-mozilla-$_",
+        desc             => "Approval for landing the patch on mozilla-$_.",
+        is_active        => ($_ eq 'esr115' ? 0 : 1),
+        is_requestable   => 1,
+        is_requesteeble  => 0,
+        is_multiplicable => 0,
+        grant_group      => '',
+        target_type      => 'a',
+        cc_list          => '',
+        inclusions       => ['Firefox:General'],
+      }
+    } qw(beta release esr140 esr115)
+  ),
 );
 
 print "creating flag types...\n";
@@ -733,15 +753,16 @@ foreach my $flag (@flagtypes) {
 
   $dbh->do(
     'INSERT INTO flagtypes (name, description, cc_list, target_type, is_requestable,
-                                     is_requesteeble, is_multiplicable, grant_group_id, request_group_id)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                                     is_requesteeble, is_multiplicable, grant_group_id, request_group_id,
+                                     is_active)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     undef,
     (
       $flag->{name},             $flag->{desc},
       $flag->{cc_list},          $flag->{target_type},
       $flag->{is_requestable},   $flag->{is_requesteeble},
       $flag->{is_multiplicable}, $grant_group_id,
-      $request_group_id
+      $request_group_id,         $flag->{is_active} // 1
     )
   );
 
