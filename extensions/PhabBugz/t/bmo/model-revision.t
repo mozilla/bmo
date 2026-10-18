@@ -141,9 +141,10 @@ sub load { return Revision->new_from_query({phids => [$raw->{phid}]}) }
   is($conduit->call_count('user.search'), 1, 'author is loaded once');
 }
 
-# reviews
+# reviews. new_from_query does not request reviewers-extra, so build the
+# revision from the full fixture (as WebService does with its own search).
 {
-  my $revision = load();
+  my $revision = Revision->new(dclone($raw));
   $conduit->reset_calls;
   my $reviews = $revision->reviews;
   is(scalar @$reviews,
@@ -166,6 +167,10 @@ sub load { return Revision->new_from_query({phids => [$raw->{phid}]}) }
   my ($accepted) = grep { !$_->{is_project} } @{$same_diff->reviews};
   is($accepted->{status}, 'accepted',
     'accepted on the current diff stays accepted');
+
+  my ($loaded) = grep { !$_->{is_project} } @{load()->reviews};
+  is($loaded->{status}, 'accepted',
+    'without reviewers-extra (new_from_query) accepted stays accepted');
 }
 
 # subscribers and projects

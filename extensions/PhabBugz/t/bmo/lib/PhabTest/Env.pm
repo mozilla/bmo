@@ -337,16 +337,16 @@ sub teardown {
 
 sub _try_step {
   my ($code) = @_;
-  local $@;
+  local $@ = undef;
   eval { $code->(); 1 } or warn "PhabTest::Env teardown step failed: $@";
 }
 
 # Runs before global destruction, while Bugzilla->dbh still works, for test
 # files that die before calling finish().
 END {
-  local $?;
+  local $? = $?;
   foreach my $env (grep {defined} values %LIVE) {
-    local $@;
+    local $@ = undef;
     eval { $env->teardown; 1 } or warn "PhabTest::Env teardown failed: $@";
   }
 }
@@ -354,7 +354,7 @@ END {
 sub DESTROY {
   my ($self) = @_;
   return if $self->{finished};
-  local $@;
+  local $@ = undef;
   eval { $self->teardown; 1 } or warn "PhabTest::Env teardown failed: $@";
 }
 

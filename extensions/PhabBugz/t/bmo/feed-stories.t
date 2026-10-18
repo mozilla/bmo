@@ -514,7 +514,7 @@ SKIP: {
 {
   my $cursor = start_scenario();
   $conduit->queue('feed.query_id' => cursor_invalid($cursor + $_)) for 0 .. 2;
-  my $error = with_typed_errors { run_feed() };
+  my $error = with_typed_errors(sub { run_feed() });
   is(
     ref $error && $error->type,
     'bugzilla.code.phabricator_api_error',
@@ -541,7 +541,7 @@ foreach my $case (
   my $cursor = start_scenario();
   story(object_phid => 'PHID-TASK-unseen');
   $conduit->queue('feed.query_id' => $reply);
-  my $error = with_typed_errors { run_feed() };
+  my $error = with_typed_errors(sub { run_feed() });
   ok($error, "$name: feed_query throws");
   is($conduit->call_count('feed.query_id'), 1,       "$name: not retried");
   is($env->cursor('feed'),                  $cursor, "$name: cursor unchanged");

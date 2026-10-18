@@ -279,7 +279,7 @@ foreach my $case (
     ));
   };
   my $run
-    = sub { with_typed_errors { $env->run_sync(sub { $feed->feed_query }) } };
+    = sub { with_typed_errors(sub { $env->run_sync(sub { $feed->feed_query }) }) };
   my $attachments = sub {
     my ($bug) = @_;
     return [grep { is_attachment_phab_revision($_) }

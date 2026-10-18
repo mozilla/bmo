@@ -203,7 +203,7 @@ foreach my $case (
   # Give the sync a membership change to send for this file's group.
   $env->add_to_group($alice, $group);
   $conduit->on($method => $reply);
-  my $error = with_typed_errors { run_groups() };
+  my $error = with_typed_errors(sub { run_groups() });
   ok($error, "$method failure (" . ($reply->{type}) . ') aborts group_query');
   $conduit->off($method);
   $env->remove_from_group($alice, $group);

@@ -332,7 +332,7 @@ sub throws_error {
 
 # Run $code with Bugzilla errors thrown as Template::Exception objects that
 # have a ->type, instead of rendered error pages. Returns what $code returns.
-sub with_typed_errors(&) {
+sub with_typed_errors {
   my ($code) = @_;
   local $Bugzilla::Template::is_processing = 1;
   return $code->();
@@ -594,8 +594,16 @@ sub reply_project_edit {
 
 sub reply_differential_revision_search {
   my ($self, $params) = @_;
-  return $self->_page($params,
+  my $result = $self->_page($params,
     _filter($params->{constraints} // {}, @{$self->{revisions}}));
+
+  # Like Conduit, only return the attachments the caller asked for
+  my $wanted = $params->{attachments} // {};
+  foreach my $revision (@{$result->{data}}) {
+    my $attachments = $revision->{attachments};
+    delete @$attachments{grep { !$wanted->{$_} } keys %$attachments};
+  }
+  return $result;
 }
 
 sub reply_differential_revision_edit {

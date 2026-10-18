@@ -231,7 +231,7 @@ foreach my $case (
   my ($name, $reply) = @$case;
   my $cursor = start_scenario();
   $conduit->queue('user.search' => $reply);
-  my $error = with_typed_errors { run_users() };
+  my $error = with_typed_errors(sub { run_users() });
   ok($error, "$name: user_query throws");
   is($env->cursor('user'), $cursor, "$name: cursor unchanged");
 }

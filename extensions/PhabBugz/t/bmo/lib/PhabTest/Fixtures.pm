@@ -42,6 +42,11 @@ use Mojo::JSON qw(false true);
 my $RUN_TAG = lc sprintf('%x%x', time, $$);
 my $COUNTER = 0;
 
+# Revision ids also become BMO attachment filenames (phabricator-D<id>-url.txt)
+# and Feed.pm matches attachments on other bugs by that filename, so they get
+# their own counter seeded from the time and pid (1000 revisions per process).
+my $NEXT_REVISION_ID = (time * 100_000 + $$ % 100_000) * 1_000;
+
 sub next_phid {
   my ($type) = @_;
   return sprintf('PHID-%s-pt%s%06d', $type, $RUN_TAG, ++$COUNTER);
@@ -130,7 +135,7 @@ sub project_obj {
 # optionally, reviewers-extra attachments)
 sub revision_obj {
   my (%args) = @_;
-  my $id     = $args{id}     // ++$COUNTER;
+  my $id     = $args{id}     // ++$NEXT_REVISION_ID;
   my $phid   = $args{phid}   // next_phid('DREV');
   my $status = $args{status} // 'needs-review';
 
