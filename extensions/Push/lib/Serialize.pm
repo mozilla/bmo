@@ -64,6 +64,16 @@ sub object_to_hash {
   return wantarray ? ($rh, $name) : $rh;
 }
 
+# forget the cached hashes for an object.  the cache is keyed on the object's
+# address, so a later push of the same (since modified) object would otherwise
+# serialize stale data, eg. a bug created with flags is pushed before and after
+# its flags are set.
+sub uncache {
+  my ($self, $object) = @_;
+  my $cache = Bugzilla->request_cache;
+  delete $cache->{"push.$_.$object"} foreach qw(deep shallow);
+}
+
 # given a changes hash, return an event hash
 sub changes_to_event {
   my ($self, $changes) = @_;
