@@ -39,6 +39,34 @@ use constant API_BLOCK_COUNT => 500;
 # Products which we should not send data to ETL such as Legal, etc.
 use constant EXCLUDE_PRODUCTS => ('Legal',);
 
+# Every BigQuery table this script writes to. Each run streams rows into a
+# staging copy of these tables and then publishes them all in one transaction.
+use constant BQ_TABLES => qw(
+  bugs attachments flags tracking_flags keywords see_also users
+  bug_mentors bug_dependencies bug_regressions bug_duplicates
+);
+
+# Prefix for staging tables, and how long they live if a run is killed
+# before it can drop them.
+use constant STAGING_PREFIX   => 'etl_staging_';
+use constant STAGING_LIFETIME => 2 * 24 * 60 * 60;    # two days
+
+# Extra staging column holding a per-row key, used to drop rows that were
+# sent twice when an insert request was retried
+use constant STAGING_ROW_KEY => q(_etl_row);
+
+# How long to wait for a BigQuery query (such as the publish transaction)
+use constant QUERY_MAX_WAIT => 60 * 60;               # one hour
+
+# A running export refreshes its lock at least this often. A lock not
+# refreshed within LOCK_STALE_AFTER was left by a run that died, so a new run
+# (such as a Kubernetes retry) takes it over. By default a new run waits up to
+# LOCK_MAX_WAIT for an existing lock to be released or go stale.
+use constant LOCK_REFRESH_EVERY => 60;                # one minute
+use constant LOCK_STALE_AFTER   => 10 * 60;           # ten minutes
+use constant LOCK_MAX_WAIT      => 15 * 60;           # fifteen minutes
+use constant LOCK_POLL_INTERVAL => 30;
+
 # Log levels
 use constant DEBUG_OUTPUT => 1;
 
@@ -48,7 +76,13 @@ getopt
   'q|quiet'           => \my $quiet,
   'd|debug'           => \my $debug,
   's|snapshot-date=s' => \my $snapshot_date,
+  'w|lock-wait=i'     => \my $lock_wait,
   'n|no-cache=s'      => \my @no_cache;
+
+$lock_wait //= LOCK_MAX_WAIT;
+
+# Identifies this run in the lock table and in staging table names
+my $run_id = time() . "_$$";
 
 # Create a hash for faster checking later
 my %no_cache = map { $_ => 1 } @no_cache;
@@ -64,6 +98,12 @@ $project_id || die "Invalid BigQuery product ID.\n";
 
 my $dataset_id = Bugzilla->params->{bmo_etl_dataset_id};
 $dataset_id || die "Invalid BigQuery dataset ID.\n";
+
+# The date is used in BigQuery SQL statements, so make sure it is sane.
+# Checked before taking the lock so a bad value does not leave it behind.
+if ($snapshot_date && $snapshot_date !~ /^\d{4}-\d{2}-\d{2}$/) {
+  die "Invalid snapshot date '$snapshot_date', expected YYYY-MM-DD.\n";
+}
 
 # Check to make sure another instance is not currently running
 check_and_set_lock();
@@ -94,42 +134,91 @@ our %excluded_bugs = ();
 # Bugs that are private to one or more groups
 our %private_bugs = ();
 
-# In order to avoid entering duplicate data, we will first query BigQuery
-# to make sure other entries with this date are not already present.
-check_for_duplicates();
+# Real table name => staging table name, column names, and rows sent
+our %staging_tables = ();
+our %table_columns  = ();
+our %sent_counts    = ();
 
-# Process each table to be sent to ETL
-process_bugs();
-process_attachments();
-process_flags();
-process_flag_activity();
-process_tracking_flags();
-process_keywords();
-process_see_also();
-process_users();
+# Set by the signal handlers below. Checked before each batch is sent, since
+# the die from a signal can be swallowed by an inner try block.
+our $abort_reason;
 
-process_two_columns(
-  'bug_mentors', 'bug_mentors',
-  ['bug_id', 'user_id'],
-  ['bug_id', 'user_id']
-);
-process_two_columns(
-  'dependencies', 'bug_dependencies',
-  ['blocked', 'dependson'],
-  ['bug_id',  'depends_on_id']
-);
-process_two_columns(
-  'regressions', 'bug_regressions',
-  ['regresses', 'regressed_by'],
-  ['bug_id',    'regresses_id']
-);
-process_two_columns(
-  'duplicates', 'bug_duplicates',
-  ['dupe',   'dupe_of'],
-  ['bug_id', 'duplicate_of_id']
-);
+# Kubernetes sends SIGTERM before killing the pod. If the process is killed
+# outright (SIGKILL), the staging tables expire on their own and the real
+# tables are untouched.
+$SIG{TERM} = sub {
+  $abort_reason = "Received SIGTERM, aborting export\n";
+  die $abort_reason;
+};
+$SIG{INT} = sub {
+  $abort_reason = "Received SIGINT, aborting export\n";
+  die $abort_reason;
+};
 
-# If we are done, remove the lock
+# Rows are streamed into staging tables and only copied into the real tables
+# by publish_snapshot(), in a single transaction. If anything fails before
+# then, the real tables never see any data for this snapshot date.
+my $already_exported;
+try {
+  # Staging tables left by a run that died are no longer needed
+  drop_orphaned_staging_tables();
+
+  # In order to avoid entering duplicate data, we will first query BigQuery
+  # to make sure other entries with this date are not already present. This
+  # is not an error, since a retry after a run that published and then died
+  # should simply finish.
+  if (snapshot_exists()) {
+    $already_exported = 1;
+    return;
+  }
+
+  create_staging_tables();
+
+  # Process each table to be sent to ETL
+  process_bugs();
+  process_attachments();
+  process_flags();
+  process_flag_activity();
+  process_tracking_flags();
+  process_keywords();
+  process_see_also();
+  process_users();
+
+  process_two_columns(
+    'bug_mentors', 'bug_mentors',
+    ['bug_id', 'user_id'],
+    ['bug_id', 'user_id']
+  );
+  process_two_columns(
+    'dependencies', 'bug_dependencies',
+    ['blocked', 'dependson'],
+    ['bug_id',  'depends_on_id']
+  );
+  process_two_columns(
+    'regressions', 'bug_regressions',
+    ['regresses', 'regressed_by'],
+    ['bug_id',    'regresses_id']
+  );
+  process_two_columns(
+    'duplicates', 'bug_duplicates',
+    ['dupe',   'dupe_of'],
+    ['bug_id', 'duplicate_of_id']
+  );
+
+  publish_snapshot();
+}
+catch {
+  drop_staging_tables();
+  delete_lock();
+  die $_;
+};
+
+if ($already_exported) {
+  logger("Snapshot date $snapshot_date was already exported. Nothing to do.");
+}
+
+# If we are done, remove the staging tables and the lock
+drop_staging_tables();
 delete_lock();
 
 ### Functions
@@ -794,7 +883,6 @@ sub get_cache {
     # First uncompress the JSON and then decode it back to Perl data
     my $data;
     unless (gunzip \$gzipped_data => \$data) {
-      delete_lock();
       die "gunzip failed: $GunzipError\n";
     }
     return decode_json($data);
@@ -822,7 +910,6 @@ sub store_cache {
   # Compress the JSON to save space in the DB
   my $gzipped_data;
   unless (gzip \$data => \$gzipped_data) {
-    delete_lock();
     die "gzip failed: $GzipError\n";
   }
 
@@ -857,14 +944,9 @@ sub send_data {
     $row->{snapshot_date} = $snapshot_date;
   }
 
-  my @json_rows = ();
-  foreach my $row (@{$all_rows}) {
-    push @json_rows, {json => $row};
-  }
-
-  my $big_query = {rows => \@json_rows};
-
   if ($test) {
+    my $big_query = {rows => [map { +{json => $_} } @{$all_rows}]};
+
     my $filename
       = bz_locations()->{'datadir'} . '/'
       . $snapshot_date . '-'
@@ -876,50 +958,50 @@ sub send_data {
     my $fh = path($filename)->open('>>');
     print $fh encode_json($big_query) . "\n";
     unless (close $fh) {
-      delete_lock();
       die "Could not close $filename: $!\n";
     }
 
     return;
   }
 
-  my $http_headers = HTTP::Headers->new;
+  # Stop sending if a signal was received, even if an inner try block
+  # swallowed the die from the signal handler.
+  die $abort_reason if $abort_reason;
 
-  # Do not attempt to get access token if running in test environment
-  if ($base_url !~ /^http:\/\/[^\/]+:9050/) {
-    my $access_token = _get_access_token();
-    $http_headers->header(Authorization => 'Bearer ' . $access_token);
+  my $staging_table = $staging_tables{$table}
+    || die "No staging table for $table\n";
+
+  # Give each row a key that is unique within this run. The HTTP client
+  # resends the whole batch if a request fails after BigQuery accepted it, so
+  # the key lets publish_snapshot() drop those duplicates without merging
+  # rows that are legitimately identical (cleared flags have no id). It is
+  # also sent as insertId so BigQuery drops most duplicates on its own.
+  my $row_num = $sent_counts{$table};
+  my @keyed_rows;
+  foreach my $row (@{$all_rows}) {
+    my $key = "$table-" . $row_num++;
+    push @keyed_rows, {insertId => $key, json => {%{$row}, STAGING_ROW_KEY, $key}};
   }
 
-  my $full_path = sprintf 'projects/%s/datasets/%s/tables/%s/insertAll',
-    $project_id, $dataset_id, $table;
-
-  logger("Sending to $base_url/$full_path", DEBUG_OUTPUT);
-
-  my $request = HTTP::Request->new('POST', "$base_url/$full_path", $http_headers);
-  $request->header('Content-Type' => 'application/json');
-
-  logger('Encoding content into JSON.', DEBUG_OUTPUT);
-
-  $request->content(encode_json($big_query));
-
-  logger('Sending request', DEBUG_OUTPUT);
-
-  my $response = $ua->request($request);
-
-  logger($response->content, DEBUG_OUTPUT);
+  my $content = encode_json({rows => \@keyed_rows});
+  my $response
+    = bq_request('POST', "datasets/$dataset_id/tables/$staging_table/insertAll",
+    $content);
 
   my $result = decode_json($response->content);
 
   if (!$response->is_success
     || (exists $result->{insertErrors} && @{$result->{insertErrors}}))
   {
-    delete_lock();
     die "Google Big Query insert failure:\nRequest:\n"
-      . $request->content
+      . $content
       . "\n\nResponse:\n"
       . $response->content . "\n";
   }
+
+  $sent_counts{$table} += scalar @{$all_rows};
+
+  refresh_lock();
 }
 
 sub _get_access_token {
@@ -951,7 +1033,6 @@ sub _get_access_token {
   my $res = $ua->request($request);
 
   if (!$res->is_success) {
-    delete_lock();
     die 'Google access token failure: ' . $res->content . "\n";
   }
 
@@ -964,42 +1045,313 @@ sub _get_access_token {
   return $access_token;
 }
 
-# If a previous process is performing an export to BigQuery, then
-# we must check the lock table and exit if true.
+# Take the export lock. If another run holds it, wait for that run to
+# finish. A lock that stops being refreshed belongs to a run that died
+# (for example a pod that was killed), so it is removed and taken over.
 sub check_and_set_lock {
   return if $test;    # No need if just dumping test files
 
   logger('Checking for previous lock or setting new one', DEBUG_OUTPUT);
 
   my $dbh_main = Bugzilla->dbh_main;
+  my $waited   = 0;
 
-  # Clear out any locks that are greater than 24h old
-  $dbh_main->do('DELETE FROM bmo_etl_locked WHERE creation_ts < '
-      . $dbh_main->sql_date_math('NOW()', '-', 24, 'HOUR'));
+  while (1) {
+    my $stale
+      = $dbh_main->do(
+      'DELETE FROM bmo_etl_locked WHERE COALESCE(updated_ts, creation_ts) < '
+        . $dbh_main->sql_date_math('NOW()', '-', LOCK_STALE_AFTER / 60, 'MINUTE'));
+    if ($stale > 0) {
+      logger('Removed stale lock left by a previous run that did not finish.');
+    }
 
-  # Now check for any pre-existing locks and do not proceed if one found
-  my $locked = $dbh_main->selectrow_array('SELECT COUNT(*) FROM bmo_etl_locked');
-  if ($locked) {
-    die "Another process has set a lock. Exiting\n";
+    # The unique index on name allows only one lock row, so if two runs get
+    # here at the same time only one insert succeeds.
+    my $inserted = $dbh_main->do(
+      'INSERT IGNORE INTO bmo_etl_locked (value, creation_ts, updated_ts)
+       VALUES (?, NOW(), NOW())', undef, $run_id
+    );
+    if ($inserted > 0) {
+      logger("Set new lock for run $run_id.", DEBUG_OUTPUT);
+      return;
+    }
+
+    # The lock may have been released since the insert. Waiting as usual
+    # keeps this loop bounded if the insert keeps failing for another reason.
+    my $owner = $dbh_main->selectrow_array('SELECT value FROM bmo_etl_locked')
+      // 'unknown';
+
+    if ($waited >= $lock_wait) {
+      die "Another process ($owner) has set a lock. Exiting\n";
+    }
+
+    logger("Export run $owner holds the lock. Waiting.");
+    sleep LOCK_POLL_INTERVAL;
+    $waited += LOCK_POLL_INTERVAL;
+  }
+}
+
+# Refresh the lock so other runs know this one is still alive. Dies if the
+# lock was taken over, which means this run stalled for too long and must
+# not publish. Pass a true value to skip the rate limit.
+sub refresh_lock {
+  my ($force) = @_;
+  return if $test;
+
+  state $last_refresh = 0;
+  return if !$force && time() - $last_refresh < LOCK_REFRESH_EVERY;
+
+  my $updated
+    = Bugzilla->dbh_main->do(
+    'UPDATE bmo_etl_locked SET updated_ts = NOW() WHERE value = ?',
+    undef, $run_id);
+  if ($updated < 1) {
+    die "Lost the export lock to another run. Aborting\n";
   }
 
-  logger('Previous lock not found. Setting new one.', DEBUG_OUTPUT);
-
-  $dbh_main->do(
-    'INSERT INTO bmo_etl_locked (value, creation_ts) VALUES (?, NOW())',
-    undef, 'locked');
+  $last_refresh = time();
 }
 
-# Delete lock from bmo_etl_locked
+# Delete this run's lock from bmo_etl_locked
 sub delete_lock {
+  return if $test;
   logger("Deleting lock in database.");
-  Bugzilla->dbh_main->do('DELETE FROM bmo_etl_locked');
+  Bugzilla->dbh_main->do('DELETE FROM bmo_etl_locked WHERE value = ?',
+    undef, $run_id);
 }
 
-sub check_for_duplicates {
-  return if $test;    # no need if just dumping test files
+# Returns true if BigQuery already has data for this snapshot date
+sub snapshot_exists {
+  return 0 if $test;    # no need if just dumping test files
 
-  logger("Checking for duplicate data for snapshot date $snapshot_date.");
+  logger("Checking for existing data for snapshot date $snapshot_date.");
+
+  # Snapshots are published to all tables at once, so checking bugs is enough
+  my $result
+    = run_bq_query(
+    "SELECT count(*) FROM `${project_id}.${dataset_id}.bugs` WHERE snapshot_date = '$snapshot_date';"
+    );
+
+  return $result->{rows}->[0]->{f}->[0]->{v} ? 1 : 0;
+}
+
+# Drop staging tables left behind by earlier runs that died. This run holds
+# the lock, so no other run is using them.
+sub drop_orphaned_staging_tables {
+  return if $test;
+
+  my @orphans;
+  my $page_token = '';
+  do {
+    my $path = "datasets/$dataset_id/tables?maxResults=1000";
+    $path .= "&pageToken=$page_token" if $page_token;
+
+    my $response = bq_request('GET', $path);
+    if (!$response->is_success) {
+      die "Unable to list tables in $dataset_id: " . $response->content . "\n";
+    }
+
+    my $result = decode_json($response->content);
+    push @orphans,
+      grep { index($_, STAGING_PREFIX) == 0 }
+      map { $_->{tableReference}->{tableId} } @{$result->{tables} || []};
+    $page_token = $result->{nextPageToken};
+  } while ($page_token);
+
+  foreach my $staging_table (@orphans) {
+    logger("Dropping orphaned staging table $staging_table.");
+    my $response
+      = bq_request('DELETE', "datasets/$dataset_id/tables/$staging_table");
+    if (!$response->is_success && $response->code != 404) {
+      die "Unable to drop staging table $staging_table: " . $response->content . "\n";
+    }
+  }
+}
+
+# Create an empty staging table for each real table, with the same schema.
+# The run id keeps names unique, since streaming into a table that was just
+# deleted and recreated with the same name can lose rows.
+sub create_staging_tables {
+  return if $test;
+
+  my $expiration = (time() + STAGING_LIFETIME) * 1000;
+
+  foreach my $table (BQ_TABLES) {
+    my $response = bq_request('GET', "datasets/$dataset_id/tables/$table");
+    if (!$response->is_success) {
+      die "Unable to read schema for $table: " . $response->content . "\n";
+    }
+    my $schema = decode_json($response->content)->{schema};
+
+    my $staging_table = STAGING_PREFIX . "${table}_$run_id";
+    logger("Creating staging table $staging_table.");
+
+    # Staging has one extra column holding the row key set in send_data()
+    my $staging_schema = {fields =>
+        [@{$schema->{fields}}, {name => STAGING_ROW_KEY, type => 'STRING'}]};
+
+    $response = bq_request(
+      'POST',
+      "datasets/$dataset_id/tables",
+      encode_json({
+        tableReference => {
+          projectId => $project_id,
+          datasetId => $dataset_id,
+          tableId   => $staging_table,
+        },
+        schema         => $staging_schema,
+        expirationTime => "$expiration",
+      })
+    );
+    if (!$response->is_success) {
+      die "Unable to create staging table $staging_table: "
+        . $response->content . "\n";
+    }
+
+    $staging_tables{$table} = $staging_table;
+    $table_columns{$table}  = [map { $_->{name} } @{$schema->{fields}}];
+    $sent_counts{$table}    = 0;
+  }
+}
+
+# Copy every staging table into its real table in one transaction, so either
+# the whole snapshot appears or none of it does.
+sub publish_snapshot {
+  return if $test;
+
+  # Make sure every row that was sent is visible in staging before copying.
+  # Streamed rows are normally queryable within a few seconds. Count row keys
+  # rather than rows, since a retried insert can leave duplicates.
+  foreach my $table (BQ_TABLES) {
+    my $staging_table = $staging_tables{$table};
+    my $count;
+    foreach my $attempt (1 .. 6) {
+      my $result = run_bq_query(
+        "SELECT COUNT(DISTINCT " . STAGING_ROW_KEY . ") "
+          . "FROM `${project_id}.${dataset_id}.${staging_table}`;");
+      $count = $result->{rows}->[0]->{f}->[0]->{v} // 0;
+      last if $count == $sent_counts{$table};
+      logger("$staging_table has $count of $sent_counts{$table} rows, waiting.");
+      sleep 10;
+    }
+    if ($count != $sent_counts{$table}) {
+      die "Staging table $staging_table has $count rows "
+        . "but $sent_counts{$table} were sent\n";
+    }
+  }
+
+  logger("Publishing snapshot date $snapshot_date.");
+
+  # snapshot_exists() ran when this run started, but a transaction submitted
+  # by an earlier run can keep going in BigQuery after that run died and
+  # commit later. So every insert also checks for the snapshot, and fails the
+  # whole transaction if it is already there. bugs goes last, since the
+  # check looks at bugs and must not see the rows this transaction adds.
+  my $already_published
+    = "IF(EXISTS(SELECT 1 FROM `${project_id}.${dataset_id}.bugs` "
+    . "WHERE snapshot_date = '$snapshot_date'), "
+    . "ERROR('Snapshot date $snapshot_date was already exported'), TRUE)";
+
+  # Copy one row per row key, so rows sent twice by a retried insert are
+  # only published once
+  my $row_key = STAGING_ROW_KEY;
+  my @statements;
+  foreach my $table ((grep { $_ ne 'bugs' } BQ_TABLES), 'bugs') {
+    my $columns = join ', ', map {"`$_`"} @{$table_columns{$table}};
+    push @statements,
+        "INSERT INTO `${project_id}.${dataset_id}.${table}` ($columns) "
+      . "SELECT $columns FROM (SELECT *, ROW_NUMBER() OVER "
+      . "(PARTITION BY `$row_key`) AS _etl_copy "
+      . "FROM `${project_id}.${dataset_id}.$staging_tables{$table}`) "
+      . "WHERE _etl_copy = 1 AND $already_published;";
+  }
+
+  # Make sure no other run has taken over before making the data visible
+  refresh_lock(1);
+
+  try {
+    run_bq_query(join "\n", 'BEGIN TRANSACTION;',
+      @statements, 'COMMIT TRANSACTION;');
+    logger("Snapshot date $snapshot_date published.");
+  }
+  catch {
+    my $error = $_;
+
+    # The snapshot is there if the guard above fired, or if this run's
+    # transaction committed but waiting for the result failed. Either way
+    # it was published exactly once, so the run has nothing left to do.
+    my $exists = try { snapshot_exists() } catch {0};
+    die $error if !$exists;
+
+    logger("Snapshot date $snapshot_date is already in BigQuery. Nothing to do.");
+  };
+}
+
+# Drop any staging tables created by this run. Failures are only logged,
+# since the tables expire on their own.
+sub drop_staging_tables {
+  foreach my $table (keys %staging_tables) {
+    my $staging_table = delete $staging_tables{$table};
+    logger("Dropping staging table $staging_table.");
+    try {
+      my $response
+        = bq_request('DELETE', "datasets/$dataset_id/tables/$staging_table");
+      if (!$response->is_success && $response->code != 404) {
+        WARN(
+          "ERROR: Unable to drop staging table $staging_table: " . $response->content);
+      }
+    }
+    catch {
+      WARN("ERROR: Unable to drop staging table $staging_table: $_");
+    };
+  }
+}
+
+# Run a SQL statement using the BigQuery jobs.query API and return the
+# decoded response, waiting for long running jobs to finish.
+sub run_bq_query {
+  my ($sql) = @_;
+
+  logger($sql, DEBUG_OUTPUT);
+
+  my $response = bq_request('POST', 'queries',
+    encode_json({query => $sql, useLegacySql => false, timeoutMs => 60000}));
+  if (!$response->is_success) {
+    die 'Google Big Query query failure: ' . $response->content . "\n";
+  }
+
+  my $result = decode_json($response->content);
+  my $waited = 0;
+
+  # The job keeps running in BigQuery after the request times out, so poll
+  # for the result rather than giving up and leaving its outcome unknown.
+  while (!$result->{jobComplete}) {
+    if ($waited >= QUERY_MAX_WAIT) {
+      die "Google Big Query query did not complete in time: $sql\n";
+    }
+
+    my $job      = $result->{jobReference};
+    my $location = $job->{location} ? "&location=$job->{location}" : '';
+    $response = bq_request('GET',
+      "queries/$job->{jobId}?timeoutMs=60000&maxResults=0$location");
+    if (!$response->is_success) {
+      die 'Google Big Query query failure: ' . $response->content . "\n";
+    }
+
+    $result = decode_json($response->content);
+    $waited += 60;
+
+    refresh_lock();
+  }
+
+  logger(encode_json($result), DEBUG_OUTPUT);
+
+  return $result;
+}
+
+# Send a request to the BigQuery API. The path is relative to the project.
+sub bq_request {
+  my ($method, $path, $content) = @_;
 
   my $http_headers = HTTP::Headers->new;
 
@@ -1009,39 +1361,19 @@ sub check_for_duplicates {
     $http_headers->header(Authorization => 'Bearer ' . $access_token);
   }
 
-  my $full_path = "projects/$project_id/queries";
+  my $url = "$base_url/projects/$project_id/$path";
+  logger("$method $url", DEBUG_OUTPUT);
 
-  logger("Querying $base_url/$full_path", DEBUG_OUTPUT);
-
-  my $query = {
-    query =>
-      "SELECT count(*) FROM ${project_id}.${dataset_id}.bugs WHERE snapshot_date = '$snapshot_date';",
-    useLegacySql => false,
-  };
-
-  my $request = HTTP::Request->new('POST', "$base_url/$full_path", $http_headers);
-  $request->header('Content-Type' => 'application/json');
-  $request->content(encode_json($query));
-
-  logger(encode_json($query), DEBUG_OUTPUT);
-
-  my $res = $ua->request($request);
-  if (!$res->is_success) {
-    delete_lock();
-    die 'Google Big Query query failure: ' . $res->content . "\n";
+  my $request = HTTP::Request->new($method, $url, $http_headers);
+  if (defined $content) {
+    $request->header('Content-Type' => 'application/json');
+    $request->content($content);
   }
 
-  logger($res->content, DEBUG_OUTPUT);
+  my $response = $ua->request($request);
+  logger($response->content, DEBUG_OUTPUT);
 
-  my $result = decode_json($res->content);
-
-  my $row_count = $result->{rows}->[0]->{f}->[0]->{v};
-
-  # Do not export if we have any rows with this snapshot date.
-  if ($row_count) {
-    delete_lock();
-    die "Duplicate data found for snapshot date $snapshot_date\n";
-  }
+  return $response;
 }
 
 sub get_multi_group_value {
