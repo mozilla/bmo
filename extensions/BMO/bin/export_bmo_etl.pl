@@ -51,6 +51,10 @@ use constant BQ_TABLES => qw(
 use constant STAGING_PREFIX   => 'etl_staging_';
 use constant STAGING_LIFETIME => 2 * 24 * 60 * 60;    # two days
 
+# Extra staging column holding a per-row key, used to drop rows that were
+# sent twice when an insert request was retried
+use constant STAGING_ROW_KEY => q(_etl_row);
+
 # How long to wait for a BigQuery query (such as the publish transaction)
 use constant QUERY_MAX_WAIT => 60 * 60;               # one hour
 
@@ -940,14 +944,9 @@ sub send_data {
     $row->{snapshot_date} = $snapshot_date;
   }
 
-  my @json_rows = ();
-  foreach my $row (@{$all_rows}) {
-    push @json_rows, {json => $row};
-  }
-
-  my $big_query = {rows => \@json_rows};
-
   if ($test) {
+    my $big_query = {rows => [map { +{json => $_} } @{$all_rows}]};
+
     my $filename
       = bz_locations()->{'datadir'} . '/'
       . $snapshot_date . '-'
@@ -972,7 +971,19 @@ sub send_data {
   my $staging_table = $staging_tables{$table}
     || die "No staging table for $table\n";
 
-  my $content = encode_json($big_query);
+  # Give each row a key that is unique within this run. The HTTP client
+  # resends the whole batch if a request fails after BigQuery accepted it, so
+  # the key lets publish_snapshot() drop those duplicates without merging
+  # rows that are legitimately identical (cleared flags have no id). It is
+  # also sent as insertId so BigQuery drops most duplicates on its own.
+  my $row_num = $sent_counts{$table};
+  my @keyed_rows;
+  foreach my $row (@{$all_rows}) {
+    my $key = "$table-" . $row_num++;
+    push @keyed_rows, {insertId => $key, json => {%{$row}, STAGING_ROW_KEY, $key}};
+  }
+
+  my $content = encode_json({rows => \@keyed_rows});
   my $response
     = bq_request('POST', "datasets/$dataset_id/tables/$staging_table/insertAll",
     $content);
@@ -1175,6 +1186,10 @@ sub create_staging_tables {
     my $staging_table = STAGING_PREFIX . "${table}_$run_id";
     logger("Creating staging table $staging_table.");
 
+    # Staging has one extra column holding the row key set in send_data()
+    my $staging_schema = {fields =>
+        [@{$schema->{fields}}, {name => STAGING_ROW_KEY, type => 'STRING'}]};
+
     $response = bq_request(
       'POST',
       "datasets/$dataset_id/tables",
@@ -1184,7 +1199,7 @@ sub create_staging_tables {
           datasetId => $dataset_id,
           tableId   => $staging_table,
         },
-        schema         => $schema,
+        schema         => $staging_schema,
         expirationTime => "$expiration",
       })
     );
@@ -1205,13 +1220,15 @@ sub publish_snapshot {
   return if $test;
 
   # Make sure every row that was sent is visible in staging before copying.
-  # Streamed rows are normally queryable within a few seconds.
+  # Streamed rows are normally queryable within a few seconds. Count row keys
+  # rather than rows, since a retried insert can leave duplicates.
   foreach my $table (BQ_TABLES) {
     my $staging_table = $staging_tables{$table};
     my $count;
     foreach my $attempt (1 .. 6) {
       my $result = run_bq_query(
-        "SELECT count(*) FROM `${project_id}.${dataset_id}.${staging_table}`;");
+        "SELECT COUNT(DISTINCT " . STAGING_ROW_KEY . ") "
+          . "FROM `${project_id}.${dataset_id}.${staging_table}`;");
       $count = $result->{rows}->[0]->{f}->[0]->{v} // 0;
       last if $count == $sent_counts{$table};
       logger("$staging_table has $count of $sent_counts{$table} rows, waiting.");
@@ -1235,13 +1252,18 @@ sub publish_snapshot {
     . "WHERE snapshot_date = '$snapshot_date'), "
     . "ERROR('Snapshot date $snapshot_date was already exported'), TRUE)";
 
+  # Copy one row per row key, so rows sent twice by a retried insert are
+  # only published once
+  my $row_key = STAGING_ROW_KEY;
   my @statements;
   foreach my $table ((grep { $_ ne 'bugs' } BQ_TABLES), 'bugs') {
     my $columns = join ', ', map {"`$_`"} @{$table_columns{$table}};
     push @statements,
         "INSERT INTO `${project_id}.${dataset_id}.${table}` ($columns) "
-      . "SELECT $columns FROM `${project_id}.${dataset_id}.$staging_tables{$table}` "
-      . "WHERE $already_published;";
+      . "SELECT $columns FROM (SELECT *, ROW_NUMBER() OVER "
+      . "(PARTITION BY `$row_key`) AS _etl_copy "
+      . "FROM `${project_id}.${dataset_id}.$staging_tables{$table}`) "
+      . "WHERE _etl_copy = 1 AND $already_published;";
   }
 
   # Make sure no other run has taken over before making the data visible
