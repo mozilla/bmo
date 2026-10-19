@@ -425,7 +425,7 @@ sub render_comment {
 
   my $result = {html => $html};
   Bugzilla::Hook::process('webservice_bug_render_comment',
-    {webservice => $self, params => $params, result => $result});
+    {webservice => $self, bug => $bug, params => $params, result => $result});
 
   return $result;
 }
@@ -5429,10 +5429,10 @@ C<int> The ID of the bug to render the comment against.
 C<html> containing the HTML rendering.
 
 Extensions can add params and return values through the
-C<webservice_bug_render_comment> hook. The Needinfo extension accepts
-C<mention_bug_id> and C<mention_is_private> and returns C<mentions>, an array
-of C<nick>/C<name> hashes for the users that saving the comment on that bug
-would CC and needinfo.
+C<webservice_bug_render_comment> hook. When C<id> is given, the Needinfo
+extension accepts C<include_mentions> and C<mention_is_private> and returns
+C<mentions>, an array of C<nick>/C<name> hashes for the users that saving the
+comment on that bug would CC and needinfo.
 
 =item B<Errors>
 

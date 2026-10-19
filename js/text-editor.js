@@ -773,7 +773,8 @@ Bugzilla.CommentEditor = class CommentEditor extends Bugzilla.TextEditor {
 
   /**
    * Get the params sent to the comment render API when previewing. A new comment on an existing
-   * bug also asks for the users its `@nickname` mentions will CC and needinfo.
+   * bug is rendered against that bug, and also asks for the users its `@nickname` mentions will
+   * CC and needinfo.
    * @returns {Record<string, any>} Params.
    */
   getPreviewParams() {
@@ -782,7 +783,8 @@ Bugzilla.CommentEditor = class CommentEditor extends Bugzilla.TextEditor {
     const bugId = BUGZILLA.bug_id ?? form?.elements.namedItem('bugid')?.value;
 
     if (bugId && this.$textarea.name === 'comment') {
-      params.mention_bug_id = bugId;
+      params.id = bugId;
+      params.include_mentions = true;
       params.mention_is_private = !!(
         form?.elements.namedItem('comment_is_private')?.checked ||
         form?.elements.namedItem('isprivate')?.checked

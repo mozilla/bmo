@@ -359,6 +359,8 @@ sub _mentioned_users {
 #   commit messages, code or logs can't CC people by accident
 # - only editbugs users can trigger mentions; for everyone else they are text
 # - only the first MAX_MENTIONS distinct nicknames per update are processed
+# - mass edits are skipped, since the same comment lands on every bug and
+#   would CC and needinfo each mentioned user once per bug
 # - users who can't already see the bug are skipped, so a mention (or a typo,
 #   or a squatted nickname) can never grant access to a restricted bug; that
 #   includes groups being added to the bug in this same update
@@ -367,6 +369,7 @@ sub _mentioned_users {
 sub _process_mentions {
   my ($bug, $old_bug) = @_;
   return unless Bugzilla->usage_mode == USAGE_MODE_BROWSER;
+  return if _is_mass_edit();
 
   my @mentioned
     = _mentioned_users($bug, $bug->{added_comments} || [], $old_bug);
@@ -389,6 +392,12 @@ sub _process_mentions {
   }
 }
 
+# process_bug.cgi takes a single bug as `id` and a mass edit as `id_<bug id>`
+# params, one per bug.
+sub _is_mass_edit {
+  return grep {/^id_[1-9]/} Bugzilla->cgi->param;
+}
+
 sub _cc_and_needinfo {
   my ($bug, $mentioned, $type) = @_;
   $bug->add_cc($mentioned);
@@ -408,14 +417,14 @@ sub _cc_and_needinfo {
 
 # Lets the comment preview list who saving the comment would CC and needinfo,
 # so a stray @word is caught before the comment is submitted. The comment
-# editor sends mention_bug_id (and mention_is_private) only for new comments
-# on an existing bug, the only case _process_mentions handles.
+# editor sends include_mentions (and mention_is_private) along with the bug id
+# only for new comments on an existing bug, the only case _process_mentions
+# handles.
 sub webservice_bug_render_comment {
   my ($self, $args) = @_;
-  my $params = $args->{params};
-  return unless $params->{mention_bug_id};
+  my ($bug, $params) = @$args{qw(bug params)};
+  return unless $bug && $params->{include_mentions};
 
-  my $bug = Bugzilla::Bug->check($params->{mention_bug_id});
   my @mentioned = _mentioned_users($bug,
     [{thetext => $params->{text}, isprivate => $params->{mention_is_private}}]);
 
