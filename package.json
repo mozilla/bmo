@@ -8,7 +8,7 @@
   "scripts": {
     "build": "node scripts/build-frontend.mjs"
   },
-  "//": "The generated files are not committed; the Docker assets stage builds them from this lockfile. Dependabot proposes upgrades and CI tests them with no regeneration step needed; treat majors (jquery 4.x, mermaid 11.x, devbridge 2.x) as manual, tested reviews. A bump now moves a library's stylesheet along with its script, so review upgrades for visual changes too. bpopup is not published to npm and remains vendored under js/jquery/plugins/bPopup/.",
+  "//": "The generated files are not committed; the Docker assets stage builds them from this lockfile. Dependabot proposes upgrades and CI tests them with no regeneration step needed; treat majors (jquery 4.x, mermaid 13.x, devbridge 2.x) as manual, tested reviews. A bump now moves a library's stylesheet along with its script, so review upgrades for visual changes too. bpopup is not published to npm and remains vendored under js/jquery/plugins/bPopup/.",
   "dependencies": {
     "blueimp-md5": "2.19.0",
     "devbridge-autocomplete": "2.0.1",
@@ -16,7 +16,7 @@
     "jquery-contextmenu": "2.10.2",
     "jquery-datetimepicker": "2.5.21",
     "jquery-ui-dist": "1.13.3",
-    "mermaid": "10.9.8",
+    "mermaid": "12.2.0",
     "prismjs": "1.30.0"
   }
 }

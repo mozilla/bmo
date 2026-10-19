@@ -182,8 +182,7 @@ $sel->is_element_present_ok(
 # Now move the bug into the 'Another Product' product.
 # Both the bug and attachment flags should survive.
 
-$sel->select_ok("product",   "label=Another Product");
-$sel->select_ok("component", "label=c1");
+change_product($sel, "Another Product", "c1");
 $sel->type_ok("comment",
   "Moving to Another Product / c1. The flag should be preserved.");
 $sel->click_ok('bottom-save-btn');
@@ -315,8 +314,7 @@ $sel->selected_label_is("flag-$flag2_id", "+");
 # But moving the bug into TestProduct will delete the flag
 # as the flag setter is not in the editbugs group.
 
-$sel->select_ok("product",   "label=TestProduct");
-$sel->select_ok("component", "label=TestComponent");
+change_product($sel, "TestProduct", "TestComponent");
 $sel->type_ok("comment",
   "selenium flag will be lost. I don't have editbugs privs.");
 $sel->click_ok('bottom-save-btn');
@@ -361,3 +359,22 @@ foreach my $flagtype (
     "Flag type $flag_name deleted");
 }
 logout($sel);
+
+# On the bug page, changing the product disables the component select and
+# reloads its options asynchronously, so wait for the wanted component before
+# selecting it.
+sub change_product {
+  my ($sel, $product, $component) = @_;
+  $sel->select_ok("product", "label=$product");
+  ok(
+    wait_for_js(
+      $sel, qq{
+        const select = document.getElementById('component');
+        return !select.disabled
+          && [...select.options].some(o => o.text === '$component');
+      }
+    ),
+    "Components of $product are loaded"
+  );
+  $sel->select_ok("component", "label=$component");
+}

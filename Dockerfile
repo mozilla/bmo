@@ -2,7 +2,7 @@
 # from the versions pinned in package-lock.json. These files are not committed
 # to the repository; this stage is their only source. Node lives only here, so
 # the runtime image stays Node-free.
-FROM node:20-slim AS assets
+FROM node:22-slim AS assets
 
 WORKDIR /build
 COPY package.json package-lock.json ./

@@ -95,15 +95,3 @@ sub check_autocomplete {
       "$desc suggestions stay hidden after the field loses focus");
   }
 }
-
-# Poll a script returning a true value for up to 5 seconds.
-sub wait_for_js {
-  my ($sel, $script) = @_;
-  my $result;
-  for (0 .. 50) {
-    $result = $sel->driver->execute_script($script);
-    last if $result;
-    select(undef, undef, undef, 0.1);
-  }
-  return $result;
-}

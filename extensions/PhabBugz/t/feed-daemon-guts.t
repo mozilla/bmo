@@ -130,6 +130,64 @@ foreach my $bad_response (@bad_response) {
   $UserAgent->reset('post');
 }
 
+# `feed_lag_seconds` reports the age of the oldest unprocessed story.
+{
+  my $now = 1_000_000;
+
+  is(Bugzilla::Extension::PhabBugz::Feed::feed_lag_seconds([], $now),
+    0, '`feed_lag_seconds` is 0 when there are no new stories.');
+
+  is(
+    Bugzilla::Extension::PhabBugz::Feed::feed_lag_seconds(
+      [{id => 1, epoch => $now - 600}, {id => 2, epoch => $now - 60}], $now
+    ),
+    600,
+    '`feed_lag_seconds` uses the epoch of the oldest story.'
+  );
+
+  is(
+    Bugzilla::Extension::PhabBugz::Feed::feed_lag_seconds(
+      [{id => 1, epoch => $now + 30}], $now
+    ),
+    0,
+    '`feed_lag_seconds` does not go negative when clocks are skewed.'
+  );
+}
+
+# `feed_query` sends lag gauges before processing, even if a story fails.
+{
+  my %gauges;
+  my $datadog = mock {} => (
+    add => [
+      gauge     => sub { my ($self, $name, $value) = @_; $gauges{$name} = $value },
+      increment => sub { },
+    ]
+  );
+  my $Bugzilla = mock 'Bugzilla' => (override => [datadog => sub {$datadog}]);
+
+  my $oldest_epoch = time - 900;
+  my $Feed         = mock 'Bugzilla::Extension::PhabBugz::Feed' => (
+    override => [
+      get_last_id => sub {5},
+      new_stories => sub { [
+        {id => 6, epoch => $oldest_epoch,     text => 'story 6'},
+        {id => 7, epoch => $oldest_epoch + 1, text => 'story 7'},
+      ] },
+      _process_feed_story => sub { die "poison story\n" },
+    ]
+  );
+
+  my $error;
+  try { Bugzilla::Extension::PhabBugz::Feed->new->feed_query }
+  catch { $error = $_ };
+
+  is($error, "poison story\n", '`feed_query` propagates the story failure.');
+  cmp_ok($gauges{'bugzilla.phabbugz.feed_lag_seconds'},
+    '>=', 900, '`feed_lag_seconds` gauge is sent before the failing story.');
+  is($gauges{'bugzilla.phabbugz.feed_pending_stories'},
+    2, '`feed_pending_stories` gauge counts the fetched stories.');
+}
+
 my $feed = Bugzilla::Extension::PhabBugz::Feed->new;
 my $json = JSON::MaybeXS->new(canonical => 1, pretty => 1);
 my $dylan

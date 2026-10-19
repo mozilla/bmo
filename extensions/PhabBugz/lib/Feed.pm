@@ -12,7 +12,7 @@ use 5.10.1;
 use IO::Async::Timer::Periodic;
 use IO::Async::Loop;
 use IO::Async::Signal;
-use List::Util qw(first);
+use List::Util qw(first max);
 use List::MoreUtils qw(uniq);
 use Moo;
 use Try::Tiny;
@@ -150,6 +150,9 @@ sub feed_query {
   my $new_stories = $self->new_stories($story_last_id);
   INFO("No new stories") unless @$new_stories;
 
+  # Report lag before processing so the gauge keeps rising if a story fails.
+  $self->report_feed_lag($new_stories);
+
   # Process each story
   foreach my $story_data (@$new_stories) {
     my $story_id    = $story_data->{id};
@@ -174,6 +177,25 @@ sub feed_query {
     my $dd = Bugzilla->datadog();
     $dd->increment('bugzilla.phabbugz.feed_query_count');
   }
+}
+
+sub report_feed_lag {
+  my ($self, $new_stories) = @_;
+
+  my $lag = feed_lag_seconds($new_stories, time);
+  INFO("FEED_LAG_SECONDS: $lag");
+
+  if (my $dd = Bugzilla->datadog) {
+    $dd->gauge('bugzilla.phabbugz.feed_lag_seconds',     $lag);
+    $dd->gauge('bugzilla.phabbugz.feed_pending_stories', scalar @$new_stories);
+  }
+}
+
+# Return the age in seconds of the oldest unprocessed story, or 0 when caught up.
+sub feed_lag_seconds {
+  my ($new_stories, $now) = @_;
+  return 0 unless @$new_stories && $new_stories->[0]{epoch};
+  return max(0, $now - $new_stories->[0]{epoch});
 }
 
 sub user_query {

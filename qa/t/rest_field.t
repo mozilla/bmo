@@ -191,4 +191,23 @@ foreach my $test (@all_tests) {
   }
 }
 
+# A field in the path is combined with the ones from the query string.
+$t->get_ok(
+  $url . 'rest/field/bug/bug_status?names=priority' => api_headers(undef))
+  ->status_is(200);
+is_deeply(
+  [sort map { $_->{name} } @{$t->tx->res->json->{fields}}],
+  ['bug_status', 'priority'],
+  'Field names from the path and the query string are combined'
+);
+
+$t->get_ok(
+  $url . 'rest/field/bug/priority?include_fields=id,name' => api_headers(undef))
+  ->status_is(200);
+is_deeply(
+  [sort keys %{$t->tx->res->json->{fields}[0]}],
+  ['id', 'name'],
+  'include_fields filters the returned keys'
+);
+
 done_testing();

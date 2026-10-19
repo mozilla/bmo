@@ -146,56 +146,6 @@ sub _rest_resources {
           return {ids => [$_[0]]};
         }
       }
-    },
-    qr{^/field/bug$},
-    {GET => {method => 'fields',}},
-    qr{^/field/bug/([^/]+)$},
-    {
-      GET => {
-        method => 'fields',
-        params => sub {
-          my $value = $_[0];
-          my $param = 'names';
-          $param = 'ids' if $value =~ /^\d+$/;
-          return {$param => [$_[0]]};
-        }
-      }
-    },
-    qr{^/field/bug/([^/]+)/values$},
-    {
-      GET => {
-        method => 'legal_values',
-        params => sub {
-          return {field => $_[0]};
-        }
-      }
-    },
-    qr{^/field/bug/([^/]+)/([^/]+)/values$},
-    {
-      GET => {
-        method => 'legal_values',
-        params => sub {
-          return {field => $_[0], product_id => $_[1]};
-        }
-      }
-    },
-    qr{^/flag_types/([^/]+)/([^/]+)$},
-    {
-      GET => {
-        method => 'flag_types',
-        params => sub {
-          return {product => $_[0], component => $_[1]};
-        }
-      }
-    },
-    qr{^/flag_types/([^/]+)$},
-    {
-      GET => {
-        method => 'flag_types',
-        params => sub {
-          return {product => $_[0]};
-        }
-      }
     }
   ];
   return $rest_resources;

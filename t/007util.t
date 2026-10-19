@@ -15,7 +15,7 @@ use warnings;
 
 use lib qw(. lib local/lib/perl5 t);
 use Support::Files;
-use Test::More tests => 57;
+use Test::More tests => 58;
 use DateTime;
 
 BEGIN {
@@ -169,8 +169,9 @@ $past = $now->clone->subtract(months => 1);
 like(time_ago($past), qr/^(1 month|(2[89]|3[01]) days) ago$/, 'time_ago(DateTime 1 month ago) is reasonable');
 
 # mermaid_quote():
-is(mermaid_quote('foo(bar)'),    'foo#40;bar#41;', 'mermaid_quote: parens');
-is(mermaid_quote('foo[bar]'),    'foo#91;bar#93;', 'mermaid_quote: brackets');
-is(mermaid_quote('foo"bar"'),    'foo#34;bar#34;', 'mermaid_quote: double quotes');
-is(mermaid_quote('<script>'),    '#60;script#62;', 'mermaid_quote: angle brackets (html injection)');
-is(mermaid_quote('no specials'), 'no specials',    'mermaid_quote: passthrough');
+is(mermaid_quote('foo(bar)'),    'foo#40;bar#41;',    'mermaid_quote: parens');
+is(mermaid_quote('foo[bar]'),    'foo#91;bar#93;',    'mermaid_quote: brackets');
+is(mermaid_quote('foo"bar"'),    'foo#34;bar#34;',    'mermaid_quote: double quotes');
+is(mermaid_quote('<script>'),    '#60;script#62;',    'mermaid_quote: angle brackets (html injection)');
+is(mermaid_quote('$$x$$'),       '#36;#36;x#36;#36;', 'mermaid_quote: dollar signs (katex math)');
+is(mermaid_quote('no specials'), 'no specials',       'mermaid_quote: passthrough');

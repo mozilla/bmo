@@ -118,4 +118,9 @@ foreach my $test (@all_tests) {
   }
 }
 
+$t->get_ok($url . "rest/field/bug/version/values?product_id=$public_product" =>
+    api_headers(undef))->status_is(200);
+cmp_ok(scalar @{$t->tx->res->json->{values}},
+  '>', 0, 'product_id can be passed as a query parameter');
+
 done_testing();

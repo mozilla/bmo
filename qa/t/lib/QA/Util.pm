@@ -59,6 +59,7 @@ use base qw(Exporter);
 
   get_selenium
   check_page_load
+  wait_for_js
 
   WAIT_TIME
   CHROME_MODE
@@ -326,6 +327,19 @@ sub expand_all_modules {
     ok(0, 'Module expand animation finished within 5s');
     diag("$animating element(s) still animating; later get_text calls may return ''");
   }
+}
+
+# Poll a script returning a true value for up to 5 seconds, for page content
+# that is updated asynchronously. Returns the script's last result.
+sub wait_for_js {
+  my ($sel, $script) = @_;
+  my $result;
+  for (0 .. 50) {
+    $result = $sel->driver->execute_script($script);
+    last if $result;
+    select(undef, undef, undef, 0.1);
+  }
+  return $result;
 }
 
 # Go to admin.cgi.
