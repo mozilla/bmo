@@ -19,7 +19,6 @@ use lib "$FindBin::Bin/lib";
 use Bugzilla;
 BEGIN { Bugzilla->extensions }
 
-use Storable qw(dclone);
 use Test::More;
 use Test2::Tools::Exception qw(dies);
 use Try::Tiny;

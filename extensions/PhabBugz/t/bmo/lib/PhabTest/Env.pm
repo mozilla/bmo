@@ -235,10 +235,13 @@ sub bug {
   return Bugzilla::Bug->new($bug->id);
 }
 
+# A saved feed cursor is always a story the daemon already processed, so
+# tell the fake Conduit it exists.
 sub save_cursor {
   my ($self, $type, $value) = @_;
   Bugzilla->dbh->do('REPLACE INTO phabbugz (name, value) VALUES (?, ?)',
     undef, "${type}_last_id", $value);
+  $self->{conduit}->add_seen_story($value) if $type eq 'feed' && $value;
 }
 
 sub cursor {

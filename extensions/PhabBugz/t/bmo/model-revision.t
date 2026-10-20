@@ -23,7 +23,6 @@ BEGIN { Bugzilla->extensions }
 use Digest::SHA qw(sha1_hex);
 use Storable    qw(dclone);
 use Test::More;
-use Try::Tiny;
 
 use Bugzilla::Extension::PhabBugz::Policy;
 use Bugzilla::Extension::PhabBugz::Revision;
@@ -108,7 +107,7 @@ sub load { return Revision->new_from_query({phids => [$raw->{phid}]}) }
   my $no_bug
     = $conduit->add_revision(revision_obj(author_phid => $author_phab->{phid}));
   is(Revision->new_from_query({phids => [$no_bug->{phid}]})->bug_id,
-    '', 'missing bug id becomes an empty string');
+    '', 'null bug id becomes an empty string');
 }
 
 # Constructor maps Conduit fields
@@ -202,7 +201,8 @@ sub load { return Revision->new_from_query({phids => [$raw->{phid}]}) }
   is($conduit->call_count('diffusion.repository.search'),
     1, 'repository fetched once per request');
 
-  my $no_repo = Revision->new(revision_obj(author_phid => $author_phab->{phid}));
+  my $no_repo = Revision->new(
+    revision_obj(author_phid => $author_phab->{phid}, bug_id => ''));
   $conduit->reset_calls;
   is($no_repo->repository, undef, 'revision without a repository');
   is($conduit->call_count, 0,     'no Conduit call without a repository PHID');
@@ -244,6 +244,7 @@ sub load { return Revision->new_from_query({phids => [$raw->{phid}]}) }
   my $child   = $raw->{phid};
   my $stacked = Revision->new(revision_obj(
     phid        => $child,
+    bug_id      => '',
     author_phid => $author_phab->{phid},
     stack_graph => {$child => [$parent], $parent => []},
   ));
@@ -404,8 +405,8 @@ sub load { return Revision->new_from_query({phids => [$raw->{phid}]}) }
     'Risk to taking this patch' => 'medium',
     'String changes made?'      => 'no',
   };
-  my $revision
-    = Revision->new(revision_obj(author_phid => 'x', uplift_request => $form));
+  my $revision = Revision->new(revision_obj(
+    author_phid => 'x', bug_id => '', uplift_request => $form));
 
   # Perl hash order is random per process, so the hash only matches this
   # hand-written, key-sorted JSON if the encoder sorts keys.

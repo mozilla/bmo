@@ -158,7 +158,7 @@ sub revision_obj {
         view => $args{view_policy} // 'public',
         edit => $args{edit_policy} // 'users',
       },
-      'bugzilla.bug-id' => $args{bug_id}         // '',
+      'bugzilla.bug-id' => $args{bug_id},    # Conduit sends null when unset
       'uplift.request'  => $args{uplift_request} // [],
       stackGraph        => $args{stack_graph}    // {$phid => []},
     },

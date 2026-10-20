@@ -345,8 +345,9 @@ sub phab_attachments {
   story(object_phid => $raw->{phid}, text => updated_text($raw));
   ok(!run_feed(), 'story after a group was added to the bug');
   my ($recreate) = $conduit->calls('policy.create');
+  ok($recreate, 'policy recreated');
   is_deeply(
-    [sort @{$recreate->{policy}[-1]{value}}],
+    [sort @{$recreate ? $recreate->{policy}[-1]{value} : []}],
     [sort $project->{phid}, $project2->{phid}],
     'new policy covers both groups'
   );
@@ -432,6 +433,10 @@ TODO: {
     repository_phid => $repo->{phid},
     uplift_request  => $form,
   );
+  $env->on_teardown(sub {
+    $dbh->do('DELETE FROM phab_uplift_form_state WHERE revision_phid = ?',
+      undef, $raw->{phid});
+  });
 
   start_scenario();
   story(
@@ -464,11 +469,7 @@ TODO: {
   );
 
   my ($qe) = grep { $_->name eq 'qe-verify' } @{$fresh->flags};
-SKIP: {
-    skip 'qe-verify flag type is not available for Firefox', 1
-      unless Bugzilla::FlagType->new({name => 'qe-verify'});
-    is($qe ? $qe->status : '', '+', 'qe-verify+ set when manual QE is needed');
-  }
+  is($qe ? $qe->status : '', '+', 'qe-verify+ set when manual QE is needed');
 
   my ($hash)
     = $dbh->selectrow_array(
@@ -491,23 +492,39 @@ SKIP: {
     'form not copied again'
   );
   is(scalar(phab_attachments($bug->id)), 1, 'normal sync ran');
-
-  $dbh->do('DELETE FROM phab_uplift_form_state WHERE revision_phid = ?',
-    undef, $raw->{phid});
 }
 
-# feed.query_id reports an invalid cursor: retry with the next id
+# feed.query_id reports an invalid cursor: retry with the next id until it
+# names a story. Like Conduit, that story is the new `after` and is not
+# returned itself, only the ones after it.
 {
   my $cursor = start_scenario();
-  my $story  = story(object_phid => 'PHID-TASK-retry', gap => 2);
   $conduit->queue('feed.query_id' => cursor_invalid($cursor));
+  my $anchor = story(object_phid => 'PHID-TASK-anchor', gap => 2);
+  my $story  = story(object_phid => 'PHID-TASK-retry');
   ok(!run_feed(), 'feed_query recovers from an invalid cursor');
   is_deeply(
     [map { $_->{after} } $conduit->calls('feed.query_id')],
-    [$cursor, $cursor + 1],
-    'retried with after + 1'
+    [$cursor, $cursor + 1, $anchor->{id}],
+    'retried with after + 1 until it named a story'
   );
   is($env->cursor('feed'), $story->{id}, 'story after the gap processed');
+}
+
+# One page of stories per run; the rest come on the next run
+{
+  my $cursor  = start_scenario();
+  my @stories = map { story(object_phid => "PHID-TASK-page$_") } 1 .. 3;
+  my $guard   = $conduit->local_page_size(2);
+  ok(!run_feed(), 'first page of stories');
+  is($env->cursor('feed'), $stories[1]{id}, 'cursor at the end of the page');
+  ok(!run_feed(), 'second page of stories');
+  is_deeply(
+    [map { $_->{after} } $conduit->calls('feed.query_id')],
+    [$stories[1]{id}],
+    'second run continues from the saved cursor'
+  );
+  is($env->cursor('feed'), $stories[2]{id}, 'cursor at the last story');
 }
 
 # ... but gives up after PHAB_FEED_MAX_RETRIES

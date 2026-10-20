@@ -147,22 +147,27 @@ sub revision_for {
 
 # set_bug_assignee
 {
-  my $bug      = $env->bug;
-  my $initial  = $bug->bug_status;
-  my $revision = revision_for($bug, reviewers => [{phid => $alice_phab->{phid}}]);
-  set_bug_assignee($revision, $bug, 'author updated D1');
-  $bug->update;
-  $bug = Bugzilla::Bug->new($bug->id);
-  is($bug->assigned_to->id, $author->id,
-    'unassigned bug is assigned to the author');
-
-  # Only NEW and UNCONFIRMED bugs move to ASSIGNED; BMO files bugs as
-  # CONFIRMED, which is left alone.
-  is(
-    $bug->bug_status,
-    ($initial =~ /^(?:NEW|UNCONFIRMED)$/ ? 'ASSIGNED' : $initial),
-    "bug status after assignment (was $initial)"
-  );
+  # Only NEW and UNCONFIRMED bugs move to ASSIGNED. Set the status directly
+  # so the cases do not depend on the status Bug->create picks.
+  foreach my $case (
+    ['NEW',         'ASSIGNED'],
+    ['UNCONFIRMED', 'ASSIGNED'],
+    ['REOPENED',    'REOPENED']
+    )
+  {
+    my ($initial, $expected) = @$case;
+    my $bug = $env->bug;
+    $dbh->do('UPDATE bugs SET bug_status = ? WHERE bug_id = ?',
+      undef, $initial, $bug->id);
+    $bug = Bugzilla::Bug->new($bug->id);
+    my $revision = revision_for($bug, reviewers => [{phid => $alice_phab->{phid}}]);
+    set_bug_assignee($revision, $bug, 'author updated D1');
+    $bug->update;
+    $bug = Bugzilla::Bug->new($bug->id);
+    is($bug->assigned_to->id, $author->id,
+      "unassigned $initial bug is assigned to the author");
+    is($bug->bug_status, $expected, "$initial bug becomes $expected");
+  }
 
   my $no_reviews = $env->bug;
   set_bug_assignee(revision_for($no_reviews), $no_reviews, 'author updated D1');

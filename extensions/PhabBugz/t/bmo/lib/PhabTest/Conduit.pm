@@ -83,6 +83,7 @@ sub new {
     repos      => [],
     policies   => [],
     stories    => [],
+    seen_story => {1 => 1},
     xactions   => {},
     edges      => [],
   }, $class;
@@ -195,6 +196,15 @@ sub add_policy {
 sub add_story {
   my ($self, $obj) = @_;
   return $self->_add(stories => $obj);
+}
+
+# Record that a feed story with this id exists in Phabricator but is not
+# served (it was processed before the test). feed.query_id accepts it as an
+# `after` cursor. Story 1, new_stories' default cursor, is always known.
+sub add_seen_story {
+  my ($self, $id) = @_;
+  $self->{seen_story}{$id} = 1;
+  return $self;
 }
 
 sub _add {
@@ -669,14 +679,21 @@ sub reply_policy_create {
   return {phid => $policy->{phid}};
 }
 
+# Like feed.query_id, `after` must be the id of an existing story, otherwise
+# the call fails and Feed::new_stories retries with the next id. Returns the
+# oldest page_size stories after it (newest first), so the rest come back on
+# the next run.
 sub reply_feed_query_id {
   my ($self, $params) = @_;
   my $after = $params->{after} // 0;
-  return search_result([
-    map { dclone($_) }
-      reverse sort { $a->{id} <=> $b->{id} }
-      grep         { $_->{id} > $after } @{$self->{stories}}
-  ]);
+  return cursor_invalid($after)
+    unless $self->{seen_story}{$after}
+    || first { $_->{id} == $after } @{$self->{stories}};
+
+  my @stories = sort { $a->{id} <=> $b->{id} }
+    grep { $_->{id} > $after } @{$self->{stories}};
+  splice(@stories, $self->{page_size}) if @stories > $self->{page_size};
+  return search_result([map { dclone($_) } reverse @stories]);
 }
 
 sub reply_transaction_search {
