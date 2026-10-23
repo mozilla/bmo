@@ -91,6 +91,7 @@ use Memoize;
 
   RELATIONSHIPS
   REL_ASSIGNEE REL_QA REL_REPORTER REL_CC REL_GLOBAL_WATCHER
+  REL_FLAG_REQUESTEE REL_FLAG_REQUESTER REL_FLAG_TYPE_CC
   REL_ANY
 
   POS_EVENTS
@@ -357,14 +358,21 @@ use constant REL_CC       => 3;
 # REL 4 was REL_VOTER, before it was moved ino an extension.
 use constant REL_GLOBAL_WATCHER => 5;
 
+# Bug 1883428: recipients added because of a flag change, independently of
+# any other role they may hold on the bug.
+use constant REL_FLAG_REQUESTEE => 6;    # A flag was requested of them
+use constant REL_FLAG_REQUESTER => 7;    # Their flag request was granted/denied
+use constant REL_FLAG_TYPE_CC   => 8;    # On the flag type's admin-configured cc_list
+
 # We need these strings for the X-Bugzilla-Reasons header
 # Note: this hash uses "," rather than "=>" to avoid auto-quoting of the LHS.
 # This should be accessed through Bugzilla::BugMail::relationships() instead
 # of being accessed directly.
 use constant RELATIONSHIPS => {
-  REL_ASSIGNEE,       "AssignedTo", REL_REPORTER, "Reporter",
-  REL_QA,             "QAcontact",  REL_CC,       "CC",
-  REL_GLOBAL_WATCHER, "GlobalWatcher"
+  REL_ASSIGNEE,       "AssignedTo",       REL_REPORTER,       "Reporter",
+  REL_QA,              "QAcontact",       REL_CC,             "CC",
+  REL_GLOBAL_WATCHER,  "GlobalWatcher",   REL_FLAG_REQUESTEE, "FlagRequestee",
+  REL_FLAG_REQUESTER,  "FlagRequester",   REL_FLAG_TYPE_CC,   "FlagTypeCC"
 };
 
 # Used for global events like EVT_FLAG_REQUESTED
