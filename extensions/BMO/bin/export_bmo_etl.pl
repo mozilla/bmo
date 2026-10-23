@@ -21,6 +21,7 @@ use Bugzilla::Logging;
 use Bugzilla::User;
 use Bugzilla::FlagActivity;
 
+use English qw(-no_match_vars $PROCESS_ID);
 use HTTP::Headers;
 use HTTP::Request;
 use IO::Compress::Gzip     qw(gzip $GzipError);
@@ -82,7 +83,7 @@ getopt
 $lock_wait //= LOCK_MAX_WAIT;
 
 # Identifies this run in the lock table and in staging table names
-my $run_id = time() . "_$$";
+my $run_id = time() . "_$PROCESS_ID";
 
 # Create a hash for faster checking later
 my %no_cache = map { $_ => 1 } @no_cache;
