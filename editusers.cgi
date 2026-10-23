@@ -20,6 +20,7 @@ use Bugzilla::User;
 use Bugzilla::Bug;
 use Bugzilla::BugMail;
 use Bugzilla::Flag;
+use Bugzilla::FlagActivity;
 use Bugzilla::Field;
 use Bugzilla::Group;
 use Bugzilla::Token;
@@ -521,13 +522,19 @@ elsif ($action eq 'delete') {
   push(@{$bugs{$_->bug_id}->{$_->attach_id || 0}}, $_) foreach @$flags;
   foreach my $bug_id (keys %bugs) {
     foreach my $attach_id (keys %{$bugs{$bug_id}}) {
-      my @old_summaries = Bugzilla::Flag->snapshot($bugs{$bug_id}->{$attach_id});
       $_->_set_requestee() foreach @{$bugs{$bug_id}->{$attach_id}};
-      my @new_summaries = Bugzilla::Flag->snapshot($bugs{$bug_id}->{$attach_id});
-      my ($removed, $added)
-        = Bugzilla::Flag->update_activity(\@old_summaries, \@new_summaries);
-      LogActivityEntry($bug_id, 'flagtypes.name', $removed, $added, $userid,
-        $timestamp, undef, $attach_id);
+      foreach my $flag (@{$bugs{$bug_id}->{$attach_id}}) {
+        Bugzilla::FlagActivity->create({
+          flag_when     => $timestamp,
+          setter_id     => $userid,
+          status        => $flag->status,
+          type_id       => $flag->type_id,
+          flag_id       => $flag->id,
+          requestee_id  => $flag->requestee_id,
+          bug_id        => $bug_id,
+          attachment_id => $attach_id || undef,
+        });
+      }
     }
     $sth_set_bug_timestamp->execute($timestamp, $bug_id);
     $updatedbugs{$bug_id} = 1;

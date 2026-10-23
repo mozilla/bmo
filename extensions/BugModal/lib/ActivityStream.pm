@@ -96,35 +96,36 @@ sub find_activity_id_for_attachment {
 
 sub find_activity_id_for_flag {
   my ($self, $flag) = @_;
-  my $flagtype_name = $flag->type->name;
-  my $date          = $flag->modification_date;
-  my $setter_id     = $flag->setter->id;
-  my $stream        = $self->activity_stream;
+  my $flag_id   = $flag->id;
+  my $setter_id = $flag->setter->id;
+  my $stream    = $self->activity_stream;
 
-  # unfortunately bugs_activity treats all flag changes as the same field, so
-  # we don't have an object_id to match on
+  if (!exists $self->{activity_cache}->{flag}->{$flag_id}) {
+    # flag_activity records each change against the flag's object id, so we
+    # can look up the exact timestamp without relying on flag-type name matching.
+    my ($flag_when) = Bugzilla->dbh->selectrow_array(
+      "SELECT flag_when FROM flag_activity WHERE flag_id = ?
+       ORDER BY flag_when DESC LIMIT 1",
+      undef, $flag_id
+    );
 
-  if (!exists $self->{activity_cache}->{flag}->{$flag->id}) {
-    foreach my $change_set (reverse @$stream) {
+    SEARCH: foreach my $change_set (reverse @$stream) {
       foreach my $activity (@{$change_set->{activity}}) {
-
-        # match by user, timestamp, and flag-type name
-        next unless $activity->{who}->id == $setter_id && $activity->{when} eq $date;
+        next unless $flag_when
+          && $activity->{who}->id == $setter_id
+          && $activity->{when} eq $flag_when;
         foreach my $change (@{$activity->{changes}}) {
-          next
-            unless $change->{fieldname} eq 'flagtypes.name'
-            && $change->{flagtype_name} eq $flagtype_name;
-          $self->{activity_cache}->{flag}->{$flag->id} = $change_set->{id};
-          return $change_set->{id};
+          next unless $change->{fieldname} eq 'flagtypes.name';
+          $self->{activity_cache}->{flag}->{$flag_id} = $change_set->{id};
+          last SEARCH;
         }
       }
     }
 
-    # if we couldn't find the flag in bugs_activity it means it was set
-    # during bug creation
-    $self->{activity_cache}->{flag}->{$flag->id} = 'c0';
+    # flag set during bug creation, or no flag_activity entry yet
+    $self->{activity_cache}->{flag}->{$flag_id} //= 'c0';
   }
-  return $self->{activity_cache}->{flag}->{$flag->id};
+  return $self->{activity_cache}->{flag}->{$flag_id};
 }
 
 # comments are processed first, so there's no need to merge into existing entries

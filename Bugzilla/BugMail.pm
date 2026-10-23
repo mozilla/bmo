@@ -708,9 +708,11 @@ sub _get_diffs {
   my @args = ($bug->id);
 
   # If lastdiffed is NULL, then we don't limit the search on time.
-  my $when_restriction = '';
+  my $when_restriction      = '';
+  my $flag_when_restriction = '';
   if ($bug->lastdiffed) {
-    $when_restriction = ' AND bug_when > ? AND bug_when <= ?';
+    $when_restriction      = ' AND bug_when > ? AND bug_when <= ?';
+    $flag_when_restriction = ' AND fsa.flag_when > ? AND fsa.flag_when <= ?';
     push @args, ($bug->lastdiffed, $end);
   }
 
@@ -725,8 +727,40 @@ sub _get_diffs {
                 ON fielddefs.id = bugs_activity.fieldid
              WHERE bugs_activity.bug_id = ?
                    $when_restriction
-          ORDER BY bugs_activity.bug_when, fielddefs.description", {Slice => {}},
-    @args
+                   AND fielddefs.name != 'flagtypes.name'
+        UNION ALL
+        SELECT 'flagtypes.name' AS field_name,
+               (SELECT description FROM fielddefs WHERE name = 'flagtypes.name') AS field_desc,
+               fsa.flag_when AS bug_when,
+               CASE WHEN prev.id IS NULL THEN ''
+                    WHEN prev.status = '?' AND preq.login_name IS NOT NULL
+                         THEN CONCAT(ft.name, '?(', preq.login_name, ')')
+                    ELSE CONCAT(ft.name, prev.status)
+               END AS old,
+               CASE WHEN fsa.status = 'X' THEN ''
+                    WHEN fsa.status = '?' AND req.login_name IS NOT NULL
+                         THEN CONCAT(ft.name, '?(', req.login_name, ')')
+                    ELSE CONCAT(ft.name, fsa.status)
+               END AS new,
+               fsa.attachment_id AS attach_id,
+               NULL AS comment_id,
+               fsa.setter_id AS who
+          FROM flag_activity fsa
+          JOIN flagtypes ft ON ft.id = fsa.type_id
+          LEFT JOIN profiles req ON req.userid = fsa.requestee_id
+          LEFT JOIN flag_activity prev
+                 ON fsa.flag_id != 0
+                AND prev.flag_id = fsa.flag_id
+                AND prev.flag_when = (
+                      SELECT MAX(p2.flag_when)
+                        FROM flag_activity p2
+                       WHERE p2.flag_id = fsa.flag_id
+                         AND p2.flag_when < fsa.flag_when)
+          LEFT JOIN profiles preq ON preq.userid = prev.requestee_id
+         WHERE fsa.bug_id = ?
+               $flag_when_restriction
+          ORDER BY bug_when, field_desc", {Slice => {}},
+    @args, $bug->id, ($bug->lastdiffed ? ($bug->lastdiffed, $end) : ())
   );
   my $referenced_bugs = [];
 

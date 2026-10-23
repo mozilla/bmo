@@ -1221,6 +1221,7 @@ sub update {
   # XXX Eventually, when bugs_activity is able to track the dupe_id,
   # this code should go below the duplicates-table-updating code below.
   foreach my $field (keys %$changes) {
+    next if $field eq 'flagtypes.name';    # now tracked in flag_activity
     my $change = $changes->{$field};
     my $from   = defined $change->[0] ? $change->[0] : '';
     my $to     = defined $change->[1] ? $change->[1] : '';
@@ -4854,6 +4855,18 @@ sub GetBugActivity {
     $suppwhere = "AND COALESCE(attachments.isprivate, 0) = 0";
   }
 
+  my $flag_suppjoins = "";
+  my $flag_suppwhere = "";
+  if (!$user->is_insider) {
+    $flag_suppjoins = "LEFT JOIN attachments fa_att ON fa_att.attach_id = fsa.attachment_id";
+    $flag_suppwhere = "AND COALESCE(fa_att.isprivate, 0) = 0";
+  }
+
+  my $flag_attachpart = "";
+  if ($attach_id) {
+    $flag_attachpart = "AND fsa.attachment_id = ?";
+  }
+
   my $bug_when
     = $dbh->sql_date_format('bugs_activity.bug_when', '%Y-%m-%d %H:%i:%s');
 
@@ -4880,7 +4893,8 @@ sub GetBugActivity {
             ON profiles.userid = bugs_activity.who
          WHERE bugs_activity.bug_id = ?
                $attachpart
-               $suppwhere ";
+               $suppwhere
+               AND (fielddefs.name IS NULL OR fielddefs.name != 'flagtypes.name') ";
 
   if ( Bugzilla->params->{'comment_taggers_group'}
     && $include_comment_activity
@@ -4915,6 +4929,46 @@ sub GetBugActivity {
         ";
     push @args, $bug_id;
   }
+
+  my $flag_bug_when = $dbh->sql_date_format('fsa.flag_when', '%Y-%m-%d %H:%i:%s');
+  $query .= "
+        UNION ALL
+        SELECT 'flagtypes.name' AS field_name,
+               NULL AS activity_id,
+               fsa.attachment_id AS attach_id,
+               $flag_bug_when AS bug_when,
+               CASE WHEN prev.id IS NULL THEN ''
+                    WHEN prev.status = '?' AND preq.login_name IS NOT NULL
+                         THEN CONCAT(ft.name, '?(', preq.login_name, ')')
+                    ELSE CONCAT(ft.name, prev.status)
+               END AS removed,
+               CASE WHEN fsa.status = 'X' THEN ''
+                    WHEN fsa.status = '?' AND req.login_name IS NOT NULL
+                         THEN CONCAT(ft.name, '?(', req.login_name, ')')
+                    ELSE CONCAT(ft.name, fsa.status)
+               END AS added,
+               setter.login_name AS who,
+               NULL AS comment_id
+          FROM flag_activity fsa
+          JOIN flagtypes ft ON ft.id = fsa.type_id
+          JOIN profiles setter ON setter.userid = fsa.setter_id
+          LEFT JOIN profiles req ON req.userid = fsa.requestee_id
+          LEFT JOIN flag_activity prev
+                 ON fsa.flag_id != 0
+                AND prev.flag_id = fsa.flag_id
+                AND prev.flag_when = (
+                      SELECT MAX(p2.flag_when)
+                        FROM flag_activity p2
+                       WHERE p2.flag_id = fsa.flag_id
+                         AND p2.flag_when < fsa.flag_when)
+          LEFT JOIN profiles preq ON preq.userid = prev.requestee_id
+          $flag_suppjoins
+         WHERE fsa.bug_id = ?
+               $flag_attachpart
+               $flag_suppwhere
+      ";
+  push @args, $bug_id;
+  push @args, $attach_id if $attach_id;
 
   $query .= ") AS OUTER_TABLE";
 
