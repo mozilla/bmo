@@ -12,6 +12,7 @@ use strict;
 use warnings;
 
 use JSON qw(decode_json);
+use LWP::UserAgent;
 use URI;
 use URI::QueryParam;
 use Digest;
@@ -66,15 +67,37 @@ sub get_email_key {
 
 sub _handle_response {
   my ($self, $response) = @_;
-  my $data = eval { decode_json($response->content); };
-  if ($@) {
-    ThrowCodeError("github_bad_response",
-      {message => "Unable to parse JSON response"});
-  }
 
+  # Check the status before parsing: error pages from GitHub, a proxy, or
+  # LWP itself (internal 500s for DNS/TLS failures) are usually not JSON.
   unless ($response->is_success) {
     ThrowCodeError("github_error", {response => $response});
   }
+
+  my $data = eval { decode_json($response->decoded_content(charset => 'none') // ''); };
+  if ($@) {
+    ThrowCodeError(
+      "github_bad_response",
+      {
+        reason       => "Unable to parse JSON response",
+        status       => $response->status_line,
+        content_type => scalar $response->header('Content-Type'),
+      }
+    );
+  }
+
+  # GitHub's token endpoint reports failures (e.g. bad_verification_code)
+  # as a 200 response with an "error" key.
+  if (ref $data eq 'HASH' && $data->{error}) {
+    ThrowCodeError(
+      "github_bad_response",
+      {
+        reason => $data->{error_description} || $data->{error},
+        status => $response->status_line,
+      }
+    );
+  }
+
   return $data;
 }
 
