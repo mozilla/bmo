@@ -18,6 +18,7 @@ BEGIN {
 
 use Test::More;
 use HTTP::Response;
+use Try::Tiny;
 
 use Bugzilla;
 BEGIN { Bugzilla->extensions }
@@ -50,8 +51,7 @@ sub client_with {
 
 sub error_from {
   my ($code) = @_;
-  eval { $code->(); };
-  return $@;
+  return try { $code->(); undef } catch { $_ };
 }
 
 subtest 'successful JSON responses are returned' => sub {
