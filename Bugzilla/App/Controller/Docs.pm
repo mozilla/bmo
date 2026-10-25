@@ -15,6 +15,7 @@ use Bugzilla::Constants;
 use Bugzilla::Util qw(trim);
 use Cwd            qw(realpath);
 use Encode         qw(decode);
+use English        qw(-no_match_vars);
 use File::Basename qw(basename);
 use Mojo::DOM;
 use Mojo::File ();
@@ -316,7 +317,7 @@ sub _snippet {
   $text = trim($text);
   return [] if $text eq '';
 
-  my $first   = $text =~ /$highlight/       ? $-[0]                       : 0;
+  my $first   = $text =~ /$highlight/       ? $LAST_MATCH_START[0]        : 0;
   my $start   = $first > SEARCH_SNIPPET_PAD ? $first - SEARCH_SNIPPET_PAD : 0;
   my $excerpt = substr($text, $start, 3 * SEARCH_SNIPPET_PAD);
 

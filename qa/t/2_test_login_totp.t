@@ -19,7 +19,7 @@ use Try::Tiny;
 use QA::Util;
 
 my ($sel, $config) = get_selenium();
-my $mfa_help_url = qr{/using/two-factor-authentication\.html$};
+my $mfa_help_url = qr{/using/two-factor-authentication\.md$};
 
 # Enable TOTP for the admin user
 log_in($sel, $config, 'admin');
