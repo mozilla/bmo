@@ -35,8 +35,10 @@ use constant IMAGE_TYPES => {
 };
 
 # Tuning for the keyword search (Docs#search).
-use constant SEARCH_MAX_SECTIONS => 3;     # matching sections shown per page
-use constant SEARCH_SNIPPET_PAD  => 90;    # characters of context per snippet
+use constant SEARCH_MAX_SECTIONS => 3;      # matching sections shown per page
+use constant SEARCH_SNIPPET_PAD  => 90;     # characters of context per snippet
+use constant SEARCH_MAX_LENGTH   => 256;    # query characters considered
+use constant SEARCH_MAX_TERMS    => 10;     # keywords considered; each is a regex
 
 use constant ALERT_TITLES => {
   caution   => 'Caution',
@@ -228,13 +230,17 @@ sub _convert_alerts {
 }
 
 # Split the query into lowercased keywords. "Quoted phrases" are kept
-# together; everything else is whitespace separated.
+# together; everything else is whitespace separated. Anyone can search and
+# every keyword is matched against every section, so only the first
+# SEARCH_MAX_TERMS keywords of the first SEARCH_MAX_LENGTH characters count.
 sub _parse_query {
   my ($query) = @_;
+  $query = substr($query, 0, SEARCH_MAX_LENGTH);
   my %seen;
-  return
-    grep { $_ ne '' && !$seen{$_}++ }
+  my @terms = grep { $_ ne '' && !$seen{$_}++ }
     map { trim(lc $_) } grep {defined} $query =~ /"([^"]*)"|(\S+)/g;
+  splice(@terms, SEARCH_MAX_TERMS) if @terms > SEARCH_MAX_TERMS;
+  return @terms;
 }
 
 # Every page containing all of the keywords, best match first.

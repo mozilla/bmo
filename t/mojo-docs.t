@@ -20,6 +20,7 @@ use Bugzilla::Test::MockDB;
 use Bugzilla::Test::MockParams;
 
 use Test2::V0;
+use Mojo::File ();
 use Test::Mojo;
 
 # Rendering the docs requires libcmark-gfm.
@@ -116,6 +117,37 @@ $t->get_ok('/docs/en/search?q=quicksearch+zzzznotaword')->status_is(200);
 $t->element_exists_not('.docs-search-result',
   'every keyword has to appear on the page')
   ->text_like('.docs-search-results p' => qr/No documentation pages match/);
+
+# Only the first few keywords of a query are searched for.
+my @many_terms = Bugzilla::App::Controller::Docs::_parse_query(join ' ',
+  map {"term$_"} 1 .. 50);
+is(scalar @many_terms, Bugzilla::App::Controller::Docs->SEARCH_MAX_TERMS,
+  'keyword count is capped');
+is($many_terms[0], 'term1', 'the earliest keywords are kept');
+my @long_terms = Bugzilla::App::Controller::Docs::_parse_query('x' x 10_000);
+is(length $long_terms[0], Bugzilla::App::Controller::Docs->SEARCH_MAX_LENGTH,
+  'query length is capped');
+$t->get_ok('/docs/en/search?q=' . join('+', map {"term$_"} 1 .. 50))
+  ->status_is(200);
+
+# Every "Related documentation" link on the error pages points at a page
+# (and heading) that exists.
+my %docslinks;
+foreach my $file (qw(user-error code-error)) {
+  my $tmpl
+    = Mojo::File->new("template/en/default/global/$file.html.tmpl")->slurp;
+  $docslinks{$1} = 1 while $tmpl =~ /'([^'\s]+)'\s*=>/g;
+}
+my @docslinks = sort keys %docslinks;
+ok(scalar @docslinks, 'found docslinks in the error templates');
+foreach my $link (@docslinks) {
+  my ($page, $anchor) = split /#/, $link, 2;
+  like($page, qr/\.md$/, "docslink $link uses a .md path");
+  $t->get_ok("/docs/en/md/$page")->status_is(200);
+  $t->element_exists(qq{.docs-content [id="$anchor"]},
+    "docslink anchor $link exists")
+    if defined $anchor;
+}
 
 # Directory traversal and non-doc files are rejected.
 $t->get_ok('/docs/en/md/../../../Bugzilla.pm')->status_is(404);

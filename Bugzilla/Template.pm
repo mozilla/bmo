@@ -976,8 +976,8 @@ sub create {
       'basepath' => sub { return Bugzilla->localconfig->basepath; },
 
       # Base URL of the in-app docs viewer (Bugzilla::App::Controller::Docs).
-      # Legacy .html links only redirect when a .md exists at the same path;
-      # links to moved pages or the removed POD API pages will 404.
+      # Link to the .md paths under docs/en/md; legacy .html links only
+      # redirect when a .md exists at the same path.
       'docs_urlbase' => sub {
         return Bugzilla->localconfig->basepath . 'docs/en/md/';
       },
