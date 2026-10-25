@@ -26,7 +26,7 @@ link to that instead.
 ## Links Between Pages
 
 Always link to other documentation pages with relative paths that include
-the `.md` extension, e.g. `[User Guide](../using/index.md)`. These links
+the `.md` extension, e.g. `[User Guide](using/index.md)`. These links
 work both in the in-app viewer and when reading the files on GitHub.
 Images live in `docs/en/images/` and are referenced relatively as well,
 e.g. `![description](../../images/example.png)`. Give every image a

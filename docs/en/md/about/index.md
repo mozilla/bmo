@@ -1,8 +1,8 @@
 # About This Documentation
 
-This is the documentation for version 4.2 of Bugzilla, a bug-tracking system
-from Mozilla. Bugzilla is an enterprise-class piece of software that tracks
-millions of bugs and issues for thousands of organizations around the world.
+This is the documentation for Bugzilla, a bug-tracking system from Mozilla.
+Bugzilla is an enterprise-class piece of software that tracks millions of bugs
+and issues for thousands of organizations around the world.
 
 The most current version of this document can always be found on the [Bugzilla
 website](https://www.bugzilla.org/docs/).

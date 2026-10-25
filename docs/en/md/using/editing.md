@@ -73,4 +73,4 @@ bug statuses. If you wish to customize this image for your site, the [diagram
 file](../../images/bzLifecycle.xml) is available in
 [Dia's](http://www.gnome.org/projects/dia) native XML format.
 
-![image](../../images/bzLifecycle.png)
+![Diagram of the default bug lifecycle statuses and resolutions](../../images/bzLifecycle.png)

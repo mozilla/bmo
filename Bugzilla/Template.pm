@@ -975,11 +975,9 @@ sub create {
       # Allow templates to get the absolute path of the URLBase value
       'basepath' => sub { return Bugzilla->localconfig->basepath; },
 
-      # Base URL of the in-app documentation viewer
-      # (Bugzilla::App::Controller::Docs). Kept as "docs_urlbase" so the
-      # many templates that build documentation links keep working; the
-      # viewer redirects legacy Sphinx-style .html paths to the Markdown
-      # pages.
+      # Base URL of the in-app docs viewer (Bugzilla::App::Controller::Docs).
+      # Legacy .html links only redirect when a .md exists at the same path;
+      # links to moved pages or the removed POD API pages will 404.
       'docs_urlbase' => sub {
         return Bugzilla->localconfig->basepath . 'docs/en/md/';
       },

@@ -59,7 +59,7 @@ maintained.
   - [Bug Fields](api/core/v1/field.md)
   - [Flag Activity](api/core/v1/flag-activity.md)
   - [General](api/core/v1/general.md)
-  - [Github](api/core/v1/github.md)
+  - [GitHub](api/core/v1/github.md)
   - [Groups](api/core/v1/group.md)
   - [Products](api/core/v1/product.md)
   - [Users](api/core/v1/user.md)

@@ -10,7 +10,7 @@
 - [Bug Fields](field.md)
 - [Flag Activity](flag-activity.md)
 - [General](general.md)
-- [Github](github.md)
+- [GitHub](github.md)
 - [Groups](group.md)
 - [Products](product.md)
 - [Users](user.md)

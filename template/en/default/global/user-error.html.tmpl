@@ -1190,8 +1190,7 @@
 
   [% ELSIF error == "json_rpc_get_method_required" %]
     When using JSON-RPC over GET, you must specify a 'method'
-    parameter. See the documentation at
-    [%+ docs_urlbase FILTER html %]api/Bugzilla/WebService/Server/JSONRPC.html
+    parameter.
 
   [% ELSIF error == "json_rpc_illegal_content_type" %]
     When using JSON-RPC over POST, you cannot send data as
