@@ -76,6 +76,15 @@ SKIP: {
     ->header_is('Content-Type' => 'image/png');
 }
 
+# Diagram sources are served as downloads, not rendered inline.
+SKIP: {
+  skip 'no diagram source in docs/en/images', 4
+    unless -f 'docs/en/images/bzLifecycle.xml';
+  $t->get_ok('/docs/en/images/bzLifecycle.xml')->status_is(200)
+    ->header_is('Content-Type' => 'application/xml');
+  $t->header_like('Content-Disposition' => qr/^attachment/);
+}
+
 # The search form is on every documentation page.
 $t->get_ok('/docs/en/md/index.md')
   ->element_exists('form.docs-search input[name="q"]',

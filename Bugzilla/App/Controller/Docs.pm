@@ -34,6 +34,8 @@ use constant IMAGE_TYPES => {
   svg  => 'image/svg+xml',
 };
 
+use constant DOWNLOAD_TYPES => {xml => 'application/xml',};
+
 # Tuning for the keyword search (Docs#search).
 use constant SEARCH_MAX_SECTIONS => 3;      # matching sections shown per page
 use constant SEARCH_SNIPPET_PAD  => 90;     # characters of context per snippet
@@ -111,6 +113,16 @@ sub show {
 
   if ($path =~ m{^images/.+\.(\w+)$} && IMAGE_TYPES->{lc $1}) {
     $self->res->headers->content_type(IMAGE_TYPES->{lc $1});
+    return $self->reply->file($file);
+  }
+
+  # Diagram sources (e.g. the Dia file for bzLifecycle.png) are offered as
+  # downloads only, so the browser never renders them in our origin.
+  if ($path =~ m{^images/.+\.(\w+)$} && DOWNLOAD_TYPES->{lc $1}) {
+    my $name    = Mojo::File->new($file)->basename;
+    my $headers = $self->res->headers;
+    $headers->content_type(DOWNLOAD_TYPES->{lc $1});
+    $headers->content_disposition(qq{attachment; filename="$name"});
     return $self->reply->file($file);
   }
 
