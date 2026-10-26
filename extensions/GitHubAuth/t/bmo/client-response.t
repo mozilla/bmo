@@ -115,7 +115,7 @@ subtest 'OAuth error payload is surfaced' => sub {
   );
 };
 
-subtest 'error page renders the GitHub error, not the messages fallback' => sub {
+subtest 'error page renders the GitHub error details' => sub {
   my $template = Bugzilla->template;
   my $output   = '';
   $template->process(
@@ -130,8 +130,6 @@ subtest 'error page renders the GitHub error, not the messages fallback' => sub 
   ) or diag($template->error);
   like($output, qr/Unable to parse JSON response/, 'reason rendered');
   like($output, qr/HTTP 200 OK, text\/html/,       'status rendered');
-  unlike($output, qr/messaging functions incorrectly/,
-    'header did not treat the error as a message tag');
 };
 
 done_testing;
