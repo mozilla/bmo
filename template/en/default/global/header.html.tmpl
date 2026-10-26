@@ -548,15 +548,13 @@
       </a>
     </li>
   [% END %]
-  [% IF Param('docs_urlbase') %]
-    <li role="separator"></li>
-    <li role="none">
-      <a href="[% docs_urlbase FILTER html %]" target="_blank" role="menuitem">
-        <span class="icon" aria-hidden="true" data-icon="help"></span>
-        <span class="label" role="none">Documentation</span>
-      </a>
-    </li>
-  [% END %]
+  <li role="separator"></li>
+  <li role="none">
+    <a href="[% docs_urlbase FILTER html %]" target="_blank" role="menuitem">
+      <span class="icon" aria-hidden="true" data-icon="help"></span>
+      <span class="label" role="none">Documentation</span>
+    </a>
+  </li>
 [% END %]
 
 [% BLOCK format_css_link %]

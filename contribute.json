@@ -18,7 +18,7 @@
     ],
     "participate": {
         "home": "https://wiki.mozilla.org/BMO",
-        "docs": "https://bmo.readthedocs.io"
+        "docs": "https://bugzilla.mozilla.org/docs"
     },
     "bugs": {
         "list": "https://bugzilla.mozilla.org/buglist.cgi?bug_status=NEW&product=bugzilla.mozilla.org",

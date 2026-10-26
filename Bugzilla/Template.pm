@@ -975,12 +975,11 @@ sub create {
       # Allow templates to get the absolute path of the URLBase value
       'basepath' => sub { return Bugzilla->localconfig->basepath; },
 
-      # Allow templates to access docs URL with users' preferred language
+      # Base URL of the in-app docs viewer (Bugzilla::App::Controller::Docs).
+      # Link to the .md paths under docs/en/md; legacy .html links only
+      # redirect when a .md exists at the same path.
       'docs_urlbase' => sub {
-        my $language     = Bugzilla->current_language;
-        my $docs_urlbase = Bugzilla->params->{'docs_urlbase'};
-        $docs_urlbase =~ s/\%lang\%/$language/;
-        return $docs_urlbase;
+        return Bugzilla->localconfig->basepath . 'docs/en/md/';
       },
 
       # Check whether the URL is safe.

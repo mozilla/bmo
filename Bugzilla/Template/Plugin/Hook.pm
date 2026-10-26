@@ -148,4 +148,4 @@ Output from processing template extension.
 
 L<Template::Plugin>
 
-L<https://bmo.readthedocs.io/en/latest/integrating/extensions.html>
+L<https://bugzilla.mozilla.org/docs/en/md/integrating/extensions.md>

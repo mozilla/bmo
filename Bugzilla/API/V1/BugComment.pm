@@ -467,7 +467,7 @@ sub _updates_disabled {
       error         => 1,
       code          => ERROR_UNKNOWN_TRANSIENT,
       message       => 'Bug updates are currently disabled.',
-      documentation => 'https://bmo.readthedocs.io/en/latest/api/',
+      documentation => Bugzilla->localconfig->urlbase . 'docs/en/md/api/index.md',
     },
     status => REST_STATUS_CODE_MAP()->{_default}
   );

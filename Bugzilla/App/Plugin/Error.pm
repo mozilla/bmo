@@ -90,7 +90,7 @@ sub _render_error {
       error         => 1,
       code          => $code,
       message       => $message,
-      documentation => 'https://bmo.readthedocs.io/en/latest/api/',
+      documentation => Bugzilla->localconfig->urlbase . 'docs/en/md/api/index.md',
     };
 
     $c->render(json => $error, status => $status_code);

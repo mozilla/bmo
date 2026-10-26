@@ -185,13 +185,6 @@ my %optional_features = (
     description => 'RADIUS Authentication',
     prereqs     => {runtime => {requires => {'Authen::Radius' => 0}}}
   },
-  documentation => {
-    description => 'Documentation',
-    prereqs     => {
-      runtime =>
-        {requires => {'File::Which' => 0, 'File::Copy::Recursive' => 0,}}
-    },
-  },
   auth_ldap => {
     description => 'LDAP Authentication',
     prereqs     => {runtime => {requires => {'Net::LDAP' => 0}}},
