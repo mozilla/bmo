@@ -1409,16 +1409,6 @@ sub db_schema_abstract_schema {
     ],
     INDEXES => [recorded_future_idx => {FIELDS => ['name'], TYPE => 'UNIQUE',},],
   };
-
-  # Recorded Future
-  $args->{'schema'}->{'recorded_future'} = {
-    FIELDS => [
-      id    => {TYPE => 'INTSERIAL',    NOTNULL => 1, PRIMARYKEY => 1,},
-      name  => {TYPE => 'VARCHAR(255)', NOTNULL => 1,},
-      value => {TYPE => 'MEDIUMTEXT',   NOTNULL => 1}
-    ],
-    INDEXES => [recorded_future_idx => {FIELDS => ['name'], TYPE => 'UNIQUE',},],
-  };
 }
 
 sub install_update_db {
@@ -1604,6 +1594,12 @@ sub install_update_db {
       description => 'Is Triaged',
       type        => FIELD_TYPE_BOOLEAN,
     });
+  }
+
+  # Add bmo_etl_locked.creation_ts column
+  if (!$dbh->bz_column_info('bmo_etl_locked', 'creation_ts')) {
+    $dbh->bz_add_column('bmo_etl_locked',
+      'creation_ts' => {TYPE => 'DATETIME'});
   }
 
   # Add bmo_etl_locked.updated_ts column

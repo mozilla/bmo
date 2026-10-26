@@ -1704,6 +1704,35 @@ plugins).
 
 =back
 
+=head2 webservice_bug_render_comment
+
+This hook lets an extension accept extra params in C<POST /rest/bug/comment/render>
+and add values to its response. The Needinfo extension uses it to list the
+users that a comment's @mentions would CC and needinfo.
+
+Params:
+
+=over
+
+=item C<webservice>
+
+The C<Bugzilla::API::V1::BugComment> controller handling the request.
+
+=item C<bug>
+
+The L<Bugzilla::Bug> the comment is rendered against, or C<undef> when the
+request has no C<id>.
+
+=item C<params>
+
+A hash ref of the request params.
+
+=item C<result>
+
+The hash ref returned to the client, already holding C<html>. Add keys to it.
+
+=back
+
 =head2 webservice_error_codes
 
 If your webservice extension throws custom errors, you can set numeric

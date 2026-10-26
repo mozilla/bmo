@@ -97,6 +97,11 @@ sub get_format {
   $ctype =~ s/[^a-zA-Z\-]//g;
   $format =~ s/[^a-zA-Z\-]//g;
 
+  # Content types are lowercase. Normalise so that e.g. "CSV" cannot miss
+  # the contenttypes lookup or resolve to a template on a case-insensitive
+  # filesystem while bypassing callers' checks against $format->{extension}.
+  $ctype = lc $ctype;
+
   $template .= ($format ? "-$format" : "");
   $template .= ".$ctype.tmpl";
 

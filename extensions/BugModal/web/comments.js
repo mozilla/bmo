@@ -988,6 +988,15 @@ Bugzilla.BugModal.InstantUpdater = class InstantUpdater {
       });
     }
 
+    // `@nickname` mentions are only processed for comments submitted through the form, not the
+    // API, so let the form handle them. This loosely mirrors `_extract_mentions` in the Needinfo
+    // extension. A false positive only costs a page reload.
+    if (/(?<![\w@./-])@[\p{L}\p{N}|._-]/u.test(changedFields.comment)) {
+      throw new Error('BEFORE_SUBMIT_HALT', {
+        cause: 'Comment mentions users.',
+      });
+    }
+
     // Show a placeholder comment immediately. Don't `await` this because the HTML rendering doesn’t
     // block the following operations.
     try {

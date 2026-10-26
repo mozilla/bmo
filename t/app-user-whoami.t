@@ -91,6 +91,16 @@ $t->get_ok('/rest/whoami' => \%phab)->status_is(200);
 $t->json_is('/id'         => $phab_user->id)
   ->json_is('/mfa_status' => Mojo::JSON->false);
 
+# Once the account has MFA enabled, Phabricator must see it.
+Bugzilla->set_user(Bugzilla::User->super_user);
+$phab_user->set_mfa('TOTP');
+$phab_user->update();
+Bugzilla->set_user(Bugzilla::User->new);
+
+$t->get_ok('/rest/whoami' => \%phab)->status_is(200);
+$t->json_is('/id'         => $phab_user->id)
+  ->json_is('/mfa_status' => Mojo::JSON->true);
+
 # A token Phabricator rejects, or one for an email Bugzilla does not know.
 $phab_response = encode_json({error_info => 'API token is not valid.'});
 $t->get_ok('/rest/whoami' => \%phab)->status_isnt(200)->json_is('/code' => 306);

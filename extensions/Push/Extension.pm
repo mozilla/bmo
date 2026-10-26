@@ -261,9 +261,10 @@ sub _push_object {
   my ($self, $message_type, $object, $change_set, $changes) = @_;
   my $rh;
 
-  # serialize the object
-  my ($rh_object, $name)
-    = Bugzilla::Extension::Push::Serialize->instance->object_to_hash($object);
+  # serialize the object, ignoring any hash cached by an earlier push of it
+  my $serializer = Bugzilla::Extension::Push::Serialize->instance;
+  $serializer->uncache($object);
+  my ($rh_object, $name) = $serializer->object_to_hash($object);
 
   if (!$rh_object) {
     warn "empty hash from serializer ($message_type $object)\n";

@@ -655,11 +655,22 @@ Bugzilla.TextEditor = class TextEditor {
   }
 
   /**
+   * Get the params sent to the comment render API when previewing.
+   * @returns {Record<string, any>} Params.
+   */
+  getPreviewParams() {
+    return { text: this.$textarea.value };
+  }
+
+  /**
    * Called whenever the Preview tab is selected. Fetch and display the rendered text if it's
    * edited.
    */
   async preview() {
-    if (this.$textarea.value === this.lastPreviewedText) {
+    const params = this.getPreviewParams();
+    const paramsKey = JSON.stringify(params);
+
+    if (paramsKey === this.lastPreviewedParams) {
       return;
     }
 
@@ -673,13 +684,24 @@ Bugzilla.TextEditor = class TextEditor {
     this.$preview.innerHTML = `<p role="status">${this.str.loading.htmlEncode()}</p>`;
 
     try {
-      const { html } = await Bugzilla.API.post('bug/comment/render', {
-        text: this.$textarea.value,
-      });
+      const { html, mentions } = await Bugzilla.API.post('bug/comment/render', params);
 
       // Use the HTML without `htmlEncode()` because the API-provided rendered text should be safe
       // to be injected as is; using `htmlEncode()` rather breaks the text
       this.$preview.innerHTML = html;
+
+      // List who saving the comment will CC and needinfo, so a stray `@word` is noticed before
+      // the comment is submitted
+      if (mentions?.length) {
+        const users = mentions
+          .map(({ nick, name }) => (name ? `${name} (@${nick})` : `@${nick}`).htmlEncode())
+          .join(', ');
+
+        this.$preview.insertAdjacentHTML(
+          'afterbegin',
+          `<p class="mention-notice">${this.str.mention_notice.htmlEncode()} ${users}</p>`,
+        );
+      }
 
       // Highlight code if possible
       if (Prism) {
@@ -687,7 +709,7 @@ Bugzilla.TextEditor = class TextEditor {
       }
 
       this.$preview.setAttribute('aria-busy', 'false');
-      this.lastPreviewedText = this.$textarea.value;
+      this.lastPreviewedParams = paramsKey;
     } catch (ex) {
       this.$preview.innerHTML = `
         <p role="alert" class="error">${this.str.preview_error.htmlEncode()}</p>
@@ -747,6 +769,29 @@ Bugzilla.CommentEditor = class CommentEditor extends Bugzilla.TextEditor {
   render() {
     this.$textarea.insertAdjacentElement('afterend', this.$container);
     this.$editTabPanel.appendChild(this.$textarea);
+  }
+
+  /**
+   * Get the params sent to the comment render API when previewing. A new comment on an existing
+   * bug is rendered against that bug, and also asks for the users its `@nickname` mentions will
+   * CC and needinfo.
+   * @returns {Record<string, any>} Params.
+   */
+  getPreviewParams() {
+    const params = super.getPreviewParams();
+    const form = this.$textarea.form;
+    const bugId = BUGZILLA.bug_id ?? form?.elements.namedItem('bugid')?.value;
+
+    if (bugId && this.$textarea.name === 'comment') {
+      params.id = bugId;
+      params.include_mentions = true;
+      params.mention_is_private = !!(
+        form?.elements.namedItem('comment_is_private')?.checked ||
+        form?.elements.namedItem('isprivate')?.checked
+      );
+    }
+
+    return params;
   }
 
   /**

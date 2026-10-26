@@ -12,6 +12,7 @@ use warnings;
 
 use base qw(Bugzilla::WebService Bugzilla::WebService::Bug);
 
+use Bugzilla::Comment;
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Template;
@@ -71,17 +72,19 @@ sub run_last_changes {
     = $dbh->selectrow_array($last_comment_sth, undef, $params->{bug_id},
     $params->{changeddate_api});
   if ($last_comment_id) {
-    my $comments = $self->comments({comment_ids => [$last_comment_id]});
-    my $comment = $comments->{comments}{$last_comment_id};
-    my $text = $comment->{text};
     my $bug = Bugzilla::Bug->check($params->{bug_id});
+
+    # The query above already skips private comments for non-insiders.
+    my $comment = Bugzilla::Comment->new($last_comment_id);
+    my $text    = $comment->body_full;
     my $html
       = Bugzilla->params->{use_markdown}
       ? Bugzilla->markdown->render_html($text, $bug)
       : Bugzilla::Template::quoteUrls($text, $bug);
     $last_changes->{comment_html} = $html;
-    $last_changes->{email} = $comment->{creator} if !$last_changes->{email};
-    my $datetime = datetime_from($comment->{creation_time});
+    $last_changes->{email} = $self->type('email', $comment->author->login)
+      if !$last_changes->{email};
+    my $datetime = datetime_from($comment->creation_ts);
     $datetime->set_time_zone($user->timezone);
     $last_changes->{when} = $datetime->strftime('%Y-%m-%d %T %Z');
   }

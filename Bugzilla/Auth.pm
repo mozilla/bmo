@@ -199,7 +199,7 @@ sub _handle_login_result {
 
   if (!$fail_code) {
     if ($self->{_info_getter}->{successful}->requires_persistence) {
-      $user->{_login_token} = $self->{_persister}->persist_login($user);
+      $self->{_persister}->persist_login($user);
     }
   }
   elsif ($fail_code == AUTH_ERROR) {

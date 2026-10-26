@@ -126,8 +126,8 @@ and ``api_key`` query parameters described in the warning below, kept only as
 a stopgap for undiscovered callers). Legacy ``Bugzilla_login`` and
 ``Bugzilla_password`` credentials are **not** accepted on these resources, even
 though the old WebService dispatcher underneath BMO still supports them for
-resources not yet migrated (currently ``Bug``, ``Group``, ``Product``, and
-``User``). On those not-yet-migrated resources, if a request supplies both
+resources not yet migrated (currently ``Bug`` and ``Bugzilla``). On those
+not-yet-migrated resources, if a request supplies both
 ``Bugzilla_login``/``Bugzilla_password`` and an API key, BMO does not combine
 them or choose the strongest method: the legacy credentials take precedence,
 and BMO does not fall back to the API key if password authentication fails.

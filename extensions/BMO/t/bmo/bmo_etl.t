@@ -199,6 +199,7 @@ $t->post_ok(
   'http://bq:9050/bigquery/v2/projects/test/queries' => json => $query)
   ->status_is(200)->json_is('/rows/0/f/0/v' => $bug_id_1);
 
+<<<<<<< HEAD
 ### Section: 7 - Add an additional bug and then run the export script again
 # Run with the same timestamp to make sure it adds the bug.
 # Simulate a script stop and resume condition
@@ -214,6 +215,11 @@ $t->post_ok($url
   ->status_is(201)->json_has('/attachments');
 
 ($attach_id) = keys %{$t->tx->res->json->{attachments}};
+||||||| eacb5a0df
+### Section 7: Exporting again on the same day (with the same snapshot date) will cause the script to exit
+=======
+### Section 7: Exporting again with the same snapshot date succeeds without sending data again
+>>>>>>> master
 
 @cmd = (
   './extensions/BMO/bin/export_bmo_etl.pl',
@@ -221,6 +227,7 @@ $t->post_ok($url
 );
 
 ($output, $error, $rv) = capture { system @cmd; };
+<<<<<<< HEAD
 ok(!$rv, 'Data exported to BigQuery test instance without error');
 
 $query = {
@@ -233,5 +240,101 @@ $query = {
 $t->post_ok(
   'http://bq:9050/bigquery/v2/projects/test/queries' => json => $query)
   ->status_is(200)->json_is('/rows/0/f/0/v' => $new_bug_1->{summary});
+||||||| eacb5a0df
+ok($rv, 'Duplicate data exported to BigQuery test instance should fail');
+=======
+ok(!$rv, 'Exporting an already exported snapshot date exits successfully');
+
+### Section 8: Each row is published exactly once and staging tables are removed
+
+$query = {
+  query => 'SELECT count(*) FROM test.bugzilla.bugs WHERE id = '
+    . $bug_id_1
+    . ' AND snapshot_date = \''
+    . $snapshot_date . '\';',
+  useLegacySql => false
+};
+$t->post_ok(
+  'http://bq:9050/bigquery/v2/projects/test/queries' => json => $query)
+  ->status_is(200)
+  ->json_is('/rows/0/f/0/v' => 1);
+
+$t->get_ok('http://bq:9050/bigquery/v2/projects/test/datasets/bugzilla/tables')
+  ->status_is(200);
+my @staging = grep { $_->{tableReference}->{tableId} =~ /^etl_staging_/ }
+  @{$t->tx->res->json->{tables} || []};
+is(scalar @staging, 0, 'No staging tables left after export');
+
+my $dbh        = Bugzilla->dbh;
+my $lock_count = $dbh->selectrow_array('SELECT COUNT(*) FROM bmo_etl_locked');
+is($lock_count, 0, 'Lock removed after export');
+
+### Section 9: A live lock blocks the export, a stale lock is taken over
+
+$dbh->do(
+  'INSERT INTO bmo_etl_locked (value, creation_ts, updated_ts) VALUES (?, NOW(), NOW())',
+  undef, 'live_run'
+);
+
+@cmd = (
+  './extensions/BMO/bin/export_bmo_etl.pl',
+  '--snapshot-date', '2000-01-01', '--lock-wait', 0,
+);
+
+($output, $error, $rv) = capture { system @cmd; };
+ok($rv, 'Export should fail while another live export holds the lock');
+
+# Only one lock row can exist, so two runs starting at once cannot both
+# take the lock
+my $second_lock = $dbh->do(
+  'INSERT IGNORE INTO bmo_etl_locked (value, creation_ts, updated_ts) VALUES (?, NOW(), NOW())',
+  undef, 'second_run'
+);
+ok(!($second_lock > 0), 'A second lock cannot be set while one is held');
+
+# Simulate a run that was killed: its lock stopped being refreshed an hour
+# ago and it left a staging table behind
+$dbh->do('DELETE FROM bmo_etl_locked');
+my $stale_ts = $dbh->selectrow_array(
+  'SELECT ' . $dbh->sql_date_math('NOW()', '-', 1, 'HOUR'));
+$dbh->do(
+  'INSERT INTO bmo_etl_locked (value, creation_ts, updated_ts) VALUES (?, ?, ?)',
+  undef, 'dead_run', $stale_ts, $stale_ts
+);
+
+$t->post_ok(
+  'http://bq:9050/bigquery/v2/projects/test/datasets/bugzilla/tables' => json =>
+    {
+    tableReference =>
+      {projectId => 'test', datasetId => 'bugzilla', tableId => 'etl_staging_bugs_dead'},
+    schema => {fields => [{name => 'id', type => 'INTEGER'}]},
+    }
+)->status_is(200);
+
+($output, $error, $rv) = capture { system @cmd; };
+ok(!$rv, 'Export takes over a stale lock and finishes');
+
+$lock_count = $dbh->selectrow_array('SELECT COUNT(*) FROM bmo_etl_locked');
+is($lock_count, 0, 'Stale lock removed after export');
+
+$t->get_ok('http://bq:9050/bigquery/v2/projects/test/datasets/bugzilla/tables')
+  ->status_is(200);
+@staging = grep { $_->{tableReference}->{tableId} =~ /^etl_staging_/ }
+  @{$t->tx->res->json->{tables} || []};
+is(scalar @staging, 0, 'Orphaned staging table dropped');
+
+### Section 10: An invalid snapshot date is rejected
+
+@cmd = (
+  './extensions/BMO/bin/export_bmo_etl.pl',
+  '--snapshot-date', "2000-01-01' OR '1'='1",
+);
+
+($output, $error, $rv) = capture { system @cmd; };
+ok($rv, 'Export should fail with an invalid snapshot date');
+
+$lock_count = $dbh->selectrow_array('SELECT COUNT(*) FROM bmo_etl_locked');
+is($lock_count, 0, 'Invalid snapshot date does not leave a lock behind');
+>>>>>>> master
 
 done_testing;
