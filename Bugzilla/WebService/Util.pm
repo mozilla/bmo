@@ -321,7 +321,7 @@ sub merge_request_params {
   # request body. Query-string/form-body values win on a key collision,
   # matching the legacy REST layer (see fix_credentials/_retrieve_json_params
   # in Bugzilla::WebService::Server::REST) and the documented behavior in
-  # docs/en/rst/api/core/v1/general.rst.
+  # docs/en/md/api/core/v1/general.md.
   #
   # A param's type must not depend on how many times it was sent: ->to_hash
   # returns a scalar for one occurrence and an arrayref for two. Callers

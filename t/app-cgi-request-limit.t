@@ -159,7 +159,7 @@ $t->post_ok(
   ->content_like(qr{The request is too large\.});
 
 $t->post_ok(
-  '/rest/bug/1/attachment' => {
+  '/rest/bug' => {
     'Content-Length' => length($body),
     'Content-Type'   => "multipart/form-data; boundary=$boundary",
   } => $body
