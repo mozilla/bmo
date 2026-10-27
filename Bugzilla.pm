@@ -593,16 +593,24 @@ sub log_user_request {
     unless (i_am_cgi() || i_am_webservice())
     && Bugzilla->params->{log_user_requests};
 
-  my $cgi         = $class->cgi;
-  my $user_id     = $class->user->id;
-  my $request_url = $cgi->request_uri    // '';
-  my $method      = $cgi->request_method // 'GET';
-  my $user_agent  = $cgi->user_agent     // '';
-  my $script_name = $cgi->script_name;
-  my $server      = "web";
+  my $user_id = $class->user->id;
+  my ($request_url, $method, $user_agent, $server);
 
-  if ($script_name =~ /rest\.cgi/) {
-    $server = "rest";
+  # The CGI environment is only emulated for the legacy .cgi routes, so read
+  # the request of a native Mojo API route from the Mojo controller.
+  if ($class->usage_mode == USAGE_MODE_MOJO_REST) {
+    my $req = request_cache->{mojo_controller}->req;
+    $request_url = $req->url->path->to_string;
+    $method      = $req->method;
+    $user_agent  = $req->headers->user_agent // '';
+    $server      = 'rest';
+  }
+  else {
+    my $cgi = $class->cgi;
+    $request_url = $cgi->request_uri    // '';
+    $method      = $cgi->request_method // 'GET';
+    $user_agent  = $cgi->user_agent     // '';
+    $server      = $cgi->script_name =~ /rest\.cgi/ ? 'rest' : 'web';
   }
 
   my @params = (

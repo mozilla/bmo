@@ -19,7 +19,7 @@ our @additional_files = ();
 our @files = glob('*');
 find(sub { push(@files, $File::Find::name) if $_ =~ /\.pm$/; },
   qw(Bugzilla docs));
-push(@files, 'extensions/create.pl', 'docs/makedocs.pl', 'cpanfile');
+push(@files, 'extensions/create.pl', 'cpanfile');
 
 our @extensions = grep { $_ ne 'extensions/create.pl' && !-e "$_/disabled" }
   glob('extensions/*');

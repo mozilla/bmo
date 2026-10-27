@@ -30,6 +30,8 @@ my %OPTIONS = (
   footnotes                     => (1 << 13),
   strikethrough_double_tilde    => (1 << 14),
   table_prefer_style_attributes => (1 << 15),
+  full_info_string              => (1 << 16),
+  unsafe                        => (1 << 17),
 );
 
 my $FFI = FFI::Platypus->new(

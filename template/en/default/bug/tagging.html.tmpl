@@ -27,11 +27,7 @@
           [% END %]
         </select>
 
-        [% IF Param('docs_urlbase') %]
-          <a href="[% docs_urlbase FILTER html %]using/finding.html#individual-bug-lists">the named tag</a>
-        [% ELSE %]
-          the named tag
-        [% END %]
+        <a href="[% docs_urlbase FILTER html %]using/finding.md#bug-lists">the named tag</a>
 
         [% IF user.tags.size %]
           <select id="lob_oldqueryname" name="oldqueryname">

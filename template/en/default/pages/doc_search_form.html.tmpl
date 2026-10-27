@@ -1,0 +1,24 @@
+[%# This Source Code Form is subject to the terms of the Mozilla Public
+  # License, v. 2.0. If a copy of the MPL was not distributed with this
+  # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+  #
+  # This Source Code Form is "Incompatible With Secondary Licenses", as
+  # defined by the Mozilla Public License, v. 2.0.
+  #%]
+
+[%# Keyword search form shown at the top of every documentation page.
+  # Handled by Bugzilla::App::Controller::Docs (Docs#search).
+  #
+  # query: the current search string, if any.
+  #%]
+
+<form class="docs-search" role="search" method="get"
+      action="[% basepath FILTER none %]docs/en/search">
+  <label for="docs-search-input">Search the documentation:</label>
+  <input type="search" id="docs-search-input" name="q" size="40"
+         value="[% query FILTER html %]" placeholder="Keywords"
+         autocomplete="off">
+  <button type="submit">
+    Search
+  </button>
+</form>
