@@ -12,15 +12,20 @@ use strict;
 use warnings;
 
 use JSON qw(decode_json);
+use LWP::UserAgent;
 use URI;
 use URI::QueryParam;
 use Digest;
 
 use Bugzilla::Extension::GitHubAuth::Client::Error
   qw(ThrowUserError ThrowCodeError);
-use Bugzilla::Util qw(remote_ip);
+use Bugzilla::Logging;
+use Bugzilla::Util qw(remote_ip truncate_string);
 
 use constant DIGEST_HASH => 'SHA1';
+
+# How much of an unexpected response body to include in log messages.
+use constant LOG_BODY_LENGTH => 500;
 
 use fields qw(user_agent);
 
@@ -66,16 +71,58 @@ sub get_email_key {
 
 sub _handle_response {
   my ($self, $response) = @_;
-  my $data = eval { decode_json($response->content); };
-  if ($@) {
-    ThrowCodeError("github_bad_response",
-      {message => "Unable to parse JSON response"});
-  }
 
+  # Check the status before parsing: error pages from GitHub, a proxy, or
+  # LWP itself (internal 500s for DNS/TLS failures) are usually not JSON.
   unless ($response->is_success) {
+    _log_bad_response('HTTP error', $response);
     ThrowCodeError("github_error", {response => $response});
   }
+
+  my $data = eval { decode_json($response->decoded_content(charset => 'none') // ''); };
+  if ($@) {
+    my $reason = 'Unable to parse JSON response';
+    _log_bad_response($reason, $response);
+    ThrowCodeError(
+      "github_bad_response",
+      {
+        reason       => $reason,
+        status       => $response->status_line,
+        content_type => scalar $response->header('Content-Type'),
+      }
+    );
+  }
+
+  # GitHub's token endpoint reports failures (e.g. bad_verification_code)
+  # as a 200 response with an "error" key.
+  if (ref $data eq 'HASH' && $data->{error}) {
+    ThrowCodeError(
+      "github_bad_response",
+      {
+        reason => $data->{error_description} || $data->{error},
+        status => $response->status_line,
+      }
+    );
+  }
+
   return $data;
+}
+
+# The error vars Bugzilla::Error logs don't include the response body (and
+# github_error only carries the HTTP::Response object), so record enough of
+# the response to diagnose GitHub failures from the logs alone.
+sub _log_bad_response {
+  my ($reason, $response) = @_;
+  my $body
+    = truncate_string($response->decoded_content // '', LOG_BODY_LENGTH, '...');
+  WARN(sprintf(
+    'GitHub %s: %s (%s) from %s: %s',
+    $reason,
+    $response->status_line,
+    $response->header('Content-Type') // 'no content type',
+    ($response->request ? $response->request->uri : 'unknown URI'),
+    $body
+  ));
 }
 
 sub get_access_token {
