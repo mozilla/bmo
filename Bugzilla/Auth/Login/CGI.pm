@@ -38,11 +38,12 @@ sub get_login_info {
 
   # If the web browser accepts cookies, use them.
   if ($login_token && $login_cookie) {
-    my ($time, undef) = split(/-/, $login_token);
-
-    # Regenerate the token based on the information we have.
-    my $expected_token = issue_hash_token(['login_request', $login_cookie], $time);
-    $valid = 1 if $expected_token eq $login_token;
+    if (defined(my $time = hash_token_time($login_token))) {
+      # Regenerate the token based on the information we have.
+      my $expected_token
+        = issue_hash_token(['login_request', $login_cookie], $time);
+      $valid = 1 if $expected_token eq $login_token;
+    }
     $cgi->remove_cookie('Bugzilla_login_request_cookie');
   }
   # WebServices and other local scripts can bypass this check.
