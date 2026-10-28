@@ -17,6 +17,8 @@ use warnings;
 use lib qw(lib ../../lib ../../local/lib/perl5);
 
 use Bugzilla;
+use Bugzilla::Constants;
+use Bugzilla::Group;
 use QA::Util qw(get_config);
 use QA::Tests qw(PRIVATE_BUG_USER);
 use QA::REST::Util qw(api_headers rest_get_url);
@@ -247,5 +249,63 @@ $t->get_ok(rest_get_url($url, 'rest/user',
   ->json_like('/faults/0/message' => qr/no-such-user\@mozilla\.test/);
 is(scalar @{$t->tx->res->json->{users}},  1, 'permissive: one user returned');
 is(scalar @{$t->tx->res->json->{faults}}, 1, 'permissive: one fault returned');
+
+########################################
+# Group Visibility With can_see_groups #
+########################################
+
+# The unprivileged user is not in editusers, so the bless filter applies to
+# them. The admin belongs to many groups, so "only the blessed group" is a
+# real restriction.
+my $admin_login          = $config->{admin_user_login};
+my $admin_headers        = api_headers($config->{admin_user_api_key});
+my $unprivileged_headers = api_headers($config->{unprivileged_user_api_key});
+my $admin_groups_url     = rest_get_url($url, 'rest/user', {names => [$admin_login]});
+
+sub group_names {
+  return [sort map { $_->{name} } @{$t->tx->res->json->{users}[0]{groups}}];
+}
+
+# Users always see all of their own groups, so this is the full list.
+$t->get_ok($admin_groups_url => $admin_headers)->status_is(200);
+my $all_admin_groups = group_names();
+ok(scalar(@$all_admin_groups) > 1, 'Admin belongs to more than one group');
+ok(grep($_ eq 'canconfirm', @$all_admin_groups), 'Admin belongs to canconfirm');
+
+$t->get_ok($admin_groups_url => $unprivileged_headers)->status_is(200);
+is_deeply(group_names(), [],
+  'Non-member of can_see_groups without bless privs sees no groups');
+
+# HACK: bless privileges cannot be granted over the API.
+my $canconfirm_id = Bugzilla::Group->check('canconfirm')->id;
+Bugzilla->dbh->do(
+  'INSERT INTO user_group_map (user_id, group_id, isbless, grant_type)
+     SELECT userid, ?, 1, ? FROM profiles WHERE login_name = ?',
+  undef, $canconfirm_id, GRANT_DIRECT, $get_user
+);
+
+$t->get_ok($admin_groups_url => $unprivileged_headers)->status_is(200);
+is_deeply(group_names(), ['canconfirm'],
+  'Non-member of can_see_groups sees only the groups they can bless');
+
+Bugzilla->dbh->do(
+  'DELETE FROM user_group_map
+    WHERE group_id = ? AND isbless = 1
+      AND user_id = (SELECT userid FROM profiles WHERE login_name = ?)',
+  undef, $canconfirm_id, $get_user
+);
+
+$t->put_ok($url
+    . "rest/user/$get_user" => $admin_headers => json =>
+    {groups => {add => ['can_see_groups']}})->status_is(200)->json_has('/users');
+
+$t->get_ok($admin_groups_url => $unprivileged_headers)->status_is(200);
+is_deeply(group_names(), $all_admin_groups,
+  'Member of can_see_groups sees all of the other user\'s groups');
+
+# Clean up: leave this user belonging to nothing, as later tests expect.
+$t->put_ok($url
+    . "rest/user/$get_user" => $admin_headers => json =>
+    {groups => {remove => ['can_see_groups']}})->status_is(200)->json_has('/users');
 
 done_testing();

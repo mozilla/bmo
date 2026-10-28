@@ -392,6 +392,13 @@ sub SaveEmail {
   foreach my $rel (keys %relationships) {
     next if ($rel == REL_QA && !Bugzilla->params->{'useqacontact'});
 
+    # Flag relationships bypass wants_bug_mail() entirely (bug 1883428)
+    # and the prefs form renders no checkboxes for them.
+    next
+      if $rel == REL_FLAG_REQUESTEE
+      || $rel == REL_FLAG_REQUESTER
+      || $rel == REL_FLAG_TYPE_CC;
+
     # Positive events: a ticked box means "send me mail."
     foreach my $event (POS_EVENTS) {
       my $is_set = $cgi->param("email-$rel-$event");
