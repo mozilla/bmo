@@ -12,11 +12,18 @@
 
 [% ELSIF error == "github_bad_response" %]
   [% title = "Bad Response from GitHub" %]
-  Received unexpected response from GitHub: [% message FILTER html %]
+  Received unexpected response from GitHub: [% reason FILTER html %]
+  [% IF status %]
+    (HTTP [% status FILTER html %]
+    [%~ IF content_type %], [% content_type FILTER html %][% END %])
+  [% END %]
 
 [% ELSIF error == "github_error" %]
   [% title = "GitHub Error" %]
-  GitHub returned an error: [% response.message FILTER html %]
+  GitHub returned an error: [% response.status_line FILTER html %]
+  [% IF response.header('Client-Warning') == 'Internal response' %]
+    ([% terms.Bugzilla %] could not connect to GitHub)
+  [% END %]
 
 [% ELSIF error == "github_invalid_target" %]
   [% terms.Bugzilla %] cannot log you into an external site via GitHub.

@@ -295,7 +295,7 @@ window.addEventListener('DOMContentLoaded', () => {
   /**
    * Load the data for all the attachments on the current bug.
    * @returns {Promise<object[]>} Attachments.
-   * @see https://bmo.readthedocs.io/en/latest/api/core/v1/attachment.html#get-attachment
+   * @see https://bugzilla.mozilla.org/docs/en/md/api/core/v1/attachment.md#get-attachment
    */
   const loadBugAttachments = async () => {
     const { bugs } = await Bugzilla.API.get(`bug/${bugId}/attachment`, {

@@ -18,7 +18,7 @@ efforts from contributors on the same issue.
 Head over to [Codetribute](https://codetribute.mozilla.org/projects/bugzilla)
 to find good tasks to start with.
 
-See [`README.rst`](README.rst) for more information
+See [`README.md`](README.md) for more information
 on how to start working on Bugzilla.
 
 ## Pull Request Checklist
