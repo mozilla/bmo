@@ -339,18 +339,31 @@ $sel->wait_for_page_to_load_ok(WAIT_TIME);
 $sel->title_is("Administer Flag Types");
 
 foreach my $flagtype (
-  [$flagtype1_id,  "selenium"],
-  [$flagtype2_id,  "selenium"],
-  [$aflagtype1_id, "selenium_review"],
-  [$aflagtype2_id, "selenium_review"]
+  [$flagtype1_id,  "selenium",        1],
+  [$flagtype2_id,  "selenium",        1],
+  [$aflagtype1_id, "selenium_review", 0],
+  [$aflagtype2_id, "selenium_review", 1]
   )
 {
-  my $flag_id   = $flagtype->[0];
-  my $flag_name = $flagtype->[1];
+  my ($flag_id, $flag_name, $used) = @$flagtype;
   $sel->click_ok(
     "//a[contains(\@href,'/editflagtypes.cgi?action=confirmdelete&id=$flag_id')]");
   $sel->wait_for_page_to_load_ok(WAIT_TIME);
   $sel->title_is("Confirm Deletion of Flag Type '$flag_name'");
+
+  # A used type can only be deactivated: deleting it would delete its flag
+  # history.
+  if ($used) {
+    $sel->is_text_present_ok('so it cannot be deleted');
+    ok(!$sel->is_element_present('link=Yes, delete'), 'No delete link');
+    $sel->click_ok("link=deactivate it");
+    $sel->wait_for_page_to_load_ok(WAIT_TIME);
+    $sel->title_is("Flag Type '$flag_name' Deactivated");
+    my $msg = trim($sel->get_text("message"));
+    ok($msg eq "The flag type $flag_name has been deactivated.",
+      "Flag type $flag_name deactivated");
+    next;
+  }
   $sel->click_ok("link=Yes, delete");
   $sel->wait_for_page_to_load_ok(WAIT_TIME);
   $sel->title_is("Flag Type '$flag_name' Deleted");

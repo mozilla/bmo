@@ -18,6 +18,7 @@ use Bugzilla::Util;
 use Bugzilla::Bug;
 use Bugzilla::Attachment;
 use Bugzilla::Comment;
+use Bugzilla::FlagActivity;
 use Bugzilla::FlagType;
 use Bugzilla::Logging;
 use Bugzilla::Mailer;
@@ -1044,12 +1045,17 @@ sub _get_diffs {
   my ($bug, $end, $user_cache) = @_;
   my $dbh = Bugzilla->dbh;
 
-  my @args = ($bug->id);
+  my @args       = ($bug->id);
+  my $flag_newer   = Bugzilla::FlagActivity->newer_than_bugs_activity_sql('fsa');
+  my $flag_last    = Bugzilla::FlagActivity->last_of_request_sql('fsa');
+  my $flag_prev_id = Bugzilla::FlagActivity->previous_id_sql('fsa');
 
   # If lastdiffed is NULL, then we don't limit the search on time.
-  my $when_restriction = '';
+  my $when_restriction      = '';
+  my $flag_when_restriction = '';
   if ($bug->lastdiffed) {
-    $when_restriction = ' AND bug_when > ? AND bug_when <= ?';
+    $when_restriction      = ' AND bug_when > ? AND bug_when <= ?';
+    $flag_when_restriction = ' AND fsa.flag_when > ? AND fsa.flag_when <= ?';
     push @args, ($bug->lastdiffed, $end);
   }
 
@@ -1058,15 +1064,49 @@ sub _get_diffs {
                    fielddefs.description AS field_desc,
                    bugs_activity.bug_when, bugs_activity.removed AS old,
                    bugs_activity.added AS new, bugs_activity.attach_id,
-                   bugs_activity.comment_id, bugs_activity.who
+                   bugs_activity.comment_id, bugs_activity.who,
+                   bugs_activity.id AS activity_id
               FROM bugs_activity
         INNER JOIN fielddefs
                 ON fielddefs.id = bugs_activity.fieldid
              WHERE bugs_activity.bug_id = ?
                    $when_restriction
-          ORDER BY bugs_activity.bug_when, fielddefs.description", {Slice => {}},
-    @args
+        UNION ALL
+        SELECT 'flagtypes.name' AS field_name,
+               (SELECT description FROM fielddefs WHERE name = 'flagtypes.name') AS field_desc,
+               fsa.flag_when AS bug_when,
+               CASE WHEN prev.id IS NULL THEN ''
+                    WHEN prev.status = '?' AND preq.login_name IS NOT NULL
+                         THEN CONCAT(ft.name, '?(', preq.login_name, ')')
+                    ELSE CONCAT(ft.name, prev.status)
+               END AS old,
+               CASE WHEN fsa.status = 'X' THEN ''
+                    WHEN fsa.status = '?' AND req.login_name IS NOT NULL
+                         THEN CONCAT(ft.name, '?(', req.login_name, ')')
+                    ELSE CONCAT(ft.name, fsa.status)
+               END AS new,
+               fsa.attachment_id AS attach_id,
+               NULL AS comment_id,
+               fsa.who AS who,
+               fsa.id AS activity_id
+          FROM flag_activity fsa
+          JOIN flagtypes ft ON ft.id = fsa.type_id
+          LEFT JOIN profiles req ON req.userid = fsa.requestee_id
+          LEFT JOIN flag_activity prev ON prev.id = $flag_prev_id
+          LEFT JOIN profiles preq ON preq.userid = prev.requestee_id
+         WHERE fsa.bug_id = ?
+               AND $flag_newer
+               AND $flag_last
+               $flag_when_restriction
+          ORDER BY bug_when, field_desc, activity_id", {Slice => {}},
+    @args, $bug->id, ($bug->lastdiffed ? ($bug->lastdiffed, $end) : ())
   );
+
+  # As in history, skip a request that left a flag as it was, such as a flag
+  # created and removed at once.
+  @$diffs
+    = grep { $_->{field_name} ne 'flagtypes.name' || $_->{old} ne $_->{new} }
+    @$diffs;
   my $referenced_bugs = [];
 
   foreach my $diff (@$diffs) {

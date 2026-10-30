@@ -285,7 +285,15 @@ use constant OPERATOR_FIELD_OVERRIDE => {
   dependson        => MULTI_SELECT_OVERRIDE,
   duplicates       => MULTI_SELECT_OVERRIDE,
   keywords         => MULTI_SELECT_OVERRIDE,
-  'flagtypes.name' => {_non_changed => \&_flagtypes_nonchanged,},
+  'flagtypes.name' => {
+    _non_changed  => \&_flagtypes_nonchanged,
+    changedbefore => \&_flagtypes_changed,
+    changedafter  => \&_flagtypes_changed,
+    changedfrom   => \&_flagtypes_changed,
+    changedto     => \&_flagtypes_changed,
+    changedby     => \&_flagtypes_changed,
+    everchanged   => \&_flagtypes_changed,
+  },
   longdesc         => {
     changedby     => \&_long_desc_changedby,
     everchanged   => \&_long_desc_everchanged,
@@ -3145,38 +3153,27 @@ sub _deadline {
 
 sub _owner_idle_time_greater_less {
   my ($self, $args) = @_;
-  my ($chart_id, $joins, $value, $operator)
-    = @$args{qw(chart_id joins value operator)};
+  my ($chart_id, $value, $operator) = @$args{qw(chart_id value operator)};
   my $dbh = Bugzilla->dbh;
 
   my $table  = "idle_$chart_id";
   my $quoted = $dbh->quote(SqlifyDate($value));
+  my $owner  = "$args->{bugs_table}.assigned_to";
 
-  my $ld_table      = "comment_$table";
-  my $act_table     = "activity_$table";
-  my $comments_join = {
-    table => 'longdescs',
-    as    => $ld_table,
-    from  => 'assigned_to',
-    to    => 'who',
-    extra => ["$ld_table.bug_when > $quoted"],
-  };
-  my $activity_join = {
-    table => 'bugs_activity',
-    as    => $act_table,
-    from  => 'assigned_to',
-    to    => 'who',
-    extra => ["$act_table.bug_when > $quoted"]
-  };
+  # The assignee commented, changed a bug or changed a flag since $value. One
+  # EXISTS each, as joins would multiply their rows.
+  my $active = join(
+    ' OR ',
+    map {
+      my ($activity_table, $when) = @$_;
+      my $alias = "${activity_table}_$table";
+      "EXISTS (SELECT 1 FROM $activity_table $alias
+                WHERE $alias.who = $owner AND $alias.$when > $quoted)"
+    } (['longdescs', 'bug_when'], ['bugs_activity', 'bug_when'],
+      ['flag_activity', 'flag_when'])
+  );
 
-  push(@$joins, $comments_join, $activity_join);
-
-  if ($operator =~ /greater/) {
-    $args->{term} = "$ld_table.who IS NULL AND $act_table.who IS NULL";
-  }
-  else {
-    $args->{term} = "($ld_table.who IS NOT NULL OR $act_table.who IS NOT NULL)";
-  }
+  $args->{term} = $operator =~ /greater/ ? "NOT ($active)" : "($active)";
 }
 
 sub _multiselect_negative {
@@ -3663,6 +3660,15 @@ sub _changedbefore_changedafter {
   $args->{term} = "$table.bug_when IS NOT NULL";
   $self->_changed_security_check($args, $join);
   push(@$joins, $join);
+
+  # Flag changes are in flag_activity.
+  if ($field eq 'anything') {
+    my $fa = "flag_act_$chart_id";
+    $args->{term} = "($args->{term} OR "
+      . $self->_flag_activity_exists($args, $fa,
+      "$fa.flag_when $sql_operator $sql_date")
+      . ')';
+  }
 }
 
 sub _changedfrom_changedto {
@@ -3690,6 +3696,16 @@ sub _changedfrom_changedto {
   $args->{term} = "$table.bug_when IS NOT NULL";
   $self->_changed_security_check($args, $join);
   push(@$joins, $join);
+
+  # Flag changes are in flag_activity.
+  if ($field eq 'anything') {
+    my $fa = "flag_act_$chart_id";
+    my $match
+      = _flag_state_changed_sql($chart_id, $fa, $operator, $args->{value});
+    $args->{term} = "($args->{term} OR "
+      . $self->_flag_activity_exists($args, $fa, $match) . ')'
+      if $match;
+  }
 }
 
 sub _changedby {
@@ -3721,6 +3737,13 @@ sub _changedby {
   $args->{term} = "$table.bug_when IS NOT NULL";
   $self->_changed_security_check($args, $join);
   push(@$joins, $join);
+
+  # Flag changes are in flag_activity.
+  if ($field eq 'anything') {
+    my $fa = "flag_act_$chart_id";
+    $args->{term} = "($args->{term} OR "
+      . $self->_flag_activity_exists($args, $fa, "$fa.who = $user_id") . ')';
+  }
 }
 
 sub _changed_security_check {
@@ -3743,6 +3766,88 @@ sub _changed_security_check {
 
     $args->{term} .= " AND COALESCE(attach_${field_id}_$chart_id.isprivate, 0) = 0";
   }
+}
+
+# Flag changes are recorded in flag_activity. Older changes are only in
+# bugs_activity, so match either.
+sub _flagtypes_changed {
+  my ($self, $args) = @_;
+  my $dbh = Bugzilla->dbh;
+  $self->_convert_everchanged($args) if $args->{operator} eq 'everchanged';
+  my ($chart_id, $operator, $value) = @$args{qw(chart_id operator value)};
+
+  $self->_do_operator_function($args);
+  my $legacy_term = $args->{term};
+
+  my $fa = "flag_act_$chart_id";
+  my @where;
+
+  if ($operator =~ /^changed(before|after)$/) {
+    my $sql_operator = $1 eq 'before' ? '<=' : '>=';
+    my $sql_date = $dbh->quote(SqlifyDate($value));
+    push @where, "$fa.flag_when $sql_operator $sql_date";
+  }
+  elsif ($operator eq 'changedby') {
+    my $user_id = $value =~ /^\d+$/ ? $value : $self->_get_user_id($value);
+    push @where, "$fa.who = $user_id";
+  }
+  else {    # changedto, changedfrom
+    my $match = _flag_state_changed_sql($chart_id, $fa, $operator, $value)
+      or return;
+    push @where, $match;
+  }
+
+  $args->{term} = "(($legacy_term) OR "
+    . $self->_flag_activity_exists($args, $fa, @where) . ')';
+}
+
+# SQL true when the bug has a flag_activity row $fa matching @where. Changes to
+# private attachments are hidden from non-insiders.
+sub _flag_activity_exists {
+  my ($self, $args, $fa, @where) = @_;
+  unshift @where, "$fa.bug_id = $args->{bugs_table}.bug_id";
+  if (!$self->_user->is_insider) {
+    push @where, "COALESCE((SELECT isprivate FROM attachments
+                             WHERE attach_id = $fa.attachment_id), 0) = 0";
+  }
+  return "EXISTS (SELECT 1 FROM flag_activity $fa WHERE "
+    . join(' AND ', @where) . ')';
+}
+
+# SQL matching a flag_activity row against a history value like
+# "review+" or "review?(user@example.com)". Returns nothing if the value
+# isn't a flag state.
+# SQL condition on flag_activity row $fa for changedto or changedfrom $value
+# (the state before this change), or undef if $value isn't a flag state.
+sub _flag_state_changed_sql {
+  my ($chart_id, $fa, $operator, $value) = @_;
+  return _flag_state_match($fa, $value) if $operator eq 'changedto';
+
+  my $prev  = "flag_prev_$chart_id";
+  my $match = _flag_state_match($prev, $value) or return undef;
+  return "EXISTS (
+      SELECT 1 FROM flag_activity $prev
+       WHERE $prev.id = (SELECT MAX(p2.id) FROM flag_activity p2
+                          WHERE p2.flag_id = $fa.flag_id AND p2.id < $fa.id)
+         AND $match)";
+}
+
+sub _flag_state_match {
+  my ($table, $value) = @_;
+  my $dbh = Bugzilla->dbh;
+  my ($name, $status, $requestee)
+    = $value =~ /^\s*(.+?)([?+\-])(?:\(([^)]+)\))?\s*$/
+    or return;
+
+  my $sql = "$table.type_id IN (SELECT id FROM flagtypes WHERE name = "
+    . $dbh->quote($name) . ") AND $table.status = " . $dbh->quote($status);
+  if ($status eq '?') {
+    $sql .= $requestee
+      ? " AND $table.requestee_id = (SELECT userid FROM profiles"
+      . ' WHERE login_name = ' . $dbh->quote($requestee) . ')'
+      : " AND $table.requestee_id IS NULL";
+  }
+  return $sql;
 }
 
 sub _isempty {

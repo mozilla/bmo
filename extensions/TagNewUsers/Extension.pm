@@ -77,6 +77,13 @@ sub install_update_db {
       }
       if (!$when) {
         ($when) = $dbh->selectrow_array(
+          "SELECT flag_when FROM flag_activity WHERE who=? ORDER BY flag_when "
+            . $dbh->sql_limit(1),
+          undef, $user_id
+        );
+      }
+      if (!$when) {
+        ($when) = $dbh->selectrow_array(
           "SELECT bug_when FROM longdescs WHERE who=? ORDER BY bug_when "
             . $dbh->sql_limit(1),
           undef, $user_id

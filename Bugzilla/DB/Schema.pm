@@ -747,6 +747,13 @@ use constant ABSTRACT_SCHEMA => {
         NOTNULL    => 1,
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
       },
+      # The user who made the change. Not always the setter: redirecting a
+      # request keeps the original setter.
+      who          => {
+        TYPE       => 'INT3',
+        NOTNULL    => 1,
+        REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
+      },
       requestee_id => {
         TYPE       => 'INT3',
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
@@ -767,6 +774,7 @@ use constant ABSTRACT_SCHEMA => {
       flag_activity_type_id_idx     => ['type_id'],
       flag_activity_bug_id_idx      => ['bug_id'],
       flag_activity_status_when_idx => ['status', 'flag_when'],
+      flag_activity_who_idx         => ['who', 'flag_when'],
     ],
   },
 
