@@ -18,7 +18,7 @@ use Bugzilla::Error;
 use Bugzilla::Util qw(trim);
 use Bugzilla::Extension::PhabBugz::User;
 use Bugzilla::Extension::PhabBugz::Types qw(:types);
-use Bugzilla::Extension::PhabBugz::Util qw(request);
+use Bugzilla::Extension::PhabBugz::Util qw(remove_noop_transactions request);
 
 #########################
 #    Initialization     #
@@ -240,6 +240,11 @@ sub update {
       {type => 'projects.remove', value => $self->{remove_projects}}
     );
   }
+
+  # Phabricator records an edit, and bumps the project's modified date, even
+  # when no transactions are sent, so only call Conduit if something changed.
+  $data->{transactions} = remove_noop_transactions($data->{transactions});
+  return undef unless @{$data->{transactions}};
 
   my $result = request('project.edit', $data);
 

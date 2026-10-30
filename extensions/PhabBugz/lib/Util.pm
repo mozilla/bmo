@@ -38,6 +38,7 @@ our @EXPORT = qw(
   is_attachment_phab_revision
   is_auto_assign_excluded
   is_bug_assigned
+  remove_noop_transactions
   request
   set_attachment_approval_flags
   set_bug_assignee
@@ -391,6 +392,19 @@ sub get_attachment_revisions {
   }
 
   return \@revisions;
+}
+
+# Drops add/remove transactions with no values from a Conduit edit. A `.set`
+# with an empty list is kept as it clears the field.
+sub remove_noop_transactions {
+  my ($transactions) = @_;
+  return [
+    grep {
+      !(   $_->{type} =~ /\.(?:add|remove)$/
+        && ref $_->{value} eq 'ARRAY'
+        && !@{$_->{value}})
+    } @$transactions
+  ];
 }
 
 sub request {
