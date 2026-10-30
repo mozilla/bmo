@@ -158,8 +158,10 @@ $t->post_ok(
 )->status_is(413)
   ->content_like(qr{The request is too large\.});
 
+# /rest/version has no native POST route, so this goes to rest.cgi: the limit
+# must still answer with a REST error there.
 $t->post_ok(
-  '/rest/bug' => {
+  '/rest/version' => {
     'Content-Length' => length($body),
     'Content-Type'   => "multipart/form-data; boundary=$boundary",
   } => $body

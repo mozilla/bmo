@@ -20,9 +20,8 @@ use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Flag;
 use Bugzilla::Util qw(detaint_natural remote_ip trim);
-use Bugzilla::WebService::Constants;
-use Bugzilla::WebService::Util qw(extract_flags filter filter_wants
-  merge_request_params strip_request_params translate validate);
+use Bugzilla::WebService::Util qw(extract_flags merge_request_params
+  strip_request_params translate validate);
 
 use constant ATTACHMENT_MAPPED_SETTERS =>
   {file_name => 'filename', summary => 'description',};
@@ -81,7 +80,7 @@ sub attachments {
     my $values = $self->every_param($name);
     $params->{$name} = $values if @$values;
   }
-  _split_include_exclude($params);
+  Bugzilla::API::V1::Util->split_include_exclude($params);
 
   # As on the legacy REST server, an id in the path is added to the ones from
   # the query string.
@@ -105,7 +104,8 @@ sub attachments {
     my $bug = Bugzilla::Bug->check($bug_id);
     $bugs{$bug->id} = [];
     foreach my $attach (@{$bug->attachments}) {
-      push @{$bugs{$bug->id}}, $self->_attachment_to_hash($attach, $params);
+      push @{$bugs{$bug->id}},
+        Bugzilla::API::V1::Util->attachment_to_hash($attach, $params);
     }
   }
 
@@ -119,7 +119,8 @@ sub attachments {
     }
     push @log_attachments, $attach;
 
-    $attachments{$attach->id} = $self->_attachment_to_hash($attach, $params);
+    $attachments{$attach->id}
+      = Bugzilla::API::V1::Util->attachment_to_hash($attach, $params);
   }
 
   if ($user->id) {
@@ -136,22 +137,9 @@ sub attachments {
 sub add_attachment {
   my ($self) = @_;
 
-  # BMO: Don't allow updating of bugs if disabled. The legacy REST server
-  # answered this with the HTML "updates disabled" page, as ThrowErrorPage()
-  # only returns an error object in JSON-RPC mode. Return the JSON error an API
-  # client can handle, with the generic code user_error() uses for an error
-  # that has no code of its own.
-  if (Bugzilla->params->{disable_bug_updates}) {
-    return $self->render(
-      json => {
-        error         => 1,
-        code          => ERROR_UNKNOWN_TRANSIENT,
-        message       => 'Bug updates are currently disabled.',
-        documentation => 'https://bmo.readthedocs.io/en/latest/api/',
-      },
-      status => REST_STATUS_CODE_MAP()->{_default}
-    );
-  }
+  # BMO: Don't allow updating of bugs if disabled
+  return Bugzilla::API::V1::Util->updates_disabled($self)
+    if Bugzilla->params->{disable_bug_updates};
 
   my $user = $self->bugzilla->login;
   $user->id || return $self->user_error('login_required');
@@ -231,7 +219,8 @@ sub add_attachment {
   $_->send_changes() foreach @bugs;
 
   my %attachments
-    = map { $_->id => $self->_attachment_to_hash($_, $params) } @created;
+    = map { $_->id => Bugzilla::API::V1::Util->attachment_to_hash($_, $params) }
+    @created;
 
   return $self->render(json => {attachments => \%attachments}, status => 201);
 }
@@ -389,100 +378,9 @@ sub _request_params {
   # but a list of plain values (e.g. a hash of conditions) is invalid_params.
   (undef, $params) = validate($self, $params, 'ids');
   $params->{ids} //= [$self->stash('id') // $self->stash('attachment_id')];
-  _split_include_exclude($params);
+  Bugzilla::API::V1::Util->split_include_exclude($params);
 
   return ($params, undef);
-}
-
-sub _split_include_exclude {
-  my ($params) = @_;
-  for my $name (qw(include_fields exclude_fields)) {
-    next if !exists $params->{$name};
-    $params->{$name} = [$params->{$name}] if !ref $params->{$name};
-    $params->{$name} = [map { split(/[\s,]+/) } @{$params->{$name}}];
-  }
-}
-
-sub _user_to_hash {
-  my ($self, $user, $filters, $types, $prefix) = @_;
-  my $item = filter $filters,
-    {
-    id        => $self->type('int',    $user->id),
-    real_name => $self->type('string', $user->name),
-    nick      => $self->type('string', $user->nick),
-    name      => $self->type('email',  $user->login),
-    email     => $self->type('email',  $user->email),
-    },
-    $types, $prefix;
-  return $item;
-}
-
-sub _attachment_to_hash {
-  my ($self, $attach, $filters, $types, $prefix) = @_;
-
-  my $item = filter $filters,
-    {
-    creation_time    => $self->type('dateTime', $attach->attached),
-    last_change_time => $self->type('dateTime', $attach->modification_time),
-    id               => $self->type('int',      $attach->id),
-    bug_id           => $self->type('int',      $attach->bug_id),
-    file_name        => $self->type('string',   $attach->filename),
-    summary          => $self->type('string',   $attach->description),
-    description      => $self->type('string',   $attach->description),
-    content_type     => $self->type('string',   $attach->contenttype),
-    is_private       => $self->type('int',      $attach->isprivate),
-    is_obsolete      => $self->type('int',      $attach->isobsolete),
-    is_patch         => $self->type('int',      $attach->ispatch),
-    },
-    $types, $prefix;
-
-  # creator/attacher require an extra lookup, so we only send them if
-  # the filter wants them.
-  foreach my $field (qw(creator attacher)) {
-    if (filter_wants $filters, $field, $types, $prefix) {
-      $item->{$field} = $self->type('email', $attach->attacher->login);
-    }
-  }
-
-  if (filter_wants $filters, 'creator', $types, $prefix) {
-    $item->{'creator_detail'}
-      = $self->_user_to_hash($attach->attacher, $filters, undef, 'creator');
-  }
-
-  if (filter_wants $filters, 'data', $types, $prefix) {
-    $item->{'data'} = $self->type('base64', $attach->data);
-  }
-
-  if (filter_wants $filters, 'size', $types, $prefix) {
-    $item->{'size'} = $self->type('int', $attach->datasize);
-  }
-
-  if (filter_wants $filters, 'flags', $types, $prefix) {
-    $item->{'flags'} = [map { $self->_flag_to_hash($_) } @{$attach->flags}];
-  }
-
-  return $item;
-}
-
-sub _flag_to_hash {
-  my ($self, $flag) = @_;
-
-  my $item = {
-    id                => $self->type('int',      $flag->id),
-    name              => $self->type('string',   $flag->name),
-    type_id           => $self->type('int',      $flag->type_id),
-    creation_date     => $self->type('dateTime', $flag->creation_date),
-    modification_date => $self->type('dateTime', $flag->modification_date),
-    status            => $self->type('string',   $flag->status)
-  };
-
-  foreach my $field (qw(setter requestee)) {
-    my $field_id = $field . "_id";
-    $item->{$field} = $self->type('email', $flag->$field->login)
-      if $flag->$field_id;
-  }
-
-  return $item;
 }
 
 1;

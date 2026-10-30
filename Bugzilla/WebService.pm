@@ -72,9 +72,9 @@ L<REST|Bugzilla::WebService::Server::REST>.
 
 =head1 CALLING METHODS
 
-Methods are grouped into "packages", like C<Bug> for
-L<Bugzilla::WebService::Bug>. So, for example,
-L<Bugzilla::WebService::Bug/get>, is called as C<Bug.get>.
+Methods are grouped into "packages", like C<Bugzilla> for
+L<Bugzilla::WebService::Bugzilla>. So, for example,
+L<Bugzilla::WebService::Bugzilla/version>, is called as C<Bugzilla.version>.
 
 For REST, the "package" is more determined by the path
 used to access the resource. See each relevant method
@@ -271,9 +271,9 @@ where these parameters are used.
 =head2 Limiting What Fields Are Returned
 
 Many WebService methods return an array of structs with various
-fields in the structs. (For example, L<Bugzilla::WebService::Bug/get>
-returns a list of C<bugs> that have fields like C<id>, C<summary>,
-C<creation_time>, etc.)
+fields in the structs. (For example, the bug C<get> method, see
+F<docs/en/md/api/core/v1/bug.md>, returns a list of C<bugs> that have fields
+like C<id>, C<summary>, C<creation_time>, etc.)
 
 These parameters allow you to limit what fields are present in
 the structs, to possibly improve performance or save some bandwidth.
@@ -386,8 +386,6 @@ objects.
 =head2 WebService Methods
 
 =over
-
-=item L<Bugzilla::WebService::Bug>
 
 =item L<Bugzilla::WebService::Bugzilla>
 

@@ -314,7 +314,6 @@ sub WS_DISPATCH {
 
   my $dispatch = {
     'Bugzilla'         => 'Bugzilla::WebService::Bugzilla',
-    'Bug'              => 'Bugzilla::WebService::Bug',
     %hook_dispatch
   };
   return $dispatch;

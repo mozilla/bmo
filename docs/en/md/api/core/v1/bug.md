@@ -24,9 +24,10 @@ one bug at a time by specifying bug IDs as the search terms.
 GET /rest/bug?id=12434,43421
 ```
 
-| name            | type  | description                              |
-|-----------------|-------|------------------------------------------|
-| **id_or_alias** | mixed | An integer bug ID or a bug alias string. |
+| name            | type    | description                              |
+|-----------------|---------|------------------------------------------|
+| **id_or_alias** | mixed   | An integer bug ID or a bug alias string. |
+| permissive      | boolean | Do not fail the request if a bug can't be returned (for example, it doesn't exist or you can't see it): its error is added to `faults` instead. |
 
 **Response**
 
@@ -122,6 +123,10 @@ GET /rest/bug?id=12434,43421
   ]
 }
 ```
+
+`faults` (array) With `permissive`, an object for each bug that can't be
+returned, with its `id` as requested, the error message (`faultString`) and
+the error code (`faultCode`). Empty otherwise.
 
 `bugs` (array) Each bug object contains information about the bugs with valid
 ids containing the following items:
