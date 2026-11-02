@@ -10,8 +10,9 @@ use 5.10.1;
 use strict;
 use warnings;
 
-use base qw(Bugzilla::WebService Bugzilla::WebService::Bug);
+use base qw(Bugzilla::WebService);
 
+use Bugzilla::API::V1::Bug;
 use Bugzilla::Comment;
 use Bugzilla::Constants;
 use Bugzilla::Error;
@@ -38,8 +39,10 @@ use constant PUBLIC_METHODS => qw(
 sub run_last_changes {
   my ($self, $params) = @_;
 
-  my $dbh  = Bugzilla->dbh;
   my $user = Bugzilla->login(LOGIN_REQUIRED);
+
+  # Only reads from here, as Bug.history did.
+  my $dbh = Bugzilla->switch_to_shadow_db();
 
   my $last_comment_sql = "
         SELECT comment_id
@@ -52,12 +55,12 @@ sub run_last_changes {
   my $last_comment_sth = $dbh->prepare($last_comment_sql);
 
   my $last_changes = {};
-  my $activity
-    = $self->history({
-    ids => [$params->{bug_id}], new_since => $params->{changeddate_api}
-    });
-  if (@{$activity->{bugs}[0]{history}}) {
-    my $change_set = $activity->{bugs}[0]{history}[0];
+  my $bug = Bugzilla::Bug->check($params->{bug_id});
+  my ($activity)
+    = Bugzilla::Bug::GetBugActivity($bug->id, undef, $params->{changeddate_api},
+    1);
+  if (@$activity) {
+    my $change_set = Bugzilla::API::V1::Bug->changeset_to_hash($activity->[0]);
     $last_changes->{activity} = $change_set->{changes};
     foreach my $change (@{$last_changes->{activity}}) {
       $change->{field_desc} = template_var('field_descs')->{$change->{field_name}}
@@ -72,7 +75,6 @@ sub run_last_changes {
     = $dbh->selectrow_array($last_comment_sth, undef, $params->{bug_id},
     $params->{changeddate_api});
   if ($last_comment_id) {
-    my $bug = Bugzilla::Bug->check($params->{bug_id});
 
     # The query above already skips private comments for non-insiders.
     my $comment = Bugzilla::Comment->new($last_comment_id);

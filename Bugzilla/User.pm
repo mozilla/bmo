@@ -25,7 +25,7 @@ use Bugzilla::BugUserLastVisit;
 
 use DateTime::TimeZone;
 use List::Util qw(max);
-use List::MoreUtils qw(any);
+use List::MoreUtils qw(any uniq);
 use Scalar::Util qw(blessed);
 use Storable qw(dclone);
 use URI;
@@ -2394,6 +2394,17 @@ sub match_field {
   # Skip confirmation if we were told to, or if we don't need to confirm.
   if ($behavior == MATCH_SKIP_CONFIRM || !$need_confirm) {
     return wantarray ? ($retval, \@non_conclusive_fields) : $retval;
+  }
+
+  # A web service client can't be shown the confirmation page, which asks
+  # about the fields with no match or several matches, and, with
+  # confirmuniqueusermatch, the ones with a single match that isn't exact.
+  if (i_am_webservice()) {
+    my @fields
+      = $params->{'confirmuniqueusermatch'}
+      ? keys %$matches
+      : uniq @non_conclusive_fields;
+    ThrowUserError('user_match_too_many', {fields => [sort @fields]});
   }
 
   my $template = Bugzilla->template;
