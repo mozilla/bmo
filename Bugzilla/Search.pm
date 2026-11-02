@@ -3826,16 +3826,16 @@ sub _flag_activity_exists {
 sub _flag_state_changed_sql {
   my ($chart_id, $fa, $operator, $value) = @_;
   # As in history, a request counts as one net change.
-  my $last = Bugzilla::FlagActivity->last_of_request_sql($fa);
+  my $flag_last = Bugzilla::FlagActivity->last_of_request_sql($fa);
   if ($operator eq 'changedto') {
     my $match = _flag_state_match($fa, $value) or return undef;
-    return "$match AND $last";
+    return "$match AND $flag_last";
   }
 
   my $prev    = "flag_prev_$chart_id";
   my $prev_id = Bugzilla::FlagActivity->previous_id_sql($fa);
   my $match   = _flag_state_match($prev, $value) or return undef;
-  return "$last AND EXISTS (
+  return "$flag_last AND EXISTS (
       SELECT 1 FROM flag_activity $prev
        WHERE $prev.id = $prev_id AND $match)";
 }
