@@ -62,7 +62,13 @@ $dbh->do(
   '2099-01-01 10:00:00', $fieldid, '', 'needinfo?(bob@bmo.test)'
 );
 
-Bugzilla::Install::DB::_add_flag_activity_start_rows() for 1 .. 2;
+# The index is in the schema of a new database; older ones don't have it yet.
+sub add_start_rows {
+  $dbh->bz_drop_index('bugs_activity', 'bugs_activity_bug_field_when_idx');
+  Bugzilla::Install::DB::_add_flag_activity_start_rows();
+}
+
+add_start_rows() for 1 .. 2;
 is(
   scalar $dbh->selectrow_array(
     'SELECT COUNT(*) FROM flag_activity WHERE flag_id = ?', undef, $flag->id
@@ -111,7 +117,7 @@ $dbh->do('DELETE FROM flag_activity WHERE flag_id = ?', undef, $undated->id);
 $dbh->do('UPDATE flags SET modification_date = NULL WHERE id = ?',
   undef, $undated->id);
 
-Bugzilla::Install::DB::_add_flag_activity_start_rows();
+add_start_rows();
 is(
   scalar $dbh->selectrow_array(
     'SELECT flag_when FROM flag_activity WHERE flag_id = ?', undef, $undated->id
@@ -120,6 +126,17 @@ is(
     'SELECT creation_date FROM flags WHERE id = ?', undef, $undated->id
   ),
   'a flag without a modification date is dated at its creation'
+);
+
+# Once the index is there, checksetup doesn't walk the flags again.
+$dbh->do('DELETE FROM flag_activity WHERE flag_id = ?', undef, $undated->id);
+Bugzilla::Install::DB::_add_flag_activity_start_rows();
+is(
+  scalar $dbh->selectrow_array(
+    'SELECT COUNT(*) FROM flag_activity WHERE flag_id = ?', undef, $undated->id
+  ),
+  0,
+  'the start rows are only added once'
 );
 
 done_testing;

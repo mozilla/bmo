@@ -4557,8 +4557,12 @@ sub _migrate_flag_state_activity {
 # don't show it, as it isn't newer than that change in bugs_activity.
 sub _add_flag_activity_start_rows {
   my $dbh = Bugzilla->dbh;
+
+  # The index is added at the end, so this runs once, or again if it died.
+  return if $dbh->bz_index_info('bugs_activity', 'bugs_activity_bug_field_when_idx');
+
   my ($max_id) = $dbh->selectrow_array('SELECT MAX(id) FROM flags');
-  return unless $max_id;
+  $max_id //= 0;
 
   my $batch_size = 10_000;
   my $added      = 0;
