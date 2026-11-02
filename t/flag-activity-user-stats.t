@@ -104,4 +104,20 @@ $dbh->do(
 update_statistics_by_user($human->id);
 is(product_count(), 1, 'a change in both tables is counted once');
 
+# bugs_activity knows the bot made this change; flag_activity only has the
+# setter, the human, as a guess.
+$dbh->do(
+  'INSERT INTO bugs_activity (bug_id, who, bug_when, fieldid, removed, added)
+   VALUES (?, ?, ?, ?, ?, ?)', undef, $bug_id, $bot->id,
+  '2099-01-01 13:00:00', $fieldid, 'needinfo?(bob@bmo.test)', ''
+);
+$dbh->do(
+  'UPDATE flag_activity SET flag_when = ?, who = ? WHERE flag_when = ?',
+  undef, '2099-01-01 13:00:00', $human->id, '2099-01-01 11:00:00'
+);
+is(Bugzilla::Bug->new($bug_id)->delta_ts_non_bot,
+  '2099-01-01 10:00:00', 'the non-bot last change time skips a guessed who');
+is(last_user_activity($human->id),
+  '2099-01-01 10:00:00', 'the last user activity skips a guessed who');
+
 done_testing;

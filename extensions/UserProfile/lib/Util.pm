@@ -119,6 +119,8 @@ EOF
 EOF
 
   # bugs touched
+  my $flag_newer
+    = Bugzilla::FlagActivity->newer_than_bugs_activity_sql('flag_activity');
   _update_statistics($statistics, 'touched', [($user_id) x 3], <<EOF);
     SELECT COUNT(*) FROM (
         SELECT bugs_activity.bug_id
@@ -133,7 +135,7 @@ EOF
         UNION
         SELECT flag_activity.bug_id
           FROM flag_activity
-         WHERE who = ?
+         WHERE who = ? AND $flag_newer
          GROUP BY flag_activity.bug_id
     ) temp
 EOF
@@ -207,6 +209,8 @@ sub last_user_activity {
 
   # last comment, or change to a bug (excluding CC changes) or to its flags
   my ($user_id) = @_;
+  my $flag_newer
+    = Bugzilla::FlagActivity->newer_than_bugs_activity_sql('flag_activity');
   return Bugzilla->dbh->selectrow_array(
     <<EOF, undef, $user_id, $user_id, _field_id('cc'), $user_id);
     SELECT MAX(bug_when)
@@ -222,7 +226,7 @@ sub last_user_activity {
             UNION ALL
            SELECT MAX(flag_when) AS bug_when
              FROM flag_activity
-            WHERE who = ?
+            WHERE who = ? AND $flag_newer
            ) tmp
 EOF
 }

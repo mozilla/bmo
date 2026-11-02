@@ -3743,7 +3743,9 @@ sub _changedby {
   if ($field eq 'anything') {
     my $fa = "flag_act_$chart_id";
     $args->{term} = "($args->{term} OR "
-      . $self->_flag_activity_exists($args, $fa, "$fa.who = $user_id") . ')';
+      . $self->_flag_activity_exists($args, $fa, "$fa.who = $user_id",
+      Bugzilla::FlagActivity->newer_than_bugs_activity_sql($fa))
+      . ')';
   }
 }
 
@@ -3790,7 +3792,8 @@ sub _flagtypes_changed {
   }
   elsif ($operator eq 'changedby') {
     my $user_id = $value =~ /^\d+$/ ? $value : $self->_get_user_id($value);
-    push @where, "$fa.who = $user_id";
+    push @where, "$fa.who = $user_id",
+      Bugzilla::FlagActivity->newer_than_bugs_activity_sql($fa);
   }
   else {    # changedto, changedfrom
     my $match = _flag_state_changed_sql($chart_id, $fa, $operator, $value)

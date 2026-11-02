@@ -88,7 +88,8 @@ sub status        { return $_[0]->{status} }
 # SQL condition on flag_activity row $alias: true when it is newer than the
 # bug's last flag change in bugs_activity. Older flag changes are read from
 # bugs_activity, which has them all; flag_activity has only some of them,
-# written to both tables, which must not be listed twice.
+# written to both tables, which must not be listed twice. Older rows also don't
+# always know their who: it was filled in from the setter.
 sub newer_than_bugs_activity_sql {
   my ($class, $alias) = @_;
   return "$alias.flag_when > COALESCE(

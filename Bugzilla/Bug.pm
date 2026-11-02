@@ -4561,6 +4561,8 @@ sub delta_ts_non_bot {
   # Grab the latest timestamp for comments, bug changes and flag changes that
   # was not made by one of the accounts in the bot skip list.
   if (my $bot_ids_string = $cache->{bot_ids_string}) {
+    my $flag_newer
+      = Bugzilla::FlagActivity->newer_than_bugs_activity_sql('flag_activity');
     ($self->{delta_ts_non_bot}) = $dbh->selectrow_array(
       "SELECT MAX(bug_when)
          FROM (SELECT MAX(bug_when) AS bug_when
@@ -4573,7 +4575,8 @@ sub delta_ts_non_bot {
                UNION ALL
                SELECT MAX(flag_when) AS bug_when
                  FROM flag_activity
-                WHERE bug_id = ? AND who NOT IN ($bot_ids_string)) tmp",
+                WHERE bug_id = ? AND who NOT IN ($bot_ids_string)
+                      AND $flag_newer) tmp",
       undef, ($self->id) x 3
     );
   }

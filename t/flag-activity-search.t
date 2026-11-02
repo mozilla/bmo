@@ -31,6 +31,7 @@ my $dbh = Bugzilla->dbh;
 
 my $alice = create_user('alice@bmo.test', '*');
 my $bob   = create_user('bob@bmo.test',   '*');
+my $carol = create_user('carol@bmo.test', '*');
 
 sub new_bug {
   return create_bug(
@@ -131,6 +132,25 @@ is(search_anything(changedfrom => 'review?(alice@bmo.test)'), [],
   'anything changedfrom skips a state within a request');
 is(search(changedto => 'review+'),
   [$legacy_bug, $current_bug, $same_second_bug], 'changedto the net change');
+
+# A legacy change also in flag_activity: bugs_activity knows who made it, the
+# flag_activity row only has the setter as a guess.
+my $guessed_bug = new_bug('guessed who');
+$dbh->do(
+  'INSERT INTO bugs_activity (bug_id, who, bug_when, fieldid, removed, added)
+   VALUES (?, ?, ?, ?, ?, ?)', undef, $guessed_bug, $bob->id,
+  '2020-02-01 10:00:00', $fieldid, '', 'review+'
+);
+$dbh->do(
+  'INSERT INTO flag_activity
+     (flag_when, type_id, flag_id, setter_id, who, requestee_id, bug_id, status)
+   VALUES (?, ?, 44, ?, ?, NULL, ?, ?)', undef, '2020-02-01 10:00:00', $review_id,
+  $carol->id, $carol->id, $guessed_bug, '+'
+);
+is(search(changedby => 'carol@bmo.test'), [],
+  'changedby skips a flag_activity row older than bugs_activity');
+is(search_anything(changedby => 'carol@bmo.test'), [],
+  'anything changedby skips it too');
 
 # An assignee whose only recent changes are flag changes isn't idle.
 my $owned_bug = create_bug(
