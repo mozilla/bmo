@@ -20,6 +20,7 @@ use base qw(Exporter);
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Field;
+use Bugzilla::FlagActivity;
 use Bugzilla::Group;
 use Bugzilla::Keyword;
 use Bugzilla::Logging;
@@ -3821,15 +3822,19 @@ sub _flag_activity_exists {
 # (the state before this change), or undef if $value isn't a flag state.
 sub _flag_state_changed_sql {
   my ($chart_id, $fa, $operator, $value) = @_;
-  return _flag_state_match($fa, $value) if $operator eq 'changedto';
+  # As in history, a request counts as one net change.
+  my $last = Bugzilla::FlagActivity->last_of_request_sql($fa);
+  if ($operator eq 'changedto') {
+    my $match = _flag_state_match($fa, $value) or return undef;
+    return "$match AND $last";
+  }
 
-  my $prev  = "flag_prev_$chart_id";
-  my $match = _flag_state_match($prev, $value) or return undef;
-  return "EXISTS (
+  my $prev    = "flag_prev_$chart_id";
+  my $prev_id = Bugzilla::FlagActivity->previous_id_sql($fa);
+  my $match   = _flag_state_match($prev, $value) or return undef;
+  return "$last AND EXISTS (
       SELECT 1 FROM flag_activity $prev
-       WHERE $prev.id = (SELECT MAX(p2.id) FROM flag_activity p2
-                          WHERE p2.flag_id = $fa.flag_id AND p2.id < $fa.id)
-         AND $match)";
+       WHERE $prev.id = $prev_id AND $match)";
 }
 
 sub _flag_state_match {

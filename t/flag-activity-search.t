@@ -112,6 +112,26 @@ is(search_anything(changedto => 'review+'), [$legacy_bug, $current_bug],
 is(search_anything(changedfrom => 'review?(bob@bmo.test)'), [$current_bug],
   'anything changedfrom');
 
+# A flag requested and granted in one request is one net change, as in history.
+my $same_second_bug = new_bug('same second');
+for my $row (['?', $alice->id], ['+', undef]) {
+  $dbh->do(
+    'INSERT INTO flag_activity
+       (flag_when, type_id, flag_id, setter_id, who, requestee_id, bug_id,
+        status)
+     VALUES (?, ?, 43, ?, ?, ?, ?, ?)', undef, '2026-02-01 10:00:00', $review_id,
+    $bob->id, $bob->id, $row->[1], $same_second_bug, $row->[0]
+  );
+}
+is(search(changedto => 'review?(alice@bmo.test)'), [],
+  'changedto skips a state within a request');
+is(search(changedfrom => 'review?(alice@bmo.test)'), [],
+  'changedfrom skips a state within a request');
+is(search_anything(changedfrom => 'review?(alice@bmo.test)'), [],
+  'anything changedfrom skips a state within a request');
+is(search(changedto => 'review+'),
+  [$legacy_bug, $current_bug, $same_second_bug], 'changedto the net change');
+
 # An assignee whose only recent changes are flag changes isn't idle.
 my $owned_bug = create_bug(
   short_desc  => 'owned',
