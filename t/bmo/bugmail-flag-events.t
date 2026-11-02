@@ -293,6 +293,21 @@ sub sent_mails {
   unlike($raw[0], qr/private reasons/, 'but not the private ones');
 }
 
+# The mail of a new bug doesn't report the flags set at creation as changes.
+# The assignee gets the whole mail: the flag recipients have no diffs anyway.
+{
+  my $bug = new_bug(assigned_to => $stranger->login);
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
+    $requestee);
+  $dbh->do('UPDATE bugs SET lastdiffed = NULL WHERE bug_id = ?', undef, $bug->id);
+
+  my ($mail) = grep { $_->{to_user}->id == $stranger->id }
+    sent_mails(Bugzilla::Bug->new($bug->id), $requester);
+  ok(@{$mail->{diffs}}, 'the assignee gets the fields of the new bug');
+  ok(!grep({ $_->{field_name} eq 'flagtypes.name' } @{$mail->{diffs}}),
+    'but no flag change');
+}
+
 # A flag type edit queues one bugmail job per bug it touched.
 {
   my @jobs;
