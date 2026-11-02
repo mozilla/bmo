@@ -294,6 +294,9 @@ sub report {
 
       next unless Bugzilla->user->can_see_bug($bugid);
 
+      # A flag created and cleared in one request changed nothing.
+      next if $fieldname eq 'flagtypes.name' && $removed eq $added;
+
       # check if the user should see this field's activity
       if ( $fieldname eq 'remaining_time'
         || $fieldname eq 'estimated_time'
