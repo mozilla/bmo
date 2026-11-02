@@ -580,11 +580,11 @@ sub create {
 }
 
 # The params of a request, as the legacy REST server built them. On GET, the
-# query string, with a value per param, or a list for a param sent more than
-# once; the id in the path is added to the ids there. Otherwise the query
-# string and the request body, and the id in the path only when neither of them
-# has ids. @list_params are always lists, and include_fields/exclude_fields are
-# split on commas and spaces.
+# query string, and the id in the path is added to the ids there. Otherwise the
+# query string and the request body, and the id in the path only when neither
+# of them has ids. A param is a value, or a list when sent more than once.
+# @list_params are always lists, and include_fields/exclude_fields are split on
+# commas and spaces.
 #
 # Also sets Bugzilla->input_params, which extensions read in bug hooks (such
 # as Needinfo's needinfo_from) and which wants_object() uses.
@@ -595,21 +595,20 @@ sub create {
 sub _request_params {
   my ($self, @list_params) = @_;
 
-  my $params;
-  if ($self->req->method eq 'GET') {
-    $params = {};
-    foreach my $name (@{$self->req->query_params->names}) {
-      my $values = $self->req->query_params->every_param($name);
-      $params->{$name} = @$values > 1 ? $values : $values->[0];
-    }
-  }
-  else {
-    my $error;
-    ($params, $error) = merge_request_params($self, \@list_params);
+  my $params = {};
+  my $sent   = $self->req->query_params;
+  if ($self->req->method ne 'GET') {
+    ($params, my $error) = merge_request_params($self);
     if ($error) {
       $self->user_error($error);
       return (undef, 1);
     }
+    $sent = $self->req->params;
+  }
+
+  foreach my $name (@{$sent->names}) {
+    my $values = $sent->every_param($name);
+    $params->{$name} = @$values > 1 ? $values : $values->[0];
   }
 
   # As legacy validate(): a single value becomes a list, and anything but a

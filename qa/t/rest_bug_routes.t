@@ -121,6 +121,29 @@ foreach my $from ('no-such-user@example.invalid', 'mozilla.test') {
     ->json_like('/message' => qr/cannot make a conclusive match/);
 }
 
+# A param repeated in a form-encoded create stays a list.
+{
+  my @cc = @$config{qw(editbugs_user_login unprivileged_user_login)};
+  $t->post_ok($url . 'rest/bug' => $headers => form => {
+    product     => 'TestProduct',
+    component   => 'TestComponent',
+    version     => 'unspecified',
+    summary     => 'Form-encoded create',
+    op_sys      => 'Linux',
+    platform    => 'PC',
+    type        => 'defect',
+    description => 'cc and blocks sent twice',
+    cc          => \@cc,
+    blocks      => [1, 2],
+  })->status_is(200)->json_has('/id');
+  my $id = $t->tx->res->json->{id};
+  $t->get_ok($url . "rest/bug/$id?include_fields=cc,blocks" => $headers)
+    ->status_is(200);
+  my $bug = $t->tx->res->json->{bugs}[0];
+  is_deeply([sort @{$bug->{cc}}], [sort @cc], 'every cc of the form is kept');
+  is_deeply([sort @{$bug->{blocks}}], [1, 2], 'every blocks of the form is kept');
+}
+
 # OPTIONS lists the methods of each route.
 $t->options_ok($url . 'rest/bug')->status_is(200)
   ->header_is(Allow => 'GET, POST');
