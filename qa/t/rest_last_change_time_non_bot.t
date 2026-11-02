@@ -53,7 +53,10 @@ ok(
 );
 $old_timestamp = $current_timestamp;
 
-sleep(5);
+# Long enough for the timestamps to differ, and shorter than the server's
+# 5 second keep-alive timeout: the next request reuses the connection, which
+# fails if the server closes it at the same time.
+sleep(2);
 
 # Add a comment as a bot user
 $t->put_ok($url
