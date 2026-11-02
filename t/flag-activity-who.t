@@ -20,6 +20,7 @@ use Bugzilla::Test::MockDB;
 use Bugzilla::Test::MockParams (mail_delivery_method => 'None');
 use Bugzilla::Test::Util qw(create_bug create_user);
 use Bugzilla::Bug;
+use Bugzilla::Install::DB;
 use Bugzilla::User;
 use Test2::V0;
 
@@ -77,5 +78,21 @@ my ($redirect) = grep {
     @{$_->{changes}}
 } @$operations;
 is($redirect->{who}, 'redirector@bmo.test', 'history shows the redirector');
+
+# A checksetup that died after adding the column left it nullable: the next
+# one finishes the job.
+$dbh->bz_alter_column('flag_activity', 'who',
+  {TYPE => 'INT3', REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}});
+$dbh->do('UPDATE flag_activity SET who = NULL WHERE flag_id = ?',
+  undef, $flag->id);
+Bugzilla::Install::DB::_add_flag_activity_who();
+is(
+  scalar $dbh->selectrow_array(
+    'SELECT COUNT(*) FROM flag_activity WHERE who IS NULL'),
+  0,
+  'an interrupted migration fills the rows left'
+);
+ok($dbh->bz_column_info('flag_activity', 'who')->{NOTNULL},
+  'and makes the column NOT NULL');
 
 done_testing;

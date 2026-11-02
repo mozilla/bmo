@@ -4590,13 +4590,16 @@ sub _add_flag_activity_start_rows {
 sub _add_flag_activity_who {
   my $dbh = Bugzilla->dbh;
 
-  if (!$dbh->bz_column_info('flag_activity', 'who')) {
+  # Still nullable if it died before the end: pick up from there.
+  my $who = $dbh->bz_column_info('flag_activity', 'who');
+  if (!$who || !$who->{NOTNULL}) {
 
     # Existing rows don't record who made the change; the setter is the best
     # value available.
     $dbh->bz_add_column('flag_activity', 'who',
-      {TYPE => 'INT3', REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}});
-    $dbh->do('UPDATE flag_activity SET who = setter_id');
+      {TYPE => 'INT3', REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}})
+      if !$who;
+    $dbh->do('UPDATE flag_activity SET who = setter_id WHERE who IS NULL');
     $dbh->bz_alter_column('flag_activity', 'who',
       {
       TYPE       => 'INT3',
