@@ -397,6 +397,10 @@ elsif ($action eq 'del') {
           + (SELECT COUNT(*) FROM flag_activity WHERE who = ? OR setter_id = ?)',
     undef, ($otherUserID) x 3
   );
+  # The foreign key forbids deleting a requestee kept in the flag history.
+  $vars->{'flag_activity_requestee'} = $dbh->selectrow_array(
+    'SELECT COUNT(*) FROM flag_activity WHERE requestee_id = ?',
+    undef, $otherUserID);
   $vars->{'component_cc'}
     = $dbh->selectrow_array('SELECT COUNT(*) FROM component_cc WHERE user_id = ?',
     undef, $otherUserID);
