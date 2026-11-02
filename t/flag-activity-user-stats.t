@@ -120,4 +120,21 @@ is(Bugzilla::Bug->new($bug_id)->delta_ts_non_bot,
 is(last_user_activity($human->id),
   '2099-01-01 10:00:00', 'the last user activity skips a guessed who');
 
+# One request: a flag requested and granted, another requested and removed.
+sub add_request_rows {
+  my ($flag_id, @statuses) = @_;
+  $dbh->do(
+    'INSERT INTO flag_activity
+       (flag_when, type_id, flag_id, setter_id, who, bug_id, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?)', undef, '2099-01-01 14:00:00', $needinfo_id,
+    $flag_id, $human->id, $human->id, $bug_id, $_
+  ) for @statuses;
+}
+my $before = product_count();
+add_request_rows(900, '?', '+');
+add_request_rows(901, '?', 'X');
+update_statistics_by_user($human->id);
+is(product_count(), $before + 1,
+  'the activity by product counts one net change per request');
+
 done_testing;

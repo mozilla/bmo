@@ -310,14 +310,21 @@ sub _activity_by_product {
 EOF
   map { $products{$_->{product}} += $_->{count} } @$rows;
 
-  # flag changes, skipping the older ones that are also in bugs_activity
-  my $newer = Bugzilla::FlagActivity->newer_than_bugs_activity_sql('fa');
+  # flag changes, skipping the older ones that are also in bugs_activity. As in
+  # history, a request is one net change, and none if it left the flag as it was.
+  my $newer     = Bugzilla::FlagActivity->newer_than_bugs_activity_sql('fa');
+  my $flag_last = Bugzilla::FlagActivity->last_of_request_sql('fa');
+  my $prev_id   = Bugzilla::FlagActivity->previous_id_sql('fa');
   $rows = $dbh->selectall_arrayref(<<EOF, {Slice => {}}, $user_id);
     SELECT products.name AS product, count(*) AS count
       FROM flag_activity fa
            INNER JOIN bugs ON bugs.bug_id = fa.bug_id
            INNER JOIN products ON products.id = bugs.product_id
-     WHERE fa.who = ? AND $newer
+           LEFT JOIN flag_activity prev ON prev.id = $prev_id
+     WHERE fa.who = ? AND $newer AND $flag_last
+           AND NOT (COALESCE(prev.status, 'X') = fa.status
+                    AND COALESCE(prev.requestee_id, 0)
+                        = COALESCE(fa.requestee_id, 0))
      GROUP BY bugs.product_id
 EOF
   map { $products{$_->{product}} += $_->{count} } @$rows;
