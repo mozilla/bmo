@@ -48,7 +48,6 @@ use Bugzilla::Hook;
 use Bugzilla::User;
 use Bugzilla::Util;
 use Bugzilla::Error;
-use Bugzilla::Mailer;
 use Bugzilla::Constants;
 use Bugzilla::Field;
 
@@ -68,8 +67,6 @@ use constant AUDIT_UPDATES => 0;
 use constant AUDIT_REMOVES => 0;
 
 use constant SKIP_REQUESTEE_ON_ERROR => 1;
-
-our $disable_flagmail = 0;
 
 sub DB_COLUMNS {
   my $dbh = Bugzilla->dbh;
@@ -580,20 +577,15 @@ sub update_flags {
       $new_flag->{id}                = $flag->id;
       $new_flag->{creation_date}     = format_time($timestamp, '%Y-%m-%d %H:%i:%s');
       $new_flag->{modification_date} = format_time($timestamp, '%Y-%m-%d %H:%i:%s');
-      $class->notify($new_flag, undef, $self, $timestamp);
     }
     else {
-      my $changes = $new_flag->update($timestamp);
-      if (scalar(keys %$changes)) {
-        $class->notify($new_flag, $old_flags{$new_flag->id}, $self, $timestamp);
-      }
+      $new_flag->update($timestamp);
       delete $old_flags{$new_flag->id};
     }
   }
 
   # These flags have been deleted.
   foreach my $old_flag (values %old_flags) {
-    $class->notify(undef, $old_flag, $self, $timestamp);
 
     # BMO - provide a hook which passes the timestamp,
     # because that isn't passed to remove_from_db().
@@ -714,7 +706,6 @@ sub force_retarget {
     else {
       # Track deleted attachment flags.
       push(@removed, $class->snapshot([$flag])) if $flag->attach_id;
-      $class->notify(undef, $flag, $bug || $flag->bug);
 
       # BMO - provide a hook which passes the timestamp,
       # because that isn't passed to remove_from_db().
@@ -1064,151 +1055,6 @@ sub extract_flags_from_cgi {
 
   # Return the list of flags to update and/or to create.
   return (\@flags, \@new_flags);
-}
-
-=pod
-
-=over
-
-=item C<notify($flag, $old_flag, $object, $timestamp)>
-
-Sends an email notification about a flag being created, fulfilled
-or deleted.
-
-=back
-
-=cut
-
-sub notify {
-  my ($class, $flag, $old_flag, $obj, $timestamp) = @_;
-
-  if ($disable_flagmail) {
-    return;
-  }
-
-  my ($bug, $attachment);
-  if (blessed($obj) && $obj->isa('Bugzilla::Attachment')) {
-    $attachment = $obj;
-    $bug        = $attachment->bug;
-  }
-  elsif (blessed($obj) && $obj->isa('Bugzilla::Bug')) {
-    $bug = $obj;
-  }
-  else {
-    # Not a good time to throw an error.
-    return;
-  }
-
-  my $addressee;
-
-  # If the flag is set to '?', maybe the requestee wants a notification.
-  if ( $flag
-    && $flag->requestee_id
-    && (!$old_flag || ($old_flag->requestee_id || 0) != $flag->requestee_id))
-  {
-    if ($flag->requestee->wants_mail([EVT_FLAG_REQUESTED])) {
-      $addressee = $flag->requestee;
-    }
-  }
-  elsif ($old_flag
-    && $old_flag->status eq '?'
-    && (!$flag || $flag->status ne '?'))
-  {
-    if ($old_flag->setter->wants_mail([EVT_REQUESTED_FLAG])) {
-      $addressee = $old_flag->setter;
-    }
-  }
-
-  my $cc_list = $flag ? $flag->type->cc_list : $old_flag->type->cc_list;
-  $cc_list //= '';
-
-  # Is there someone to notify?
-  return unless ($addressee || $cc_list);
-
-  # The email client will display the Date: header in the desired timezone,
-  # so we can always use UTC here.
-  $timestamp ||= Bugzilla->dbh->selectrow_array('SELECT LOCALTIMESTAMP(0)');
-  $timestamp = format_time($timestamp, '%a, %d %b %Y %T %z', 'UTC');
-
-  # If the target bug is restricted to one or more groups, then we need
-  # to make sure we don't send email about it to unauthorized users
-  # on the request type's CC: list, so we have to trawl the list for users
-  # not in those groups or email addresses that don't have an account.
-  my @bug_in_groups = grep { $_->{'ison'} || $_->{'mandatory'} } @{$bug->groups};
-  my $attachment_is_private = $attachment ? $attachment->isprivate : undef;
-
-  my %recipients;
-  foreach my $cc (split(/[, ]+/, $cc_list)) {
-    my $ccuser = new Bugzilla::User({name => $cc, cache => 1});
-    next
-      if (scalar(@bug_in_groups)
-      && (!$ccuser || !$ccuser->can_see_bug($bug->bug_id)));
-    next if $attachment_is_private && (!$ccuser || !$ccuser->is_insider);
-
-    # Prevent duplicated entries due to case sensitivity.
-    $cc = $ccuser ? $ccuser->email : $cc;
-    $recipients{$cc} = $ccuser;
-  }
-
-  # Only notify if the addressee is allowed to receive the email
-  # and can see the bug (prevents short_desc leaking via Subject/body).
-  if (
-       $addressee
-    && $addressee->email_enabled
-    && ( (!scalar(@bug_in_groups) || $addressee->can_see_bug($bug->bug_id))
-      && (!$attachment_is_private || $addressee->is_insider))
-    )
-  {
-    $recipients{$addressee->email} = $addressee;
-  }
-
-  return unless keys %recipients;
-
-  # Process and send notification for each recipient.
-  # If there are users in the CC list who don't have an account,
-  # use the default language for email notifications.
-  my $default_lang;
-  if (grep { !$_ } values %recipients) {
-    $default_lang = Bugzilla::User->new()->setting('lang');
-  }
-
-  # Get comments on the bug
-  my $all_comments = $bug->comments({after => $bug->lastdiffed});
-  @$all_comments = grep { $_->type || $_->body =~ /\S/ } @$all_comments;
-
-  # Get public only comments
-  my $public_comments = [grep { !$_->is_private } @$all_comments];
-
-  foreach my $to (keys %recipients) {
-
-    # Add threadingmarker to allow flag notification emails to be the
-    # threaded similar to normal bug change emails.
-    my $thread_user_id = $recipients{$to} ? $recipients{$to}->id : 0;
-
-    # We only want to show private comments to users in the is_insider group
-    my $comments = $recipients{$to}
-      && $recipients{$to}->is_insider ? $all_comments : $public_comments;
-
-    my $vars = {
-      flag            => $flag,
-      old_flag        => $old_flag,
-      to              => $to,
-      date            => $timestamp,
-      bug             => $bug,
-      attachment      => $attachment,
-      threadingmarker => build_thread_marker($bug->id, $thread_user_id),
-      new_comments    => $comments,
-    };
-
-    my $lang = $recipients{$to} ? $recipients{$to}->setting('lang') : $default_lang;
-
-    my $template = Bugzilla->template_inner($lang);
-    my $message;
-    $template->process("request/email.txt.tmpl", $vars, \$message)
-      || ThrowTemplateError($template->error());
-
-    MessageToMTA($message);
-  }
 }
 
 # This is an internal function used by $bug->flag_types

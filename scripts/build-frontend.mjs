@@ -87,7 +87,7 @@ const TARGETS = {
   'jquery/plugins/devbridgeAutocomplete/devbridgeAutocomplete-min.js':
     'devbridge-autocomplete/dist/jquery.autocomplete.min.js',
   'jquery/plugins/devbridgeAutocomplete/license.txt':
-    'devbridge-autocomplete/license.txt',
+    'devbridge-autocomplete/LICENSE',
 };
 
 // Whole directories copied verbatim: destination (relative to js/) -> source

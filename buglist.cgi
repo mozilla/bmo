@@ -323,7 +323,7 @@ my $disp_prefix = "bugs";
 if ( ($cmdtype eq "dorem" && $remaction =~ /^run/)
   || ($format->{extension} ne 'html' && defined $cgi->param('namedcmd')))
 {
-  $disp_prefix = $cgi->param('namedcmd');
+  $disp_prefix = $cgi->param('namedcmd') // 'bugs';
 }
 
 # Take appropriate action based on user's request.

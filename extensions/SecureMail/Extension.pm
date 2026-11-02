@@ -369,7 +369,7 @@ sub mailer_before_send {
 
     # Check if the new bugmail prefix should be added to the subject.
     my $add_new
-      = (  $email->header('X-Bugzilla-Type') eq 'new'
+      = (  $email->header('X-Bugzilla-Type') =~ /^new\b/
         && $user
         && $user->settings->{'bugmail_new_prefix'}->{'value'} eq 'on') ? 1 : 0;
 

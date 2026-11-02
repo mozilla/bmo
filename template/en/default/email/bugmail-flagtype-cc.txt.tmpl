@@ -1,0 +1,47 @@
+[%# This Source Code Form is subject to the terms of the Mozilla Public
+  # License, v. 2.0. If a copy of the MPL was not distributed with this
+  # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+  #
+  # This Source Code Form is "Incompatible With Secondary Licenses", as
+  # defined by the Mozilla Public License, v. 2.0.
+  #%]
+
+[% PROCESS global/variables.none.tmpl %]
+
+From: [% Param('mailfrom') %]
+To: [% to %]
+Subject: [[% terms.Bug %] [%+ bug.id %]] [% bug.short_desc %]
+Date: [% date %]
+X-Bugzilla-Type: request
+[%+ INCLUDE "email/header-common.txt.tmpl" %]
+[%+ threadingmarker %]
+
+[%+ urlbase %]show_bug.cgi?id=[% bug.id %]
+
+[% FOREACH event = flag_events %]
+[% IF event.action == 'requested' %]
+[%+ event.setter.identity %] requested [% event.type.name %][% " for attachment ${event.attachment_id}" IF event.attachment_id %].
+[% ELSIF event.action == 'answered' %]
+[% status_word = event.status == '+' ? 'granted' : event.status == '-' ? 'denied' : 'cleared' %]
+[%+ event.setter.identity %] [% status_word %] [% event.type.name %][% " for attachment ${event.attachment_id}" IF event.attachment_id %].
+[% ELSE %]
+[%+ event.setter.identity %] set [% event.type.name %][% event.status IF event.status != 'X' %][% " for attachment ${event.attachment_id}" IF event.attachment_id %][% " (cleared)" IF event.status == 'X' %].
+[% END %]
+[% END %]
+
+[%+ USE wrap -%]
+[%- FILTER bullet = wrap(80) %]
+
+[% FOREACH comment = new_comments %]
+
+[%- IF comment.count %]
+--- Comment #[% comment.count %] from [% comment.author.identity %] ---
+[% ELSE %]
+--- Description ---
+[% END %]
+[%+ comment.body_full({ is_bugmail => 1, wrap => 1 }) FILTER strip_control_chars %]
+[% END %]
+
+[%- END %]
+
+@@body-headers@@

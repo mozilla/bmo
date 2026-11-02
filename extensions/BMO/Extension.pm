@@ -1784,8 +1784,12 @@ sub _log_sent_email {
   my $message_type;
   my $type   = $email->header('X-Bugzilla-Type')   || '';
   my $reason = $email->header('X-Bugzilla-Reason') || '';
-  if ($type eq 'whine' || $type eq 'request' || $type eq 'admin') {
+  if ($type eq 'whine' || $type eq 'admin') {
     $message_type = $type;
+  }
+  elsif ($type =~ /\brequest\b/) {
+    # Bugmail carrying a flag event, e.g. "changed request" (bug 1883428).
+    $message_type = 'request';
   }
   elsif ($reason && $reason ne 'None') {
     $message_type = $reason;

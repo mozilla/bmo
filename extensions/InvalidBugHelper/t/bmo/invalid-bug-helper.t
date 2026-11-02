@@ -21,6 +21,7 @@ use Test::More;
 use Bugzilla;
 use Bugzilla::Constants;
 use Bugzilla::Bug;
+use Bugzilla::Component;
 use Bugzilla::Group;
 use Bugzilla::Product;
 use Bugzilla::User;
@@ -135,12 +136,37 @@ no warnings 'redefine';
 local *{"${ws}::type"} = sub { return $_[2] };
 use strict 'refs';
 
+# The test data has no Invalid Bugs product, the one close_as_invalid moves
+# bugs to. It needs the version and milestone of the bug it receives.
+if (!Bugzilla::Product->new({name => 'Invalid Bugs'})) {
+  my $invalid = Bugzilla::Product->create({
+    name            => 'Invalid Bugs',
+    description     => 'Bugs closed by the invalid bug helper',
+    default_version => $bug_from_plain_reporter->version,
+  });
+  Bugzilla::Component->create({
+    name         => 'General',
+    product      => $invalid,
+    description  => 'Invalid bugs',
+    initialowner => $admin->login,
+    team_name    => 'Mozilla',
+  });
+
+  # The user caches the products it can enter.
+  Bugzilla->set_user(Bugzilla::User->new($admin->id));
+}
+
 SKIP: {
-  skip 'Need the Invalid Bugs product to test the non-editbugs-reporter path', 2
+  skip 'Need the Invalid Bugs product to test the non-editbugs-reporter path', 3
     unless Bugzilla::Product->new({name => 'Invalid Bugs'});
+
+  # Flag mail is part of bugmail, so closing must send it.
+  my @sent;
+  local *Bugzilla::BugMail::Send = sub { push @sent, $_[0] };
 
   my $result = eval { $ws->close_as_invalid({bug_id => $bug_from_plain_reporter->id}) };
   is($@, '', 'close_as_invalid does not throw for a bug reported by a non-editbugs user');
+  is_deeply(\@sent, [$bug_from_plain_reporter->id], 'and sends the bugmail');
   is(ref $result eq 'HASH' ? $result->{product} : undef, 'Invalid Bugs',
     'bug from non-editbugs reporter is moved to Invalid Bugs');
 }

@@ -29,7 +29,7 @@ use base qw(Exporter);
 @Bugzilla::Token::EXPORT = qw(issue_api_token issue_session_token
   issue_short_lived_session_token
   check_token_data delete_token
-  issue_hash_token check_hash_token
+  issue_hash_token check_hash_token hash_token_time
   issue_hash_sig   check_hash_sig
   set_token_extra_data get_token_extra_data);
 
@@ -231,6 +231,10 @@ sub issue_hash_token {
   $data ||= [];
   $time ||= time();
 
+  # The time must be purely numeric, otherwise fields could be shifted
+  # across the '*' separators below to forge a token for another user.
+  die "Invalid hash token time: $time" unless $time =~ /^\d+\z/a;
+
   # For the user ID, use the actual ID if the user is logged in.
   # Otherwise, use the remote IP, in case this is for something
   # such as creating an account or logging in.
@@ -254,17 +258,21 @@ sub issue_hash_token {
   return $time . '-' . $token;
 }
 
+# Returns the issue time from a hash token, or undef if the token is not
+# a purely numeric time followed by a base64url HMAC.
+sub hash_token_time {
+  my ($token) = @_;
+  return undef unless defined $token && $token =~ /^(\d+)-[\w-]+\z/a;
+  return $1;
+}
+
 sub check_hash_token {
   my ($token, $data) = @_;
   $data ||= [];
-  my ($time, $expected_token);
 
-  if ($token) {
-    ($time, undef) = split(/-/, $token);
-
-    # Regenerate the token based on the information we have.
-    $expected_token = issue_hash_token($data, $time);
-  }
+  # Regenerate the token based on the information we have.
+  my $time           = hash_token_time($token);
+  my $expected_token = defined $time ? issue_hash_token($data, $time) : '';
 
   if (!$token
     || $expected_token ne $token

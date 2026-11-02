@@ -391,7 +391,7 @@ sub get {
 
     if (filter_wants($params, 'groups')) {
       if ( $api_user->id == $user_obj->id
-        || $api_user->in_group('mozilla-employee-confidential'))
+        || $api_user->in_group('can_see_groups'))
       {
         $user_info->{groups} = [map { $self->_group_to_hash($_) } @{$user_obj->groups}];
       }

@@ -2720,6 +2720,14 @@ sub create {
   require Bugzilla::BugMail;
   my %relationships = Bugzilla::BugMail::relationships();
   foreach my $rel (keys %relationships) {
+
+    # Flag relationships bypass wants_bug_mail() entirely (bug 1883428),
+    # so email_setting rows for them are never consulted.
+    next
+      if $rel == REL_FLAG_REQUESTEE
+      || $rel == REL_FLAG_REQUESTER
+      || $rel == REL_FLAG_TYPE_CC;
+
     foreach my $event (POS_EVENTS, NEG_EVENTS) {
 
       # These "exceptions" define the default email preferences.

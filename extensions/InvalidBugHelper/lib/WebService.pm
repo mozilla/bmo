@@ -15,6 +15,7 @@ use base qw(Bugzilla::WebService);
 
 use Bugzilla;
 use Bugzilla::Bug;
+use Bugzilla::BugMail;
 use Bugzilla::Comment;
 use Bugzilla::Constants;
 use Bugzilla::Error;
@@ -95,6 +96,10 @@ sub close_as_invalid {
   }
 
   $dbh->bz_commit_transaction();
+
+  # Flag mail is part of bugmail, so the requesters of the cleared needinfos
+  # are told now rather than with the bug's next change.
+  Bugzilla::BugMail::Send($bug->id, {changer => $user});
 
   return {
     id      => $self->type('int',    $bug->id),

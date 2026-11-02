@@ -280,7 +280,7 @@ sub validate {
   # that match.
   $params = $params_type->coerce($params);
   if (my $type_error = $params_type->validate($params)) {
-    FATAL("validate() found type error: $type_error");
+    WARN("validate() found type error: $type_error");
     ThrowUserError('invalid_params', {type_error => $type_error}) if $type_error;
   }
 

@@ -1,0 +1,23 @@
+[%# This Source Code Form is subject to the terms of the Mozilla Public
+  # License, v. 2.0. If a copy of the MPL was not distributed with this
+  # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+  #
+  # This Source Code Form is "Incompatible With Secondary Licenses", as
+  # defined by the Mozilla Public License, v. 2.0.
+  #%]
+
+[% RETURN UNLESS product.name == 'mozilla.org' %]
+
+<div id="bug_create_warning">
+  <div id="bug_create_warning_image">
+    <img src="[% basepath FILTER none %]extensions/BMO/web/images/sign_warning.png" width="32" height="32" alt="">
+  </div>
+  <div id="bug_create_warning_text">
+    <p>
+      GitHub Enterprise requests are no longer accepted in Bugzilla so the <em>Github: Administration</em> component is disabled.
+      Please submit your GitHub Enterprise requests through <a href="https://mozilla-hub.atlassian.net/jira/software/c/projects/SREIN/form/1344">Jira</a> instead.
+      The new documentation hub can also be found in <a href="https://mozilla-hub.atlassian.net/wiki/spaces/GHE/pages/3087892663/Getting+help+with+GitHub">
+      Confluence</a>.
+    </p>  
+  </div>
+</div>

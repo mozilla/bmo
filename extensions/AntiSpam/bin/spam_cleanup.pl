@@ -13,6 +13,7 @@ use 5.10.1;
 use lib qw(. lib local/lib/perl5);
 
 use Bugzilla;
+use Bugzilla::BugMail;
 BEGIN { Bugzilla->extensions() }
 
 use Bugzilla::Comment;
@@ -59,6 +60,10 @@ foreach my $comment_id (@{$comment_ids}) {
   if (@clear_flags) {
     $bug->set_flags(\@clear_flags, []);
     $bug->update;
+
+    # Flag mail is part of bugmail, so the requesters are told now rather
+    # than with the bug's next change.
+    Bugzilla::BugMail::Send($bug->id, {changer => $auto_user});
   }
 
   # Lastly we need to remove the entry from the cleanup queue

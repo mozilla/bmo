@@ -31,6 +31,12 @@ sub _render_error {
   my ($type, $c, $error, $vars, $options) = @_;
   $options ||= {};
 
+  # Mojo dispatches actions inside an eval, so Bugzilla::Error skips its
+  # rollback for native routes. Roll back here so an open transaction
+  # does not leak into the next request on this process.
+  my $dbh = Bugzilla->dbh;
+  $dbh->bz_rollback_transaction() if $dbh->bz_in_transaction;
+
   # If values are defined in the stash, use those instead
   my $stash = $c->stash;
   $type  = $stash->{type}  if $stash->{type};

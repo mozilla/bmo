@@ -28,9 +28,10 @@ use Carp qw(longmess);
 # This maps job names for Bugzilla::JobQueue to the appropriate modules.
 # If you add new types of jobs, you should add a mapping here.
 use constant JOB_MAP => {
-  send_mail => 'Bugzilla::Job::Mailer',
-  bug_mail  => 'Bugzilla::Job::BugMail',
-  run_task  => 'Bugzilla::Job::RunTask',
+  send_mail     => 'Bugzilla::Job::Mailer',
+  bug_mail      => 'Bugzilla::Job::BugMail',
+  bug_mail_send => 'Bugzilla::Job::BugMailSend',
+  run_task      => 'Bugzilla::Job::RunTask',
 };
 
 # Without a driver cache TheSchwartz opens a new database connection
