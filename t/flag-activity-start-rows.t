@@ -101,4 +101,25 @@ is(
   'the next change shows the previous value'
 );
 
+# flags.modification_date can be NULL, flag_activity.flag_when can't.
+$bug = Bugzilla::Bug->new($bug_id);
+$bug->set_flags([],
+  [{type_id => $needinfo_id, status => '?', requestee => 'bob@bmo.test'}]);
+$bug->update('2099-01-01 12:00:00');
+my ($undated) = grep { $_->status eq '?' } @{Bugzilla::Bug->new($bug_id)->flags};
+$dbh->do('DELETE FROM flag_activity WHERE flag_id = ?', undef, $undated->id);
+$dbh->do('UPDATE flags SET modification_date = NULL WHERE id = ?',
+  undef, $undated->id);
+
+Bugzilla::Install::DB::_add_flag_activity_start_rows();
+is(
+  scalar $dbh->selectrow_array(
+    'SELECT flag_when FROM flag_activity WHERE flag_id = ?', undef, $undated->id
+  ),
+  scalar $dbh->selectrow_array(
+    'SELECT creation_date FROM flags WHERE id = ?', undef, $undated->id
+  ),
+  'a flag without a modification date is dated at its creation'
+);
+
 done_testing;

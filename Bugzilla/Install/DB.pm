@@ -4567,8 +4567,8 @@ sub _add_flag_activity_start_rows {
       'INSERT INTO flag_activity
          (flag_when, type_id, flag_id, setter_id, who, requestee_id, bug_id,
           attachment_id, status)
-       SELECT modification_date, type_id, id, setter_id, setter_id,
-              requestee_id, bug_id, attach_id, status
+       SELECT COALESCE(modification_date, creation_date), type_id, id,
+              setter_id, setter_id, requestee_id, bug_id, attach_id, status
          FROM flags
         WHERE id > ? AND id <= ?
               AND NOT EXISTS (SELECT 1 FROM flag_activity
