@@ -4577,6 +4577,10 @@ sub _add_flag_activity_start_rows {
     );
   }
   print "Added a flag_activity row for $added flags.\n" if $added > 0;
+
+  # For FlagActivity->newer_than_bugs_activity_sql.
+  $dbh->bz_add_index('bugs_activity', 'bugs_activity_bug_field_when_idx',
+    [qw(bug_id fieldid bug_when)]);
 }
 
 sub _add_flag_activity_who {
