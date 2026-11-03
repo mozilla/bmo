@@ -454,14 +454,17 @@ sub update {
   # Drop the request-level keys that are not user fields and pass everything
   # else through, so set_all() still raises unknown_method on an unrecognized
   # field rather than silently ignoring it. login and password are user
-  # fields too: keep them unless both are sent, as the legacy server took that
-  # pair as credentials. Strip before translate(), which maps email to login.
+  # fields too. The legacy server took them sent together as the caller's
+  # credentials; native auth never does, so refuse the pair rather than
+  # guess: email and password change both. Strip before translate(), which
+  # maps email to login.
+  return $self->user_error('invalid_params',
+    {type_error => 'login and password cannot be sent together, use email'})
+    if exists $params->{login} && exists $params->{password};
+
   my $values = strip_request_params($params, qw(ids names));
-  if (!(exists $params->{login} && exists $params->{password})) {
-    foreach my $field (qw(login password)) {
-      $values->{$field} = $params->{$field} if exists $params->{$field};
-    }
-  }
+  $values->{$_} = $params->{$_}
+    for grep { exists $params->{$_} } qw(login password);
   $values = translate($values, MAPPED_FIELDS);
 
   my $dbh = Bugzilla->dbh;

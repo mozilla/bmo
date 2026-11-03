@@ -6,10 +6,10 @@
 # This Source Code Form is "Incompatible With Secondary Licenses", as
 # defined by the Mozilla Public License, v. 2.0.
 
-# PUT /rest/user/<login> takes login and password as user fields, but a login
-# and password sent together are credentials, as on the legacy server: they
-# are dropped and change nothing. The password sent is always the account's
-# own, so the account keeps it even if that breaks.
+# PUT /rest/user/<login> takes login and password as user fields, but refuses
+# them sent together, which the legacy server took as credentials. The
+# password sent is always the account's own, so the account keeps it even if
+# that breaks.
 
 use strict;
 use warnings;
@@ -54,15 +54,28 @@ $t->put_ok($url
     json                        => {login => 'not an email address'})
   ->json_is('/error', 1, 'login alone is a user field');
 
-$changes = update_target({
-  full_name => 'REST Credentials Target ' . time(),
-  login     => $target_login,
-  password  => $target_password,
-});
-ok(exists $changes->{full_name}, 'the other fields are updated');
-ok(!exists $changes->{cryptpassword},
-  'password sent with login is a credential, not a change');
+# The invalid login fails with another message if login is kept, so the
+# message proves the pair itself is refused.
+$t->put_ok(
+  $url
+    . "rest/user/$target_login" => {'X-Bugzilla-API-Key' => $admin_api_key} =>
+    json                        => {
+    full_name => 'REST Credentials Target ' . time(),
+    login     => 'not an email address',
+    password  => $target_password,
+    }
+)->json_is('/error', 1)->json_like(
+  '/message',
+  qr/login and password cannot be sent together/,
+  'login and password sent together are refused'
+);
 
-update_target({full_name => $config->{editusers_target_user_username}});
+$t->get_ok(
+  $url . "rest/user/$target_login" => {'X-Bugzilla-API-Key' => $admin_api_key})
+  ->json_is(
+  '/users/0/real_name',
+  $config->{editusers_target_user_username},
+  'nothing is changed when the pair is refused'
+  );
 
 done_testing();
