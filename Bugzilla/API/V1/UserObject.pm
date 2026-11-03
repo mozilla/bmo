@@ -21,7 +21,7 @@ use Bugzilla::User;
 use Bugzilla::User::APIKey;
 use Bugzilla::Util qw(detaint_natural mojo_user_agent trim);
 use Bugzilla::API::V1::Util qw(filter filter_wants merge_request_params
-  params_to_objects translate);
+  params_to_objects strip_request_params translate);
 
 use Digest::HMAC_SHA1 qw(hmac_sha1_hex);
 use Try::Tiny;
@@ -453,11 +453,16 @@ sub update {
 
   # Drop the request-level keys that are not user fields and pass everything
   # else through, so set_all() still raises unknown_method on an unrecognized
-  # field rather than silently ignoring it.
-  my $values = translate($params, MAPPED_FIELDS);
-  delete @$values{qw(ids names include_fields exclude_fields
-    Bugzilla_api_key Bugzilla_api_token Bugzilla_login Bugzilla_password
-    Bugzilla_token api_key token)};
+  # field rather than silently ignoring it. login and password are user
+  # fields too: keep them unless both are sent, as the legacy server took that
+  # pair as credentials. Strip before translate(), which maps email to login.
+  my $values = strip_request_params($params, qw(ids names));
+  if (!(exists $params->{login} && exists $params->{password})) {
+    foreach my $field (qw(login password)) {
+      $values->{$field} = $params->{$field} if exists $params->{$field};
+    }
+  }
+  $values = translate($values, MAPPED_FIELDS);
 
   my $dbh = Bugzilla->dbh;
   $dbh->bz_start_transaction();
