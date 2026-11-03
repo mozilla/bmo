@@ -17,7 +17,7 @@ use Bugzilla::Bug;
 use Bugzilla::Component;
 use Bugzilla::Error;
 use Bugzilla::Util qw(detaint_natural );
-use Bugzilla::WebService::Util 'filter';
+use Bugzilla::API::V1::Util qw(filter);
 
 use constant PUBLIC_METHODS => qw(
   flag_activity

@@ -15,7 +15,7 @@ use Mojo::JSON qw(false true);
 use Bugzilla::Component;
 use Bugzilla::Constants;
 use Bugzilla::Util             qw(email_filter trim);
-use Bugzilla::WebService::Util qw(merge_request_params);
+use Bugzilla::API::V1::Util qw(merge_request_params);
 
 sub setup_routes {
   my ($class, $r) = @_;

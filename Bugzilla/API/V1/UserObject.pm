@@ -12,7 +12,6 @@ use Mojo::Base qw( Mojolicious::Controller );
 
 use Mojo::JSON qw(true);
 
-use Bugzilla::API::V1::Util;
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Group;
@@ -21,8 +20,8 @@ use Bugzilla::Logging;
 use Bugzilla::User;
 use Bugzilla::User::APIKey;
 use Bugzilla::Util qw(detaint_natural mojo_user_agent trim);
-use Bugzilla::WebService::Util
-  qw(filter filter_wants merge_request_params params_to_objects translate);
+use Bugzilla::API::V1::Util qw(filter filter_wants merge_request_params
+  params_to_objects translate);
 
 use Digest::HMAC_SHA1 qw(hmac_sha1_hex);
 use Try::Tiny;

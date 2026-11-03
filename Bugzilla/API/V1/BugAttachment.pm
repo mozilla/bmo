@@ -13,15 +13,14 @@ use Mojo::Base qw( Mojolicious::Controller );
 use List::MoreUtils qw(uniq);
 use MIME::Base64    qw(decode_base64);
 
-use Bugzilla::API::V1::Util;
 use Bugzilla::Attachment;
 use Bugzilla::Bug;
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Flag;
 use Bugzilla::Util qw(detaint_natural remote_ip trim);
-use Bugzilla::WebService::Util qw(extract_flags merge_request_params
-  strip_request_params translate validate);
+use Bugzilla::API::V1::Util
+  qw(extract_flags merge_request_params strip_request_params translate validate);
 
 use constant ATTACHMENT_MAPPED_SETTERS =>
   {file_name => 'filename', summary => 'description',};

@@ -15,7 +15,7 @@ use base qw(Bugzilla::Extension);
 
 use Bugzilla::Extension::Gravatar::Data qw( %gravatar_user_map );
 use Bugzilla::User::Setting;
-use Bugzilla::WebService::Util qw(filter_wants);
+use Bugzilla::API::V1::Util qw(filter_wants);
 use Digest::MD5 qw(md5_hex);
 use Scalar::Util qw(blessed);
 

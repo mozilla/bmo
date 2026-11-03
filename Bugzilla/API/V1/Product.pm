@@ -15,7 +15,7 @@ use Mojo::JSON qw(true false);
 use Bugzilla::Constants;
 use Bugzilla::Product;
 use Bugzilla::Util             qw(email_filter);
-use Bugzilla::WebService::Util qw(filter filter_wants merge_request_params);
+use Bugzilla::API::V1::Util qw(filter filter_wants merge_request_params);
 
 use constant FIELD_MAP =>
   {has_unconfirmed => 'allows_unconfirmed', is_open => 'isactive'};

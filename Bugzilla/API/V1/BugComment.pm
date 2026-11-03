@@ -12,7 +12,6 @@ use Mojo::Base qw( Mojolicious::Controller );
 
 use List::MoreUtils qw(uniq);
 
-use Bugzilla::API::V1::Util;
 use Bugzilla::Bug;
 use Bugzilla::BugMail;
 use Bugzilla::Comment;
@@ -22,7 +21,7 @@ use Bugzilla::Error;
 use Bugzilla::Hook;
 use Bugzilla::Template;
 use Bugzilla::Util qw(datetime_from detaint_natural remote_ip trim);
-use Bugzilla::WebService::Util qw(merge_request_params);
+use Bugzilla::API::V1::Util qw(merge_request_params);
 
 sub setup_routes {
   my ($class, $r) = @_;

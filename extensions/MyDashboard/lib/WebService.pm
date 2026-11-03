@@ -18,7 +18,7 @@ use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Template;
 use Bugzilla::Util qw(detaint_natural template_var datetime_from);
-use Bugzilla::WebService::Util qw(validate);
+use Bugzilla::API::V1::Util qw(validate);
 
 use Bugzilla::Extension::MyDashboard::Queries
   qw(QUERY_DEFS query_bugs query_flags);

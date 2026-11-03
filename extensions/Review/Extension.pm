@@ -25,7 +25,7 @@ use Bugzilla::Search;
 use Bugzilla::User;
 use Bugzilla::User::Setting;
 use Bugzilla::Util qw(clean_text datetime_from diff_arrays);
-use Bugzilla::WebService::Util qw(filter_wants);
+use Bugzilla::API::V1::Util qw(filter_wants);
 use Scalar::Util qw(blessed);
 
 use constant UNAVAILABLE_RE => qr/\b(?:unavailable|pto|away)\b/i;

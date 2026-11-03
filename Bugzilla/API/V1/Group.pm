@@ -16,8 +16,8 @@ use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Group;
 use Bugzilla::User;
-use Bugzilla::WebService::Util
-  qw(merge_request_params params_to_objects strip_request_params translate validate);
+use Bugzilla::API::V1::Util qw(merge_request_params params_to_objects
+  strip_request_params translate validate);
 
 use constant MAPPED_RETURNS =>
   {userregexp => 'user_regexp', isactive => 'is_active'};
