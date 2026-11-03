@@ -114,7 +114,9 @@ sub report {
       $comment_filter = 'AND longdescs.isprivate = 0';
     }
 
-    # Flag changes are in flag_activity, older ones in bugs_activity.
+    # Flag changes are in flag_activity, older ones in bugs_activity. CHAR(63)
+    # is a question mark: a literal one would be taken for a placeholder by
+    # the debug output below.
     my $flag_newer   = Bugzilla::FlagActivity->newer_than_bugs_activity_sql('fsa');
     my $flag_last    = Bugzilla::FlagActivity->last_of_request_sql('fsa');
     my $flag_prev_id = Bugzilla::FlagActivity->previous_id_sql('fsa');
@@ -152,13 +154,13 @@ sub report {
       . $dbh->sql_date_format('fsa.flag_when', '%Y-%m-%d %H:%i:%s')
       . " AS ts,
                    CASE WHEN prev.id IS NULL THEN ''
-                        WHEN prev.status = '?' AND preq.login_name IS NOT NULL
-                             THEN CONCAT(ft.name, '?(', preq.login_name, ')')
+                        WHEN prev.status = CHAR(63) AND preq.login_name IS NOT NULL
+                             THEN CONCAT(ft.name, prev.status, '(', preq.login_name, ')')
                         ELSE CONCAT(ft.name, prev.status)
                    END AS removed,
                    CASE WHEN fsa.status = 'X' THEN ''
-                        WHEN fsa.status = '?' AND req.login_name IS NOT NULL
-                             THEN CONCAT(ft.name, '?(', req.login_name, ')')
+                        WHEN fsa.status = CHAR(63) AND req.login_name IS NOT NULL
+                             THEN CONCAT(ft.name, fsa.status, '(', req.login_name, ')')
                         ELSE CONCAT(ft.name, fsa.status)
                    END AS added,
                    profiles.login_name,
