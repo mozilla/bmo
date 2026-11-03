@@ -21,7 +21,7 @@ use Bugzilla;
 use Bugzilla::Constants;
 use Bugzilla::Bug;
 use Bugzilla::BugMail;
-use Bugzilla::Test::Util qw(create_user);
+use Bugzilla::Test::Util qw(create_group create_user);
 BEGIN { Bugzilla->extensions }
 
 Bugzilla->usage_mode(USAGE_MODE_TEST);
@@ -92,13 +92,47 @@ sub new_bug {
 }
 
 sub add_activity {
-  my ($bug, $flag_id, $when, $status, $setter, $requestee) = @_;
+  my ($bug, $flag_id, $when, $status, $setter, $requestee, %extra) = @_;
   $dbh->do(
     'INSERT INTO flag_activity (flag_when, type_id, flag_id, setter_id,
-                                requestee_id, bug_id, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?)', undef, $when, $type_id, $flag_id,
-    $setter->id, $requestee ? $requestee->id : undef, $bug->id, $status
+                                requestee_id, bug_id, attachment_id, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)', undef, $when,
+    $extra{type_id} // $type_id, $flag_id, $setter->id,
+    $requestee ? $requestee->id : undef, $bug->id, $extra{attachment_id}, $status
   );
+}
+
+# A flag type of its own for one test, with the given cc_list. Named per run
+# so a rerun on the same DB gets a fresh one.
+sub new_flag_type {
+  my ($name, @cc) = @_;
+  $dbh->do(
+    "INSERT INTO flagtypes (name, description, cc_list, target_type,
+                            is_requestable, is_requesteeble, is_multiplicable)
+     VALUES (?, ?, ?, 'b', 1, 1, 1)", undef, "$name-$$",
+    'Bug 2070239 test flag', join(', ', @cc)
+  );
+  return $dbh->bz_last_key('flagtypes', 'id');
+}
+
+# A group of its own for one test, with the given members. Fresh users keep
+# group membership from being read before it is set.
+sub new_group_with {
+  my ($name, @members) = @_;
+  my $group = create_group("$name-$$", isbuggroup => 1);
+  $dbh->do('INSERT INTO user_group_map (user_id, group_id) VALUES (?, ?)',
+    undef, $_->id, $group->id)
+    for @members;
+  return $group;
+}
+
+# The flag type cc_list recipients for the events in the mail window.
+sub flag_type_cc {
+  my ($bug) = @_;
+  my @events
+    = Bugzilla::BugMail::_get_flag_mail_events($bug, $window_start, $window_end,
+    {});
+  return Bugzilla::BugMail::_get_flag_type_cc($bug, \@events, {});
 }
 
 sub sent_to {
@@ -189,6 +223,27 @@ sub sent_mails {
 
   ok($sent->{$requester->login}, 'requester is told their request was answered');
   ok(!$sent->{$requestee->login}, 'answerer is not mailed about their own answer');
+}
+
+# An answer to a flag re-requested by someone else goes to the latest
+# requester, found by time and not by id: the later '?' is inserted first.
+{
+  my $bug        = new_bug();
+  my $flag_id    = $next_flag_id++;
+  my $requester2 = create_user('flagmail-requester2@mozilla.example', '*');
+  add_activity($bug, $flag_id, '1999-12-31 23:30:00', '?', $requester2, $requestee);
+  add_activity($bug, $flag_id, '1999-12-31 23:00:00', '?', $requester,  $requestee);
+  add_activity($bug, $flag_id, '2000-01-01 00:00:10', '+', $requestee);
+
+  my @events
+    = Bugzilla::BugMail::_get_flag_mail_events($bug, $window_start, $window_end,
+    {});
+  is($events[0]{requester_id}, $requester2->id,
+    'an answer goes to the latest requester by time, not by id');
+
+  my $sent = sent_to($bug, $requestee);
+  ok($sent->{$requester2->login}, 'the latest requester is mailed');
+  ok(!$sent->{$requester->login}, 'the earlier requester is not');
 }
 
 # Send: mail carrying a flag event keeps "request" in X-Bugzilla-Type, as the
@@ -291,6 +346,56 @@ sub sent_mails {
   is(scalar @raw, 1, 'the cc_list address with no account is mailed');
   like($raw[0], qr/Uplift request: public reasons/, 'with the public comments');
   unlike($raw[0], qr/private reasons/, 'but not the private ones');
+}
+
+# The cc_list of a flag on a private attachment only reaches insiders.
+{
+  my $insider  = create_user('flagmail-insider@mozilla.example',  '*');
+  my $outsider = create_user('flagmail-outsider@mozilla.example', '*');
+  my $raw      = 'flagmail-insider-list@mozilla.example';
+  my $group    = new_group_with('flagmail-insiders', $insider);
+  local Bugzilla->params->{insidergroup} = $group->name;
+  my $private_type = new_flag_type('flagmail-private', $insider->login,
+    $outsider->login, $raw);
+
+  my $bug = new_bug();
+  $dbh->do(
+    "INSERT INTO attachments (bug_id, creation_ts, modification_time,
+                              description, mimetype, filename, submitter_id,
+                              isprivate)
+     VALUES (?, ?, ?, 'private', 'text/plain', 'private.txt', ?, 1)", undef,
+    $bug->id, $window_start, $window_start, $requester->id
+  );
+  my $attach_id = $dbh->bz_last_key('attachments', 'attach_id');
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
+    undef, type_id => $private_type, attachment_id => $attach_id);
+
+  my ($accounts, $raw_addresses) = flag_type_cc($bug);
+  ok($accounts->{$insider->id}, 'private attachment flag: insider is mailed');
+  ok(!$accounts->{$outsider->id}, 'non-insider is not');
+  ok(!$raw_addresses->{$raw},     'address with no account is not');
+}
+
+# The cc_list of a flag on a bug in a group only reaches who can see the bug.
+{
+  my $member     = create_user('flagmail-member@mozilla.example',    '*');
+  my $non_member = create_user('flagmail-nonmember@mozilla.example', '*');
+  my $raw        = 'flagmail-group-list@mozilla.example';
+  my $group      = new_group_with('flagmail-secure', $member);
+  my $secure_type = new_flag_type('flagmail-secure', $member->login,
+    $non_member->login, $raw);
+
+  my $bug = new_bug();
+  $dbh->do('INSERT INTO bug_group_map (bug_id, group_id) VALUES (?, ?)',
+    undef, $bug->id, $group->id);
+  $bug = Bugzilla::Bug->new($bug->id);
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
+    undef, type_id => $secure_type);
+
+  my ($accounts, $raw_addresses) = flag_type_cc($bug);
+  ok($accounts->{$member->id}, 'bug in a group: member is mailed');
+  ok(!$accounts->{$non_member->id}, 'non-member is not');
+  ok(!$raw_addresses->{$raw},       'address with no account is not');
 }
 
 # A flag type edit queues one bugmail job per bug it touched.
