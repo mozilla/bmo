@@ -30,6 +30,7 @@ use base qw(Exporter);
 # (type, updates_disabled, user_to_hash...) are called as
 # Bugzilla::API::V1::Util->method instead.
 our @EXPORT_OK = qw(
+  coerce_booleans
   extract_flags
   filter
   filter_wants
@@ -326,6 +327,22 @@ sub strip_request_params {
   delete @values{REQUEST_PARAMS, @also};
   return \%values;
 }
+
+# A JSON body sends booleans as real booleans, but the query string and a form
+# body send the literal string "true" or "false", which Perl treats as true
+# either way. Turns each of the given params that is set into 1 or 0, and
+# returns the error for the first one that isn't a boolean, if any.
+sub coerce_booleans {
+  my ($params, @fields) = @_;
+  foreach my $field (@fields) {
+    next if !defined $params->{$field} || ref $params->{$field};
+    my $value = lc $params->{$field};
+    return "$field must be true or false" if $value !~ /^(?:true|false|1|0)$/;
+    $params->{$field} = ($value eq 'true' || $value eq '1') ? 1 : 0;
+  }
+  return undef;
+}
+
 
 # Same output as type() on the legacy JSON-RPC/REST server.
 sub type {
@@ -638,3 +655,11 @@ not a field of the object.
 Subroutine that takes a list of hashes that are potential flag changes for
 both bugs and attachments. Then breaks the list down into two separate lists
 based on if the change is to add a new flag or to update an existing flag.
+
+=head2 coerce_booleans
+
+Takes a params hashref and the names of boolean params, e.g.
+C<coerce_booleans($params, qw(is_open has_unconfirmed))>. Each one that is set
+to the string C<true>, C<false>, C<1> or C<0> (any case) becomes C<1> or C<0>;
+a JSON boolean is left as is. Returns an error message for the first one that
+is set to anything else, or C<undef>.

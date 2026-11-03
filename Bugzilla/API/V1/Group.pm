@@ -16,8 +16,8 @@ use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Group;
 use Bugzilla::User;
-use Bugzilla::API::V1::Util qw(merge_request_params params_to_objects
-  strip_request_params translate validate);
+use Bugzilla::API::V1::Util qw(coerce_booleans merge_request_params
+  params_to_objects strip_request_params translate validate);
 
 use constant MAPPED_RETURNS =>
   {userregexp => 'user_regexp', isactive => 'is_active'};
@@ -57,7 +57,7 @@ sub create {
   my ($params, $error) = merge_request_params($self);
   return $self->user_error($error) if $error;
 
-  my $type_error = _coerce_is_active($params);
+  my $type_error = coerce_booleans($params, 'is_active');
   return $self->user_error('invalid_params', {type_error => $type_error})
     if $type_error;
 
@@ -85,7 +85,7 @@ sub update {
   my ($params, $error) = merge_request_params($self, ['ids', 'names']);
   return $self->user_error($error) if $error;
 
-  my $type_error = _coerce_is_active($params);
+  my $type_error = coerce_booleans($params, 'is_active');
   return $self->user_error('invalid_params', {type_error => $type_error})
     if $type_error;
 
@@ -208,22 +208,6 @@ sub get {
   my @result = map { $self->_group_to_hash($params, $_) } @$groups;
 
   return $self->render(json => {groups => \@result});
-}
-
-# A JSON body sends is_active as a real boolean, but the query string and a
-# form body send the literal string "true" or "false", which Perl treats as
-# true either way. Same check as Product and Component. Returns the error, if
-# any.
-sub _coerce_is_active {
-  my ($params) = @_;
-
-  return undef if !defined $params->{is_active} || ref $params->{is_active};
-  my $value = lc $params->{is_active};
-  return 'is_active must be true or false'
-    if $value !~ /^(?:true|false|1|0)$/;
-  $params->{is_active} = ($value eq 'true' || $value eq '1') ? 1 : 0;
-
-  return undef;
 }
 
 sub _group_to_hash {

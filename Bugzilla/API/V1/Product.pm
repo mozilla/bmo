@@ -14,8 +14,9 @@ use Mojo::JSON qw(true false);
 
 use Bugzilla::Constants;
 use Bugzilla::Product;
-use Bugzilla::Util             qw(email_filter);
-use Bugzilla::API::V1::Util qw(filter filter_wants merge_request_params);
+use Bugzilla::Util qw(email_filter);
+use Bugzilla::API::V1::Util
+  qw(coerce_booleans filter filter_wants merge_request_params);
 
 use constant FIELD_MAP =>
   {has_unconfirmed => 'allows_unconfirmed', is_open => 'isactive'};
@@ -174,17 +175,10 @@ sub create {
   my ($params, $error) = merge_request_params($self);
   return $self->user_error($error) if $error;
 
-  # A JSON body sends booleans as real booleans, but the query string and a
-  # form body send the literal string "true" or "false", which Perl treats as
-  # true either way.
-  foreach my $field (qw(has_unconfirmed is_open create_series)) {
-    next if !defined $params->{$field} || ref $params->{$field};
-    my $value = lc $params->{$field};
-    return $self->user_error('invalid_params',
-      {type_error => "$field must be true or false"})
-      if $value !~ /^(?:true|false|1|0)$/;
-    $params->{$field} = ($value eq 'true' || $value eq '1') ? 1 : 0;
-  }
+  my $type_error
+    = coerce_booleans($params, qw(has_unconfirmed is_open create_series));
+  return $self->user_error('invalid_params', {type_error => $type_error})
+    if $type_error;
 
   # Create product
   my $args = {
