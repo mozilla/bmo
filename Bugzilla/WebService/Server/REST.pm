@@ -22,7 +22,6 @@ use Bugzilla::WebService::Constants;
 use Bugzilla::WebService::Util qw(fix_credentials set_rest_cors_headers taint_data);
 
 # Load resource modules
-use Bugzilla::WebService::Server::REST::Resources::Bug;
 use Bugzilla::WebService::Server::REST::Resources::Bugzilla;
 
 use List::MoreUtils qw(uniq);

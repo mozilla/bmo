@@ -45,12 +45,8 @@ sub _render_error {
 
   my $logfunc = _make_logfunc(ucfirst($type));
 
-  # Find the full error message
-  my $message;
-  $vars->{error} = $error;
-  my $template = Bugzilla->template;
-  $template->process("global/$type-error.html.tmpl", $vars, \$message)
-    || die $template->error();
+  $vars ||= {};
+  my ($message, $code) = error_message_and_code($type, $error, $vars);
 
   # Errors displayed in a web page
   if (Bugzilla->usage_mode == USAGE_MODE_MOJO) {
@@ -79,14 +75,6 @@ sub _render_error {
 
   # Errors returned in an API request
   elsif (Bugzilla->usage_mode == USAGE_MODE_MOJO_REST) {
-    my %error_map = %{WS_ERROR_CODE()};
-    my $code      = $error_map{$error};
-
-    if (!$code) {
-      $code = ERROR_UNKNOWN_FATAL     if $type =~ /code/i;
-      $code = ERROR_UNKNOWN_TRANSIENT if $type =~ /user/i;
-    }
-
     my %status_code_map = %{REST_STATUS_CODE_MAP()};
     my $status_code     = $status_code_map{$code} || $status_code_map{'_default'};
 
@@ -102,6 +90,25 @@ sub _render_error {
     $c->render(json => $error, status => $status_code);
     return 0;
   }
+}
+
+# The full message of a code or user error, and its API error code.
+sub error_message_and_code {
+  my ($type, $error, $vars) = @_;
+
+  my $message;
+  my $template = Bugzilla->template;
+  $template->process("global/$type-error.html.tmpl",
+    {%$vars, error => $error}, \$message)
+    || die $template->error();
+
+  my $code = WS_ERROR_CODE->{$error};
+  if (!$code) {
+    $code = ERROR_UNKNOWN_FATAL     if $type =~ /code/i;
+    $code = ERROR_UNKNOWN_TRANSIENT if $type =~ /user/i;
+  }
+
+  return ($message, $code);
 }
 
 sub _make_logfunc {

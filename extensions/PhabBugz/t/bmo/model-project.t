@@ -216,14 +216,13 @@ my $longer = $conduit->add_project(project_obj(name => "$name-and-more"));
   );
 }
 
-# An update with no pending changes still calls project.edit
+# An update with no pending changes does not call project.edit, as
+# Phabricator still bumps the modified date for an empty edit
 {
   my $project = Project->new(dclone($longer));
   $conduit->reset_calls;
-  $project->update;
-  my ($edit) = $conduit->calls('project.edit');
-  is_deeply($edit->{transactions}, [],
-    'no-op update sends an empty transaction list');
+  ok(!defined $project->update, 'no-op update returns undef');
+  is($conduit->call_count('project.edit'), 0, 'no-op update sends no edit');
 }
 
 # The join policy set by the group sync is not sent

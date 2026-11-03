@@ -507,7 +507,8 @@ The script expects to read an email with the following format:
  be included in the bug description.
 
 For the list of valid field names for the C<@> fields, including
-a list of which ones are required, see L<Bugzilla::WebService::Bug/create>.
+a list of which ones are required, see the bug C<create> method in
+F<docs/en/md/api/core/v1/bug.md>.
 (Note, however, that you cannot specify C<@description> as a field--
 you just add a comment by adding text after the C<@> fields.)
 
