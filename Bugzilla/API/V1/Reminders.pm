@@ -12,7 +12,7 @@ use Mojo::Base qw( Mojolicious::Controller );
 
 use Bugzilla::Constants;
 use Bugzilla::Reminder;
-use Bugzilla::WebService::Util qw(merge_request_params);
+use Bugzilla::API::V1::Util qw(merge_request_params);
 
 use Try::Tiny;
 

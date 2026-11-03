@@ -19,7 +19,7 @@ use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Template;
 use Bugzilla::Util qw(trim);
-use Bugzilla::WebService::Util qw(validate);
+use Bugzilla::API::V1::Util qw(validate);
 
 use constant PUBLIC_METHODS => qw(
   comments

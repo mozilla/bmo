@@ -18,7 +18,7 @@ use lib qw( . lib local/lib/perl5 );
 use Bugzilla;
 use Bugzilla::Constants;
 use Bugzilla::Bug;
-use Bugzilla::WebService::Util qw(extract_flags);
+use Bugzilla::API::V1::Util qw(extract_flags);
 BEGIN { Bugzilla->extensions }
 
 use Test2::V0;

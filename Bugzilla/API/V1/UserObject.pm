@@ -12,7 +12,6 @@ use Mojo::Base qw( Mojolicious::Controller );
 
 use Mojo::JSON qw(true);
 
-use Bugzilla::API::V1::Util;
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Group;
@@ -21,8 +20,8 @@ use Bugzilla::Logging;
 use Bugzilla::User;
 use Bugzilla::User::APIKey;
 use Bugzilla::Util qw(detaint_natural mojo_user_agent trim);
-use Bugzilla::WebService::Util
-  qw(filter filter_wants merge_request_params params_to_objects translate);
+use Bugzilla::API::V1::Util qw(filter filter_wants merge_request_params
+  params_to_objects strip_request_params translate);
 
 use Digest::HMAC_SHA1 qw(hmac_sha1_hex);
 use Try::Tiny;
@@ -454,11 +453,19 @@ sub update {
 
   # Drop the request-level keys that are not user fields and pass everything
   # else through, so set_all() still raises unknown_method on an unrecognized
-  # field rather than silently ignoring it.
-  my $values = translate($params, MAPPED_FIELDS);
-  delete @$values{qw(ids names include_fields exclude_fields
-    Bugzilla_api_key Bugzilla_api_token Bugzilla_login Bugzilla_password
-    Bugzilla_token api_key token)};
+  # field rather than silently ignoring it. login and password are user
+  # fields too. The legacy server took them sent together as the caller's
+  # credentials; native auth never does, so refuse the pair rather than
+  # guess: email and password change both. Strip before translate(), which
+  # maps email to login.
+  return $self->user_error('invalid_params',
+    {type_error => 'login and password cannot be sent together, use email'})
+    if exists $params->{login} && exists $params->{password};
+
+  my $values = strip_request_params($params, qw(ids names));
+  $values->{$_} = $params->{$_}
+    for grep { exists $params->{$_} } qw(login password);
+  $values = translate($values, MAPPED_FIELDS);
 
   my $dbh = Bugzilla->dbh;
   $dbh->bz_start_transaction();
