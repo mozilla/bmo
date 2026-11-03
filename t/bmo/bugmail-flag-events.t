@@ -8,8 +8,11 @@
 
 # Bug 1883428: DB-backed coverage for BugMail flag events --
 # _get_flag_mail_events() (previous '?' lookback, 'X' auto-clear, generic
-# 'set' events) and flag recipient selection in Send(). The private
-# attachment check is covered without a DB in t/bugmail-flag-events.t.
+# 'set' events) and flag recipient selection in Send(). Bug 2070239: the
+# latest requester of a re-requested flag, and the flag type cc_list
+# visibility checks (private attachment, bug in a group). The check of
+# which flag events a recipient may see is covered without a DB in
+# t/bugmail-flag-events.t.
 
 use 5.10.1;
 use strict;
@@ -42,18 +45,7 @@ my $stranger  = create_user('flagmail-stranger@mozilla.example',  '*');
 my $raw_cc    = 'flagmail-list@mozilla.example';    # no account
 
 # A flag type of our own, so its cc_list is known.
-my ($type_id)
-  = $dbh->selectrow_array('SELECT id FROM flagtypes WHERE name = ?',
-  undef, 'flagmail-test');
-if (!$type_id) {
-  $dbh->do(
-    "INSERT INTO flagtypes (name, description, cc_list, target_type,
-                            is_requestable, is_requesteeble, is_multiplicable)
-     VALUES (?, ?, ?, 'b', 1, 1, 1)", undef, 'flagmail-test',
-    'Bug 1883428 test flag', $type_cc->login . ", $raw_cc"
-  );
-  $type_id = $dbh->bz_last_key('flagtypes', 'id');
-}
+my $type_id = flag_type('flagmail-test', 'b', $type_cc->login, $raw_cc);
 
 # Test rows go straight into flag_activity at fixed times around a pinned
 # lastdiffed, so the mail window is deterministic. flag_activity.flag_id
@@ -102,24 +94,31 @@ sub add_activity {
   );
 }
 
-# A flag type of its own for one test, with the given cc_list. Named per run
-# so a rerun on the same DB gets a fresh one.
-sub new_flag_type {
-  my ($name, @cc) = @_;
+# A flag type of our own for a test, with the given target type ('b' or 'a')
+# and cc_list. Reused on a rerun against the same DB.
+sub flag_type {
+  my ($name, $target_type, @cc) = @_;
+  my ($id)
+    = $dbh->selectrow_array('SELECT id FROM flagtypes WHERE name = ?',
+    undef, $name);
+  return $id if $id;
   $dbh->do(
-    "INSERT INTO flagtypes (name, description, cc_list, target_type,
+    'INSERT INTO flagtypes (name, description, cc_list, target_type,
                             is_requestable, is_requesteeble, is_multiplicable)
-     VALUES (?, ?, ?, 'b', 1, 1, 1)", undef, "$name-$$",
-    'Bug 2070239 test flag', join(', ', @cc)
+     VALUES (?, ?, ?, ?, 1, 1, 1)', undef, $name, 'Flag mail test flag',
+    join(', ', @cc), $target_type
   );
   return $dbh->bz_last_key('flagtypes', 'id');
 }
 
-# A group of its own for one test, with the given members. Fresh users keep
-# group membership from being read before it is set.
-sub new_group_with {
+# A bug group of our own for a test, with the given members. Reused on a
+# rerun against the same DB. The members are fresh users, so their group
+# membership isn't read before it is set.
+sub group_with {
   my ($name, @members) = @_;
-  my $group = create_group("$name-$$", isbuggroup => 1);
+  my $group = Bugzilla::Group->new({name => $name});
+  return $group if $group;
+  $group = create_group($name, isbuggroup => 1);
   $dbh->do('INSERT INTO user_group_map (user_id, group_id) VALUES (?, ?)',
     undef, $_->id, $group->id)
     for @members;
@@ -226,24 +225,29 @@ sub sent_mails {
 }
 
 # An answer to a flag re-requested by someone else goes to the latest
-# requester, found by time and not by id: the later '?' is inserted first.
-{
-  my $bug        = new_bug();
-  my $flag_id    = $next_flag_id++;
-  my $requester2 = create_user('flagmail-requester2@mozilla.example', '*');
-  add_activity($bug, $flag_id, '1999-12-31 23:30:00', '?', $requester2, $requestee);
-  add_activity($bug, $flag_id, '1999-12-31 23:00:00', '?', $requester,  $requestee);
+# requester by time, whichever of the two '?' rows has the lower id.
+my $requester2 = create_user('flagmail-requester2@mozilla.example', '*');
+foreach my $later_first (0, 1) {
+  my $bug     = new_bug();
+  my $flag_id = $next_flag_id++;
+  my @asks    = (
+    ['1999-12-31 23:00:00', $requester],
+    ['1999-12-31 23:30:00', $requester2],
+  );
+  @asks = reverse @asks if $later_first;
+  add_activity($bug, $flag_id, $_->[0], '?', $_->[1], $requestee) for @asks;
   add_activity($bug, $flag_id, '2000-01-01 00:00:10', '+', $requestee);
 
+  my $order = $later_first ? 'later request inserted first' : 'inserted in time order';
   my @events
     = Bugzilla::BugMail::_get_flag_mail_events($bug, $window_start, $window_end,
     {});
   is($events[0]{requester_id}, $requester2->id,
-    'an answer goes to the latest requester by time, not by id');
+    "an answer goes to the latest requester ($order)");
 
   my $sent = sent_to($bug, $requestee);
-  ok($sent->{$requester2->login}, 'the latest requester is mailed');
-  ok(!$sent->{$requester->login}, 'the earlier requester is not');
+  ok($sent->{$requester2->login}, "the latest requester is mailed ($order)");
+  ok(!$sent->{$requester->login}, "the earlier requester is not ($order)");
 }
 
 # Send: mail carrying a flag event keeps "request" in X-Bugzilla-Type, as the
@@ -353,9 +357,9 @@ sub sent_mails {
   my $insider  = create_user('flagmail-insider@mozilla.example',  '*');
   my $outsider = create_user('flagmail-outsider@mozilla.example', '*');
   my $raw      = 'flagmail-insider-list@mozilla.example';
-  my $group    = new_group_with('flagmail-insiders', $insider);
+  my $group    = group_with('flagmail-insiders', $insider);
   local Bugzilla->params->{insidergroup} = $group->name;
-  my $private_type = new_flag_type('flagmail-private', $insider->login,
+  my $private_type = flag_type('flagmail-private', 'a', $insider->login,
     $outsider->login, $raw);
 
   my $bug = new_bug();
@@ -381,8 +385,8 @@ sub sent_mails {
   my $member     = create_user('flagmail-member@mozilla.example',    '*');
   my $non_member = create_user('flagmail-nonmember@mozilla.example', '*');
   my $raw        = 'flagmail-group-list@mozilla.example';
-  my $group      = new_group_with('flagmail-secure', $member);
-  my $secure_type = new_flag_type('flagmail-secure', $member->login,
+  my $group      = group_with('flagmail-secure', $member);
+  my $secure_type = flag_type('flagmail-secure', 'b', $member->login,
     $non_member->login, $raw);
 
   my $bug = new_bug();
