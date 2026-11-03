@@ -121,10 +121,6 @@ sub Send {
   }
   else {
     my ($diffs, $referenced) = _get_diffs($bug, $end, \%user_cache);
-
-    # The mail of a new bug lists its fields, not changes: flags set at
-    # creation are no change.
-    @$diffs = grep { $_->{field_name} ne 'flagtypes.name' } @$diffs if !$start;
     push(@diffs,           @$diffs);
     push(@referenced_bugs, @$referenced);
   }

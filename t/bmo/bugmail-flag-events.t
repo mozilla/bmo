@@ -352,8 +352,8 @@ foreach my $later_first (0, 1) {
   unlike($raw[0], qr/private reasons/, 'but not the private ones');
 }
 
-# The mail of a new bug doesn't report the flags set at creation as changes.
-# The assignee gets the whole mail: the flag recipients have no diffs anyway.
+# The mail of a new bug lists the flags set at creation, once, as bugs_activity
+# did: watchers see e.g. a needinfo requested on a new bug.
 {
   my $bug = new_bug(assigned_to => $stranger->login);
   add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
@@ -362,9 +362,10 @@ foreach my $later_first (0, 1) {
 
   my ($mail) = grep { $_->{to_user}->id == $stranger->id }
     sent_mails(Bugzilla::Bug->new($bug->id), $requester);
-  ok(@{$mail->{diffs}}, 'the assignee gets the fields of the new bug');
-  ok(!grep({ $_->{field_name} eq 'flagtypes.name' } @{$mail->{diffs}}),
-    'but no flag change');
+  my @flags = grep { $_->{field_name} eq 'flagtypes.name' } @{$mail->{diffs}};
+  is(scalar @flags, 1, 'the new bug mail lists the flag set at creation once');
+  like($flags[0]{new}, qr/\?\(\Q@{[$requestee->login]}\E\)$/,
+    'as requested from the requestee');
 }
 
 # The cc_list of a flag on a private attachment only reaches insiders.
