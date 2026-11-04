@@ -101,7 +101,7 @@ use constant VALIDATORS => {
   disabledtext             => \&_check_disabledtext,
   login_name               => \&check_login_name_for_creation,
   realname                 => \&_check_realname,
-  nickname                 => \&_check_realname,
+  nickname                 => \&_check_nickname,
   extern_id                => \&_check_extern_id,
   is_enabled               => \&_check_is_enabled,
   password_change_required => \&Bugzilla::Object::check_boolean,
@@ -411,6 +411,9 @@ sub _check_password {
 
 sub _check_realname { return trim($_[1]) || ''; }
 
+# "No nickname" is NULL, not '', so profiles_nickname_idx can be UNIQUE.
+sub _check_nickname { return trim($_[1]) || undef; }
+
 sub _check_is_enabled {
   my ($invocant, $is_enabled, undef, $params) = @_;
 
@@ -483,17 +486,12 @@ sub set_login {
 sub _generate_nickname {
   my ($name, $login, $id) = @_;
   my ($nick) = extract_nicks($name);
-  if (!$nick) {
-    $nick = "";
-  }
+  return undef unless $nick;
   my ($count)
     = Bugzilla->dbh->selectrow_array(
     'SELECT COUNT(*) FROM profiles WHERE nickname = ? AND userid != ?',
     undef, $nick, $id);
-  if ($count) {
-    $nick = "";
-  }
-  return $nick;
+  return $count ? undef : $nick;
 }
 
 sub set_name {

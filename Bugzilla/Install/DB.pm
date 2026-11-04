@@ -778,6 +778,10 @@ sub update_table_definitions {
 
   $dbh->bz_add_index('profiles', 'profiles_realname_ft_idx',
     {TYPE => 'FULLTEXT', FIELDS => ['realname']});
+
+  # Bug 2089200 - dkl@mozilla.com - must run before _migrate_nicknames(),
+  # which saves users through Bugzilla::User and so writes NULL nicknames.
+  _make_nicknames_unique();
   _migrate_nicknames();
 
   # Bug 1354589 - dkl@mozilla.com
@@ -4266,7 +4270,7 @@ sub _migrate_nicknames {
   my $dbh = Bugzilla->dbh;
   my $sth
     = $dbh->prepare(
-    'SELECT userid FROM profiles WHERE realname LIKE "%:%" AND is_enabled = 1 AND NOT nickname'
+    'SELECT userid FROM profiles WHERE realname LIKE "%:%" AND is_enabled = 1 AND nickname IS NULL'
     );
   $sth->execute();
   while (my ($user_id) = $sth->fetchrow_array) {
@@ -4274,6 +4278,23 @@ sub _migrate_nicknames {
     $user->set_name($user->name);
     $user->update();
   }
+}
+
+# "No nickname" used to be stored as '', which every user without one shared,
+# so the nickname index couldn't be UNIQUE. Store it as NULL instead (a UNIQUE
+# index allows any number of NULLs) and let the database enforce uniqueness
+# rather than relying on Bugzilla::User::_generate_nickname alone. The index
+# uses the column's collation, so case and accent variants also collide.
+sub _make_nicknames_unique {
+  my $dbh   = Bugzilla->dbh;
+  my $index = $dbh->bz_index_info('profiles', 'profiles_nickname_idx');
+  return if $index && $index->{TYPE} eq 'UNIQUE';
+
+  $dbh->bz_alter_column('profiles', 'nickname', {TYPE => 'varchar(255)'});
+  $dbh->do("UPDATE profiles SET nickname = NULL WHERE nickname = ''");
+  $dbh->bz_drop_index('profiles', 'profiles_nickname_idx');
+  $dbh->bz_add_index('profiles', 'profiles_nickname_idx',
+    {FIELDS => ['nickname'], TYPE => 'UNIQUE'});
 }
 
 sub _migrate_preference_categories {
