@@ -844,6 +844,10 @@ sub update_table_definitions {
   # Bug 1949556 - dkl@mozilla.com
   $dbh->bz_add_index('audit_log', 'audit_log_object_id_idx', ['object_id']);
 
+  # Bug 2088705 - xavier.lhour@gmail.com
+  # Before _migrate_flag_state_activity, which copies into this column.
+  _add_flag_activity_who();
+
   # Bug 1806896 - xavier.lhour@gmail.com
   _migrate_flag_state_activity();
 
@@ -4531,14 +4535,32 @@ sub _migrate_flag_state_activity {
   # id is not carried over: nothing references flag_activity.id externally.
   $dbh->do(
     'INSERT INTO flag_activity
-       (flag_when, type_id, flag_id, setter_id, requestee_id, bug_id,
+       (flag_when, type_id, flag_id, setter_id, who, requestee_id, bug_id,
         attachment_id, status)
-     SELECT flag_when, type_id, flag_id, setter_id, requestee_id, bug_id,
-            attachment_id, status
+     SELECT flag_when, type_id, flag_id, setter_id, setter_id, requestee_id,
+            bug_id, attachment_id, status
        FROM flag_state_activity'
   );
 
   $dbh->bz_drop_table('flag_state_activity');
+}
+
+# Nullable for now: during the rolling deploy, pods still on the previous code
+# insert rows without it. Bug 2085398 makes it NOT NULL once all pods write it.
+sub _add_flag_activity_who {
+  my $dbh = Bugzilla->dbh;
+
+  $dbh->bz_add_column('flag_activity', 'who',
+    {TYPE => 'INT3', REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}});
+
+  # For the user activity report and the changedby search.
+  $dbh->bz_add_index('flag_activity', 'flag_activity_who_idx',
+    [qw(who flag_when)]);
+
+  # Rows from before this column, or from pods on the previous code, don't
+  # record who made the change: the setter is the best value available. Runs
+  # every time, on the index above.
+  $dbh->do('UPDATE flag_activity SET who = setter_id WHERE who IS NULL');
 }
 
 sub _remove_duo_recovery_codes {
