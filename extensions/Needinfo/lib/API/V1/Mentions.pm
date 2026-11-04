@@ -32,7 +32,8 @@ sub setup_routes {
 #   groups      bug group names for the new bug
 #   is_private  whether the comment is private
 # Returns {mentions => [{nick, name, needinfo}]}; see
-# Bugzilla::Extension::Needinfo::mention_effects.
+# Bugzilla::Extension::Needinfo::mention_effects. For a new bug the list is
+# empty until saving a new bug processes its mentions (bug 2087012).
 sub mentions {
   my ($self) = @_;
   Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);

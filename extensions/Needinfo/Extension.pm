@@ -519,17 +519,35 @@ sub _needinfo_type {
   return $type;
 }
 
+# What _can_needinfo checks a mention against: how many needinfo flags the
+# bug has, and the ids of users with a pending needinfo request. Built from
+# the flags in $type->{flags} (none for a bug being filed).
+sub _needinfo_state {
+  my ($type) = @_;
+  my @flags = $type ? @{$type->{flags} || []} : ();
+  return {
+    count   => scalar @flags,
+    pending => {
+      map  { $_->requestee_id => 1 }
+      grep { $_->status eq '?' && $_->requestee_id } @flags
+    },
+  };
+}
+
 # Whether a mention of $mentioned would request needinfo, given the needinfo
-# $type from _needinfo_type with its current flags in $type->{flags}.
+# $type from _needinfo_type and its $state from _needinfo_state. Mirrors the
+# checks Bugzilla::Flag makes when the request is saved, so that a request
+# which would be rejected is predicted (and handled) as CC-only.
 sub _can_needinfo {
-  my ($type, $mentioned) = @_;
+  my ($type, $mentioned, $state) = @_;
   return 0 if !$type || $mentioned->needinfo_blocked;
+  return 0 unless $type->is_requestable && $type->is_requesteeble;
+  return 0 unless Bugzilla->user->can_change_flag($type, 'X', '?');
+  return 0 unless $mentioned->can_set_flag($type);
 
   # A non-multiplicable type allows only one needinfo flag per bug.
-  return 0 if !$type->is_multiplicable && @{$type->{flags} || []};
-  return 0
-    if grep { $_->status eq '?' && ($_->requestee_id // 0) == $mentioned->id }
-    @{$type->{flags} || []};
+  return 0 if !$type->is_multiplicable && $state->{count};
+  return 0 if $state->{pending}{$mentioned->id};
 
   return 1;
 }
@@ -538,7 +556,7 @@ sub _cc_and_needinfo {
   my ($bug, $mentioned, $type) = @_;
   $bug->add_cc($mentioned);
 
-  return unless _can_needinfo($type, $mentioned);
+  return unless _can_needinfo($type, $mentioned, _needinfo_state($type));
 
   # One call per user so $type->{flags} reflects each flag as it is added.
   $bug->set_flags([],
@@ -549,48 +567,64 @@ sub _cc_and_needinfo {
 # live mention warning in the comment editor and the comment preview. $comment
 # is a {thetext, isprivate} hash. $target is either {bug => $bug} for a comment
 # on an existing bug, or {product => $product, component => $component,
-# groups => [group names]} for the initial comment of a bug being filed
-# (component and groups are optional). Returns an array ref of
-# {nick, name, needinfo} hashes, one per user that would be CC'd; needinfo is
-# true if they would also get a needinfo request.
+# groups => [group names]} for the initial comment of a bug being filed.
+# Returns an array ref of {nick, name, needinfo} hashes, one per user that
+# would be CC'd; needinfo is true if they would also get a needinfo request.
 sub mention_effects {
   my ($comment, $target) = @_;
-  my ($type, @mentioned);
 
-  if (my $bug = $target->{bug}) {
-    @mentioned = _mentioned_users($bug, [$comment]);
-    $type      = _needinfo_type($bug) if @mentioned;
-  }
-  else {
-    my $product = $target->{product};
-    @mentioned
-      = _mentioned_users_for_new_bug($product, $target->{groups}, [$comment]);
+  # Saving a new bug doesn't process the mentions in its initial comment yet
+  # (bug 2087012), so predict nothing rather than promise notifications that
+  # won't be sent. Once it does, return new_bug_mention_effects here.
+  my $bug = $target->{bug} or return [];
 
-    # A new bug has no flags yet, and the needinfo type is checked against
-    # the product (and component) the bug is being filed in.
-    if (@mentioned) {
-      my $component = $target->{component};
-      ($type) = @{
-        Bugzilla::FlagType::match({
-          name         => 'needinfo',
-          target_type  => 'bug',
-          is_active    => 1,
-          product_id   => $product->id,
-          component_id => $component ? $component->id : undef,
-        })
-      };
-      $type->{flags} = [] if $type;
-    }
-  }
+  my @mentioned = _mentioned_users($bug, [$comment]);
+  return [] unless @mentioned;
+  return _describe_mentions(_needinfo_type($bug), \@mentioned);
+}
+
+# mention_effects for the initial comment of a bug being filed, with $target
+# as described there (component and groups are optional). Not used until
+# saving a new bug processes its mentions (bug 2087012).
+sub new_bug_mention_effects {
+  my ($comment, $target) = @_;
+  my $product = $target->{product};
+  my @mentioned
+    = _mentioned_users_for_new_bug($product, $target->{groups}, [$comment]);
+  return [] unless @mentioned;
+
+  # A new bug has no flags yet, and the needinfo type is checked against the
+  # product (and component) the bug is being filed in.
+  my $component = $target->{component};
+  my ($type) = @{
+    Bugzilla::FlagType::match({
+      name         => 'needinfo',
+      target_type  => 'bug',
+      is_active    => 1,
+      product_id   => $product->id,
+      component_id => $component ? $component->id : undef,
+    })
+  };
+  return _describe_mentions($type, \@mentioned);
+}
+
+# The {nick, name, needinfo} hashes for mention_effects. Saving requests
+# needinfo one user at a time, so each predicted request is counted before
+# the next user is checked (e.g. only the first user mentioned gets a
+# non-multiplicable needinfo). The bug's actual flags are left alone.
+sub _describe_mentions {
+  my ($type, $mentioned) = @_;
+  my $state = _needinfo_state($type);
 
   return [
     map {
-      +{
-        nick     => $_->nick,
-        name     => $_->name,
-        needinfo => _can_needinfo($type, $_) ? 1 : 0
+      my $needinfo = _can_needinfo($type, $_, $state);
+      if ($needinfo) {
+        $state->{count}++;
+        $state->{pending}{$_->id} = 1;
       }
-    } @mentioned
+      +{nick => $_->nick, name => $_->name, needinfo => $needinfo};
+    } @$mentioned
   ];
 }
 
