@@ -84,7 +84,8 @@ $t->post_ok($endpoint => $no_privs => json =>
   'nobody is needinfod by a user without editbugs'
   );
 
-# The initial comment of a bug being filed.
+# The initial comment of a bug being filed. Saving a new bug doesn't process
+# mentions yet (bug 2087012), so nobody is listed.
 $t->post_ok(
   $endpoint => $admin => json => {
     text      => "\@$nick can you look?",
@@ -93,14 +94,14 @@ $t->post_ok(
     groups    => [],
   }
 )->status_is(200)->json_is(
-  '/mentions' => $expected,
-  'new bug: the mentioned user would be needinfod'
+  '/mentions' => [],
+  'new bug: nobody until saving a new bug processes mentions'
 );
 
 $t->post_ok($endpoint => $admin => json =>
     {text => "\@$nick can you look?", product => 'TestProduct'})
   ->status_is(200)
-  ->json_is('/mentions' => $expected, 'new bug: the component is optional');
+  ->json_is('/mentions' => [], 'new bug: the component is optional');
 
 # Errors.
 $t->post_ok($endpoint => $admin => json => {text => '@admin'})

@@ -64,7 +64,9 @@ is([$extract->("~~~\n\@unclosed\n\@more")], [], 'unclosed fence runs to end');
   sub is_insider   { $_[0]{insider} }
   sub can_see_bug  { $_[0]{sees_bug} // 1 }
   sub can_see_product  { $_[0]{sees_product} // 1 }
-  sub needinfo_blocked { $_[0]{blocked} // 0 }
+  sub needinfo_blocked { $_[0]{blocked}      // 0 }
+  sub can_set_flag     { $_[0]{can_set}      // 1 }
+  sub can_change_flag  { $_[0]{can_request}  // 1 }
 
   package FakeBug;
   sub new {
@@ -102,6 +104,8 @@ is([$extract->("~~~\n\@unclosed\n\@more")], [], 'unclosed fence runs to end');
   sub name             {'needinfo'}
   sub id               {1}
   sub is_multiplicable { $_[0]{multiplicable} }
+  sub is_requestable   { $_[0]{requestable}  // 1 }
+  sub is_requesteeble  { $_[0]{requesteeble} // 1 }
 
   package FakeFlag;
   sub status       { $_[0]{status} }
@@ -193,6 +197,20 @@ $bug = FakeBug->new('@alice');
 push @{$bug->{type}{flags}}, bless({status => '?', requestee_id => 2}, 'FakeFlag');
 $process->($bug);
 is($bug->{needinfo}, [], 'no duplicate needinfo for a pending request');
+
+$users{bob}{can_set} = 0;
+$bug = FakeBug->new('@alice @bob');
+$process->($bug);
+is($bug->{cc},       ['alice', 'bob'], 'requestee without flag privs: CCd');
+is($bug->{needinfo}, ['alice@example.com'], '... but not needinfod');
+delete $users{bob}{can_set};
+
+$commenter->{can_request} = 0;
+$bug = FakeBug->new('@alice');
+$process->($bug);
+is($bug->{cc},       ['alice'], 'commenter cannot request needinfo: CCd');
+is($bug->{needinfo}, [],        '... but not needinfod');
+delete $commenter->{can_request};
 
 $bug = FakeBug->new('@boom @alice');
 ok(lives { $process->($bug) },
@@ -319,6 +337,47 @@ is(
   'warning: non-multiplicable type with a flag only CCs'
 );
 
+is(
+  $effects->(
+    {thetext => '@alice @bob'},
+    {bug     => FakeBug->new('', multiplicable => 0)}
+  ),
+  [
+    {nick => 'alice', name => 'Alice', needinfo => 1},
+    {nick => 'bob',   name => 'Bob',   needinfo => 0},
+  ],
+  'warning: non-multiplicable type without a flag only needinfos the first'
+);
+
+$preview_bug = FakeBug->new('');
+$users{bob}{can_set} = 0;
+is(
+  $effects->({thetext => '@alice @bob'}, {bug => $preview_bug}),
+  [
+    {nick => 'alice', name => 'Alice', needinfo => 1},
+    {nick => 'bob',   name => 'Bob',   needinfo => 0},
+  ],
+  'warning: a requestee without flag privs is only CCd'
+);
+delete $users{bob}{can_set};
+is($preview_bug->{type}{flags}, [], '... and the bug\'s flags are unchanged');
+
+$commenter->{can_request} = 0;
+is(
+  $effects->({thetext => '@alice'}, {bug => FakeBug->new('')}),
+  [{nick => 'alice', name => 'Alice', needinfo => 0}],
+  'warning: no needinfo when the commenter cannot request it'
+);
+delete $commenter->{can_request};
+
+foreach my $field (qw(requestable requesteeble)) {
+  is(
+    $effects->({thetext => '@alice'}, {bug => FakeBug->new('', $field => 0)}),
+    [{nick => 'alice', name => 'Alice', needinfo => 0}],
+    "warning: no needinfo when the type is not $field"
+  );
+}
+
 is($effects->({thetext => "`\@alice`\n> \@bob"}, {bug => FakeBug->new('')}),
   [], 'warning: mentions in code and quotes are ignored');
 
@@ -332,9 +391,16 @@ is($effects->({thetext => "`\@alice`\n> \@bob"}, {bug => FakeBug->new('')}),
   );
 }
 
-# The initial comment of a bug being filed: there is no bug to check
-# visibility against, so the product and the new bug's groups are used.
-my $needinfo_types = [bless({multiplicable => 1}, 'FakeType')];
+# Saving a new bug doesn't process mentions yet (bug 2087012), so the warning
+# on the bug entry form lists nobody.
+is($effects->({thetext => '@alice'}, {product => FakeProduct->new}),
+  [], 'new bug: nobody until saving a new bug processes mentions');
+
+# The prediction for the initial comment of a bug being filed, ready for when
+# it does: there is no bug to check visibility against, so the product and
+# the new bug's groups are used.
+my $new_bug_effects = \&Bugzilla::Extension::Needinfo::new_bug_mention_effects;
+my $needinfo_types  = [bless({multiplicable => 1}, 'FakeType')];
 my %type_criteria;
 my $mock_flagtype = mock 'Bugzilla::FlagType' => (
   override => [
@@ -344,7 +410,7 @@ my $mock_flagtype = mock 'Bugzilla::FlagType' => (
 my $product = FakeProduct->new(valid => [$security]);
 
 is(
-  $effects->({thetext => '@alice @hidden @me'}, {product => $product}),
+  $new_bug_effects->({thetext => '@alice @hidden @me'}, {product => $product}),
   [
     {nick => 'alice',  name => 'Alice',  needinfo => 1},
     {nick => 'hidden', name => 'Hidden', needinfo => 1},
@@ -356,14 +422,14 @@ is($type_criteria{component_id}, undef, '... of the product when no component');
 
 $users{alice}{sees_product} = 0;
 is(
-  $effects->({thetext => '@alice @bob'}, {product => $product}),
+  $new_bug_effects->({thetext => '@alice @bob'}, {product => $product}),
   [{nick => 'bob', name => 'Bob', needinfo => 1}],
   'new bug: users who cannot see the product are skipped'
 );
 delete $users{alice}{sees_product};
 
 is(
-  $effects->(
+  $new_bug_effects->(
     {thetext => '@alice @bob'},
     {product => $product, groups => ['core-security', 'not-valid-here']}
   ),
@@ -372,7 +438,7 @@ is(
 );
 
 is(
-  $effects->(
+  $new_bug_effects->(
     {thetext => '@alice @bob'},
     {product => FakeProduct->new(mandatory => [$security])}
   ),
@@ -381,7 +447,7 @@ is(
 );
 
 is(
-  $effects->(
+  $new_bug_effects->(
     {thetext => '@alice'},
     {product => $product, component => FakeGroup->new(7, 'General')}
   ),
@@ -392,7 +458,7 @@ is($type_criteria{component_id}, 7, '... uses that component\'s flag types');
 
 $users{alice}{blocked} = 1;
 is(
-  $effects->({thetext => '@alice'}, {product => $product}),
+  $new_bug_effects->({thetext => '@alice'}, {product => $product}),
   [{nick => 'alice', name => 'Alice', needinfo => 0}],
   'new bug: a user blocking needinfo is only CCd'
 );
@@ -400,19 +466,19 @@ $users{alice}{blocked} = 0;
 
 $needinfo_types = [];
 is(
-  $effects->({thetext => '@alice'}, {product => $product}),
+  $new_bug_effects->({thetext => '@alice'}, {product => $product}),
   [{nick => 'alice', name => 'Alice', needinfo => 0}],
   'new bug: no needinfo without a needinfo flag type'
 );
 $mock_flagtype = undef;
 
 $params{needinfo_mentions_enabled} = 0;
-is($effects->({thetext => '@alice'}, {product => $product}),
+is($new_bug_effects->({thetext => '@alice'}, {product => $product}),
   [], 'new bug: nobody when needinfo_mentions_enabled is off');
 $params{needinfo_mentions_enabled} = 1;
 
 $commenter->{editbugs} = 0;
-is($effects->({thetext => '@alice'}, {product => $product}),
+is($new_bug_effects->({thetext => '@alice'}, {product => $product}),
   [], 'new bug: nobody for commenters without editbugs');
 is($effects->({thetext => '@alice'}, {bug => FakeBug->new('')}),
   [], 'warning: nobody for commenters without editbugs');
