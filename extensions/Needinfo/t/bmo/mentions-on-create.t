@@ -60,7 +60,7 @@ sub set_mentions_enabled {
   write_params();
 }
 set_mentions_enabled(1);
-END { set_mentions_enabled($mentions_enabled) }
+END { set_mentions_enabled($mentions_enabled) if defined $mentions_enabled }
 
 my $admin = Bugzilla::User->check({id => 1});
 Bugzilla->set_user($admin);
