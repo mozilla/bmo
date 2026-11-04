@@ -355,7 +355,8 @@ sub _added_groups {
 
 # The checks shared by _mentioned_users and _mentioned_users_for_new_bug.
 # $can_see is called with each mentioned user and returns whether they can see
-# the bug.
+# the bug. With strict_isolation on, users who can't edit the product are
+# skipped, since add_cc would reject them.
 sub _filter_mentioned_users {
   my ($product_id, $comments, $can_see) = @_;
   return () unless Bugzilla->params->{needinfo_mentions_enabled};
@@ -377,11 +378,13 @@ sub _filter_mentioned_users {
   # Checked after parsing so updates without mentions skip the group lookup.
   my $user = Bugzilla->user;
   return () unless $user->in_group('editbugs', $product_id);
+  my $strict_isolation = Bugzilla->params->{strict_isolation};
 
   return grep {
     my $mentioned = $_;
          $mentioned->id != $user->id
       && ($public{lc $mentioned->nick} || $mentioned->is_insider)
+      && (!$strict_isolation || $mentioned->can_edit_product($product_id))
       && $can_see->($mentioned)
   } _users_for_mentions(@nicks);
 }
@@ -414,10 +417,10 @@ sub _process_mentions {
 
   my $type = _needinfo_type($bug);
 
-  # A failure for one user (e.g. add_cc's strict_isolation check) skips that
-  # user rather than rolling back the whole update. Throw*Error only dies
-  # (instead of printing an error page and exiting) in ERROR_MODE_DIE, so the
-  # eval can catch it.
+  # A failure for one user (e.g. a validation error from add_cc or set_flags)
+  # skips that user rather than rolling back the whole update. Throw*Error
+  # only dies (instead of printing an error page and exiting) in
+  # ERROR_MODE_DIE, so the eval can catch it.
   local Bugzilla->request_cache->{error_mode} = ERROR_MODE_DIE;
   local $@;
   foreach my $mentioned (@mentioned) {
@@ -465,7 +468,8 @@ sub _needinfo_state {
 sub _can_needinfo {
   my ($type, $mentioned, $state) = @_;
   return 0 if !$type || $mentioned->needinfo_blocked;
-  return 0 unless $type->is_requestable && $type->is_requesteeble;
+  return 0
+    unless $type->is_active && $type->is_requestable && $type->is_requesteeble;
   return 0 unless Bugzilla->user->can_change_flag($type, 'X', '?');
   return 0 unless $mentioned->can_set_flag($type);
 
