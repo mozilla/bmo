@@ -1,0 +1,42 @@
+get:
+  summary: Search for comment tags
+  description: Searches for tags which contain the provided substring.
+  operationId: search_comment_tags
+  parameters:
+    - name: query
+      in: path
+      description: Only tags containing this substring will be returned.
+      required: true
+      schema:
+        type: string
+    - name: limit
+      in: query
+      description: If provided, will return no more than `limit` tags.
+      schema:
+        type: integer
+        default: 10
+  responses:
+    '200':
+      description: An array of matching tags
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              type: string
+          example:
+            - spam
+    default:
+      description: >
+        This method can throw all of the errors that [Get
+        Bug](#tag/Bugs/paths/~1bug~1{id_or_alias}/get) throws, plus:
+
+
+        * 125 (Comment Tagging Disabled)
+          Comment tagging support is not available or enabled.
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Comments

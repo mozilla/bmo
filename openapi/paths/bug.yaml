@@ -1,0 +1,460 @@
+get:
+  summary: Search for bugs based on particular criteria
+  description: >
+    Allows you to search for bugs based on specific criteria. Bugs are returned
+    if they match the criteria specified. Criteria are joined in a logical AND,
+    meaning bugs returned must match all of the specified criteria.
+  operationId: search_bugs
+  parameters:
+    - name: alias
+      in: query
+      description: >-
+        The unique alias of this bug. A null value will be returned if this bug
+        has no alias.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: assigned_to
+      in: query
+      description: The login name of a user that a bug is assigned to.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: component
+      in: query
+      description: >-
+        The name of the Component that the bug is in. Note that if there are
+        multiple Components with the same name, and you search for that name,
+        bugs in *all* those Components will be returned. If you don't want this,
+        be sure to also specify the ``product`` argument.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: count_only
+      in: query
+      description: >-
+        If set to true, an object with a single key called "bug_count" will be
+        returned, which is the number of bugs that matched the search.
+      schema:
+        oneOf:
+          - type: boolean
+          - type: array
+            items:
+              type: boolean
+    - name: creation_time
+      in: query
+      description: >-
+        Searches for bugs that were created at this time or later. May not be an
+        array.
+      schema:
+        type: string
+        format: date-time
+    - name: creator
+      in: query
+      description: The login name of the user who created the bug.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: reporter
+      in: query
+      description: >-
+        The name of the user who reported the bug, for backwards compatibility
+        with older Bugzillas.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      deprecated: true
+    - name: description
+      in: query
+      description: The description (initial comment) of the bug.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: filed_via
+      in: query
+      description: Searches for bugs that were created with this method.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: id
+      in: query
+      description: The numeric ID of the bug.
+      schema:
+        oneOf:
+          - type: integer
+          - type: array
+            items:
+              type: integer
+    - name: last_change_time
+      in: query
+      description: >-
+        Searches for bugs that were modified at this time or later. May not be
+        an array.
+      schema:
+        type: string
+        format: date-time
+    - name: limit
+      in: query
+      description: >-
+        Limit the number of results returned. If the value is unset, zero or
+        greater than the maximum value set by the administrator, which is 10,000
+        by default, then the maximum value will be used instead. This is a
+        preventive measure against DoS-like attacks on Bugzilla. Use the
+        ``offset`` argument described below to retrieve more results.
+      schema:
+        type: integer
+    - name: longdescs.count
+      in: query
+      description: >-
+        The number of comments a bug has. The bug's description is the first
+        comment. For example, to find bugs which someone has commented on after
+        they have been filed, search on ``longdescs.count`` *greater than* 1.
+      schema:
+        type: integer
+    - name: offset
+      in: query
+      description: >-
+        Used in conjunction with the ``limit`` argument, ``offset`` defines the
+        starting position for the search. For example, given a search that would
+        return 100 bugs, setting ``limit`` to 10 and ``offset`` to 10 would
+        return bugs 11 through 20 from the set of 100.
+      schema:
+        type: integer
+    - name: op_sys
+      in: query
+      description: The "Operating System" field of a bug.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: platform
+      in: query
+      description: The Platform (sometimes called "Hardware") field of a bug.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: priority
+      in: query
+      description: The Priority field on a bug.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: product
+      in: query
+      description: The name of the Product that the bug is in.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: quicksearch
+      in: query
+      description: Search for bugs using quicksearch syntax.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: resolution
+      in: query
+      description: >-
+        The current resolution--only set if a bug is closed. You can find open
+        bugs by searching for bugs with an empty resolution.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: severity
+      in: query
+      description: The Severity field on a bug.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: status
+      in: query
+      description: >-
+        The current status of a bug (not including its resolution, if it has
+        one, which is a separate field above).
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: summary
+      in: query
+      description: >-
+        Searches for substrings in the single-line Summary field on bugs. If you
+        specify an array, then bugs whose summaries match *any* of the passed
+        substrings will be returned. Note that unlike searching in the Bugzilla
+        UI, substrings are not split on spaces. So searching for ``foo bar``
+        will match "This is a foo bar" but not "This foo is a bar". ``['foo',
+        'bar']``, would, however, match the second item.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: tags
+      in: query
+      description: >-
+        Searches for a bug with the specified tag. If you specify an array, then
+        any bugs that match *any* of the tags will be returned. Note that tags
+        are personal to the currently logged in user.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: target_milestone
+      in: query
+      description: >-
+        The Target Milestone field of a bug. Note that even if this Bugzilla
+        does not have the Target Milestone field enabled, you can still search
+        for bugs by Target Milestone. However, it is likely that in tha case,
+        most bugs will not have a Target Milestone set (it defaults to "---"
+        when the field isn't enabled).
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: qa_contact
+      in: query
+      description: >-
+        he login name of the bug's QA Contact. Note that even if this Bugzilla
+        does not have the QA Contact field enabled, you can still search for
+        bugs by QA Contact (though it is likely that no bug will have a QA
+        Contact set, if the field is disabled).
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: triage_owner
+      in: query
+      description: The login name of the Triage Owner of a bug's component.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: type
+      in: query
+      description: The Type field on a bug.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: url
+      in: query
+      description: The "URL" field of a bug.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: version
+      in: query
+      description: The Version field of a bug.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+    - name: whiteboard
+      in: query
+      description: >-
+        Search the "Status Whiteboard" field on bugs for a substring. Works the
+        same as the ``summary`` field described above, but searches the Status
+        Whiteboard field.
+      schema:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+  responses:
+    '200':
+      description: A list of bugs matching the search criteria
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              bugs:
+                type: array
+                items:
+                  $ref: ../components/schemas/Bug.yaml
+          example:
+            bugs:
+              - id: 35
+                alias: null
+                assigned_to: user@bugzilla.org
+                component: Widgets
+                creation_time: '2014-09-23T19:12:17Z'
+                creator: user@bugzilla.org
+                description: Bug description goes here.
+                filed_via: REST API
+                last_change_time: '2014-09-28T21:03:47Z'
+                op_sys: All
+                platform: All
+                priority: P1
+                product: MyProduct
+                resolution: null
+                severity: critical
+                status: NEW
+                summary: Bug summary goes here.
+                tags: null
+                target_milestone: '---'
+                qa_contact: null
+                triage_owner: null
+                type: defect
+                url: null
+                version: null
+                whiteboard: null
+                longdescs_count: 2
+    default:
+      description: >
+        If you specify an invalid value for a particular field, you just won’t
+        get any results for that value.
+
+
+        * 1000 (Parameters Required) 
+          You may not search without any search terms.
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Bugs
+post:
+  summary: Create a new bug
+  description: >
+    This endpoint allows you to create a new bug in Bugzilla. If you specify any
+    invalid fields, an error will be thrown stating which field is invalid. If
+    you specify any fields you are not allowed to set, they will just be set to
+    their defaults or ignored.
+
+
+    You cannot currently set all the items here that you can set on
+    enter_bug.cgi.
+
+
+    The WebService interface may allow you to set things other than those listed
+    here, but realize that anything undocumented here may likely change in the
+    future.
+  operationId: create_bug
+  requestBody:
+    content:
+      application/json:
+        schema:
+          $ref: ../components/schemas/NewBug.yaml
+        example:
+          product: TestProduct
+          component: TestComponent
+          version: unspecified
+          summary: This is a test bug - please disregard
+          alias: SomeAlias
+          op_sys: All
+          priority: P1
+          platform: All
+          type: defect
+  responses:
+    '200':
+      description: A successful bug creation response
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              id:
+                description: This is the ID of the newly-filed bug.
+                type: integer
+          example:
+            id: 12345
+    default:
+      description: |
+        Various error responses, including:
+
+        * 51 (Invalid Object)
+          You specified a field value that is invalid. The error message will have more details.
+        * 103 (Invalid Alias)
+          The alias you specified is invalid for some reason. See the error message for more details.
+        * 104 (Invalid Field)
+          One of the drop-down fields has an invalid value, or a value entered in a text field is too long. The error message will have more detail.
+        * 105 (Invalid Component)
+          You didn't specify a component.
+        * 106 (Invalid Product)
+          Either you didn't specify a product, this product doesn't exist, or you don't have permission to enter bugs in this product.
+        * 107 (Invalid Summary)
+          You didn't specify a summary for the bug.
+        * 116 (Dependency Loop)
+          You specified values in the "blocks" and "depends_on" fields, or the "regressions" and "regressed_by" fields, that would cause a circular dependency between bugs.
+        * 120 (Group Restriction Denied)
+          You tried to restrict the bug to a group which does not exist, or which you cannot use with this product.
+        * 129 (Flag Status Invalid)
+          The flag status is invalid.
+        * 130 (Flag Modification Denied)
+          You tried to request, grant, or deny a flag but only a user with the required permissions may make the change.
+        * 131 (Flag not Requestable from Specific Person)
+          You can't ask a specific person for the flag.
+        * 133 (Flag Type not Unique)
+          The flag type specified matches several flag types. You must specify the type id value to update or add a flag.
+        * 134 (Inactive Flag Type)
+          The flag type is inactive and cannot be used to create new flags.
+        * 135 (Bug Type Required)
+          You didn't specify a type for the bug.
+        * 504 (Invalid User)
+          Either the QA Contact, Assignee, or CC lists have some invalid user in them. The error message will have more details.
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Bugs

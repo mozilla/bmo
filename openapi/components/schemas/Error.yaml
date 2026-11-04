@@ -1,0 +1,11 @@
+type: object
+properties:
+  error:
+    description: >-
+      When an error occurs over REST, an object is returned with the key error
+      set to true.
+    const: true
+  message:
+    type: string
+  code:
+    type: integer

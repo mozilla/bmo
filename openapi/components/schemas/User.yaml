@@ -1,0 +1,19 @@
+type: object
+properties:
+  id:
+    description: The user ID for this user.
+    type: integer
+  real_name:
+    description: The 'real' name for this user, if any.
+    type: string
+  nick:
+    description: >-
+      The user's nickname. Currently, this is extracted from the real_name,
+      name, or email field.
+    type: string
+  name:
+    description: The user's Bugzilla login.
+    type: string
+  email:
+    description: The user's email address. Currently, this is the same value as the name.
+    type: string

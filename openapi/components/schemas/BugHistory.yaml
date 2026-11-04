@@ -1,0 +1,16 @@
+type: object
+properties:
+  when:
+    description: The date the bug activity/change happened.
+    type: string
+    format: date-time
+  who:
+    description: The login name of the user who performed the bug change.
+    type: string
+  changes:
+    description: >-
+      An array of Change objects which contain all the changes that happened to
+      the bug at this time (as specified by ``when``).
+    type: array
+    items:
+      $ref: ./BugChange.yaml

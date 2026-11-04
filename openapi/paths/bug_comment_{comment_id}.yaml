@@ -1,0 +1,64 @@
+get:
+  summary: Get a specific comment
+  description: This allows you to get a specific comment based on the comment ID
+  operationId: get_comment
+  parameters:
+    - name: comment_id
+      in: path
+      description: A single integer comment ID.
+      required: true
+      schema:
+        type: integer
+  responses:
+    '200':
+      description: A single Comment
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              comments:
+                description: >-
+                  This is an object, where the keys are the numeric IDs of the
+                  bugs, and the value is a object with a single key, comments,
+                  which is an array of comments.
+                type: object
+                additionalProperties:
+                  $ref: ../components/schemas/Comment.yaml
+              bugs:
+                type: object
+          example:
+            comments:
+              '75':
+                time: '2000-07-25T13:50:04Z'
+                text: test bug to fix problem in removing from cc list.
+                bug_id: 35
+                count: 0
+                attachment_id: null
+                is_private: false
+                tags: []
+                creator: user@bugzilla.org
+                creation_time: '2000-07-25T13:50:04Z'
+                id: 75
+            bugs: {}
+    default:
+      description: >
+        This method can throw all the same errors as [Get
+        Bug](#tag/Bugs/paths/~1bug~1{id_or_alias}/get). In addition, it can also
+        throw the following errors:
+
+
+        * 110 (Comment Is Private)
+          You specified the id of a private comment in the "comment_ids"
+          argument, and you are not in the "insider group" that can see
+          private comments.
+        * 111 (Invalid Comment ID)
+          You specified an id in the "comment_ids" argument that is invalid--either
+          you specified something that wasn't a number, or there is no comment with
+          that id.
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Comments
