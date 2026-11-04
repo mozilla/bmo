@@ -305,11 +305,59 @@ sub _users_for_mentions {
 
 # Returns the users a set of new comments ({thetext, isprivate} hashes) on
 # $bug would CC and needinfo, applying the safeguards described above
-# _process_mentions. Shared by saving and the comment preview so the preview
-# can't disagree with what actually happens. $old_bug is only passed when
-# saving, to account for groups added in the same update.
+# _process_mentions. Shared by saving, the comment preview and the live
+# mention warning so they can't disagree with what actually happens. $old_bug
+# is only passed when saving, to account for groups added in the same update.
 sub _mentioned_users {
   my ($bug, $comments, $old_bug) = @_;
+
+  # can_see_bug reads the groups stored in the database, which don't yet
+  # include groups added by this update, so check those separately. Only
+  # looked up once a mention has passed the cheaper checks.
+  my $added_groups;
+  my $can_see = sub {
+    my ($mentioned) = @_;
+    return 0 unless $mentioned->can_see_bug($bug->id);
+    $added_groups //= _added_groups($bug, $old_bug);
+    return all { $mentioned->in_group($_) } @$added_groups;
+  };
+
+  return _filter_mentioned_users($bug->product_id, $comments, $can_see);
+}
+
+# Like _mentioned_users, for a bug that is still being filed in $product with
+# the bug groups named in $group_names. Used by the live mention warning on
+# the bug entry form, where there is no bug to check visibility against yet:
+# the mentioned user has to be able to see the product and be in every group
+# the new bug will be in (the selected ones plus the product's mandatory ones).
+sub _mentioned_users_for_new_bug {
+  my ($product, $group_names, $comments) = @_;
+
+  my %valid = map { $_->name => 1 } @{$product->groups_valid};
+  my %groups = map { $_ => 1 } (grep { $valid{$_} } @{$group_names || []}),
+    (map { $_->name } @{$product->groups_mandatory});
+
+  my $can_see = sub {
+    my ($mentioned) = @_;
+    return $mentioned->can_see_product($product->name)
+      && all { $mentioned->in_group($_) } keys %groups;
+  };
+
+  return _filter_mentioned_users($product->id, $comments, $can_see);
+}
+
+sub _added_groups {
+  my ($bug, $old_bug) = @_;
+  return [] unless $old_bug;
+  my %old_groups = map { $_->id => 1 } @{$old_bug->groups_in};
+  return [map { $_->name } grep { !$old_groups{$_->id} } @{$bug->groups_in}];
+}
+
+# The checks shared by _mentioned_users and _mentioned_users_for_new_bug.
+# $can_see is called with each mentioned user and returns whether they can see
+# the bug.
+sub _filter_mentioned_users {
+  my ($product_id, $comments, $can_see) = @_;
   return () unless Bugzilla->params->{needinfo_mentions_enabled};
 
   # Lowercased nick => true if mentioned in at least one public comment.
@@ -328,23 +376,13 @@ sub _mentioned_users {
 
   # Checked after parsing so updates without mentions skip the group lookup.
   my $user = Bugzilla->user;
-  return () unless $user->in_group('editbugs', $bug->product_id);
-
-  # can_see_bug reads the groups stored in the database, which don't yet
-  # include groups added by this update, so check those separately.
-  my @added_groups;
-  if ($old_bug) {
-    my %old_groups = map { $_->id => 1 } @{$old_bug->groups_in};
-    @added_groups
-      = map { $_->name } grep { !$old_groups{$_->id} } @{$bug->groups_in};
-  }
+  return () unless $user->in_group('editbugs', $product_id);
 
   return grep {
     my $mentioned = $_;
          $mentioned->id != $user->id
       && ($public{lc $mentioned->nick} || $mentioned->is_insider)
-      && $mentioned->can_see_bug($bug->id)
-      && all { $mentioned->in_group($_) } @added_groups
+      && $can_see->($mentioned)
   } _users_for_mentions(@nicks);
 }
 
@@ -374,9 +412,7 @@ sub _process_mentions {
     = _mentioned_users($bug, $bug->{added_comments} || [], $old_bug);
   return unless @mentioned;
 
-  my ($type) = grep { $_->name eq 'needinfo' } @{$bug->flag_types};
-  undef $type
-    unless $type && $bug->check_can_change_field('flagtypes.name', 0, 1)->{allowed};
+  my $type = _needinfo_type($bug);
 
   # A failure for one user (e.g. add_cc's strict_isolation check) skips that
   # user rather than rolling back the whole update. Throw*Error only dies
@@ -397,38 +433,105 @@ sub _is_mass_edit {
   return grep {/^id_[1-9]/} Bugzilla->cgi->param;
 }
 
+# The needinfo flag type the current user can set on $bug, if any.
+sub _needinfo_type {
+  my ($bug) = @_;
+  my ($type) = grep { $_->name eq 'needinfo' } @{$bug->flag_types};
+  return undef
+    unless $type
+    && $bug->check_can_change_field('flagtypes.name', 0, 1)->{allowed};
+  return $type;
+}
+
+# Whether a mention of $mentioned would request needinfo, given the needinfo
+# $type from _needinfo_type with its current flags in $type->{flags}.
+sub _can_needinfo {
+  my ($type, $mentioned) = @_;
+  return 0 if !$type || $mentioned->needinfo_blocked;
+
+  # A non-multiplicable type allows only one needinfo flag per bug.
+  return 0 if !$type->is_multiplicable && @{$type->{flags} || []};
+  return 0
+    if grep { $_->status eq '?' && ($_->requestee_id // 0) == $mentioned->id }
+    @{$type->{flags} || []};
+
+  return 1;
+}
+
 sub _cc_and_needinfo {
   my ($bug, $mentioned, $type) = @_;
   $bug->add_cc($mentioned);
 
-  return if !$type || $mentioned->needinfo_blocked;
-
-  # A non-multiplicable type allows only one needinfo flag per bug.
-  return if !$type->is_multiplicable && @{$type->{flags}};
-  return if grep {
-    $_->status eq '?' && ($_->requestee_id // 0) == $mentioned->id
-  } @{$type->{flags}};
+  return unless _can_needinfo($type, $mentioned);
 
   # One call per user so $type->{flags} reflects each flag as it is added.
   $bug->set_flags([],
     [{type_id => $type->id, status => '?', requestee => $mentioned->login}]);
 }
 
+# Describes what saving a new comment would do with its @mentions, for the
+# live mention warning in the comment editor and the comment preview. $comment
+# is a {thetext, isprivate} hash. $target is either {bug => $bug} for a comment
+# on an existing bug, or {product => $product, component => $component,
+# groups => [group names]} for the initial comment of a bug being filed
+# (component and groups are optional). Returns an array ref of
+# {nick, name, needinfo} hashes, one per user that would be CC'd; needinfo is
+# true if they would also get a needinfo request.
+sub mention_effects {
+  my ($comment, $target) = @_;
+  my ($type, @mentioned);
+
+  if (my $bug = $target->{bug}) {
+    @mentioned = _mentioned_users($bug, [$comment]);
+    $type      = _needinfo_type($bug) if @mentioned;
+  }
+  else {
+    my $product = $target->{product};
+    @mentioned
+      = _mentioned_users_for_new_bug($product, $target->{groups}, [$comment]);
+
+    # A new bug has no flags yet, and the needinfo type is checked against
+    # the product (and component) the bug is being filed in.
+    if (@mentioned) {
+      my $component = $target->{component};
+      ($type) = @{
+        Bugzilla::FlagType::match({
+          name         => 'needinfo',
+          target_type  => 'bug',
+          is_active    => 1,
+          product_id   => $product->id,
+          component_id => $component ? $component->id : undef,
+        })
+      };
+      $type->{flags} = [] if $type;
+    }
+  }
+
+  return [
+    map {
+      +{
+        nick     => $_->nick,
+        name     => $_->name,
+        needinfo => _can_needinfo($type, $_) ? 1 : 0
+      }
+    } @mentioned
+  ];
+}
+
 # Lets the comment preview list who saving the comment would CC and needinfo,
-# so a stray @word is caught before the comment is submitted. The comment
-# editor sends include_mentions (and mention_is_private) along with the bug id
-# only for new comments on an existing bug, the only case _process_mentions
-# handles.
+# so a stray @word is caught before the comment is submitted. Clients send
+# include_mentions (and mention_is_private) along with the bug id only for
+# new comments on an existing bug. The comment editor itself now uses the
+# lighter POST /rest/needinfo/mentions endpoint (lib/API/V1/Mentions.pm).
 sub webservice_bug_render_comment {
   my ($self, $args) = @_;
   my ($bug, $params) = @$args{qw(bug params)};
   return unless $bug && $params->{include_mentions};
 
-  my @mentioned = _mentioned_users($bug,
-    [{thetext => $params->{text}, isprivate => $params->{mention_is_private}}]);
-
-  $args->{result}->{mentions}
-    = [map { +{nick => $_->nick, name => $_->name} } @mentioned];
+  $args->{result}->{mentions} = mention_effects(
+    {thetext => $params->{text}, isprivate => $params->{mention_is_private}},
+    {bug     => $bug}
+  );
 }
 
 sub _check_requestee {
