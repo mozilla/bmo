@@ -235,6 +235,23 @@ Bugzilla.MentionAutocomplete = class MentionAutocomplete {
       return;
     }
 
+    // Don't leave suggestions for an older query selectable while the new one is fetched: keep
+    // only those still matching what's typed, so the list doesn't flicker on every keystroke
+    if (this.isOpen && this.$textarea === $textarea && this.start === start) {
+      const prefix = query.toLowerCase();
+      const matching = this.suggestions.filter(({ nick }) =>
+        nick.toLowerCase().startsWith(prefix),
+      );
+
+      if (matching.length) {
+        this.show(matching);
+      } else {
+        this.close();
+      }
+    } else {
+      this.close();
+    }
+
     this.$textarea = $textarea;
     this.start = start;
 
@@ -244,8 +261,15 @@ Bugzilla.MentionAutocomplete = class MentionAutocomplete {
 
     this.timer = window.setTimeout(async () => {
       const users = await this.fetch(query);
+      // The caret may have moved without an `input` event, e.g. with ArrowUp/ArrowDown
+      const current = this.findMention($textarea);
 
-      if (requestId === this.requestId && document.activeElement === $textarea) {
+      if (
+        requestId === this.requestId &&
+        document.activeElement === $textarea &&
+        current?.start === start &&
+        current.query === query
+      ) {
         this.show(users);
       }
     }, MentionAutocomplete.DELAY);
@@ -353,8 +377,10 @@ Bugzilla.MentionAutocomplete = class MentionAutocomplete {
     this.$list.hidden = false;
     this.$textarea.setAttribute('aria-autocomplete', 'list');
     this.$textarea.setAttribute('aria-controls', this.$list.id);
-    this.highlight(0);
+    // Position first: highlighting scrolls the option into view, which would scroll the page to
+    // wherever the list was appended
     this.position();
+    this.highlight(0);
   }
 
   /**
@@ -470,7 +496,10 @@ Bugzilla.MentionAutocomplete = class MentionAutocomplete {
     const user = this.suggestions[index];
     const $textarea = this.$textarea;
 
-    if (!user || !$textarea) {
+    // Make sure the caret still ends the mention, so no other text gets replaced
+    if (!user || !$textarea || this.findMention($textarea)?.start !== this.start) {
+      this.close();
+
       return;
     }
 
@@ -494,6 +523,10 @@ Bugzilla.MentionAutocomplete = class MentionAutocomplete {
 
       $textarea.setSelectionRange(caret, caret);
     }
+
+    // Inserting the text fired `input` with the caret still after the nickname, which scheduled
+    // another search
+    this.close();
   }
 
   /**
