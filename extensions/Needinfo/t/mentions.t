@@ -63,7 +63,8 @@ is([$extract->("~~~\n\@unclosed\n\@more")], [], 'unclosed fence runs to end');
   }
   sub is_insider   { $_[0]{insider} }
   sub can_see_bug  { $_[0]{sees_bug} // 1 }
-  sub needinfo_blocked { 0 }
+  sub can_see_product  { $_[0]{sees_product} // 1 }
+  sub needinfo_blocked { $_[0]{blocked} // 0 }
 
   package FakeBug;
   sub new {
@@ -113,6 +114,16 @@ is([$extract->("~~~\n\@unclosed\n\@more")], [], 'unclosed fence runs to end');
   sub new  { my ($class, $id, $name) = @_; bless {id => $id, name => $name}, $class }
   sub id   { $_[0]{id} }
   sub name { $_[0]{name} }
+
+  package FakeProduct;
+  sub new {
+    my ($class, %args) = @_;
+    bless {valid => [], mandatory => [], %args}, $class;
+  }
+  sub id               {1}
+  sub name             {'Fake Product'}
+  sub groups_valid     { $_[0]{valid} }
+  sub groups_mandatory { $_[0]{mandatory} }
 }
 
 my %users = map { $_->nick => $_ } (
@@ -278,7 +289,7 @@ my $render = sub {
 is(
   $render->({text => '@alice @hidden @me', id => 1, include_mentions => 1})
     ->{mentions},
-  [{nick => 'alice', name => 'Alice'}],
+  [{nick => 'alice', name => 'Alice', needinfo => 1}],
   'preview lists the users a save would notify'
 );
 is($preview_bug->{cc}, [], '... without changing the bug');
@@ -291,7 +302,7 @@ is(
     include_mentions   => 1,
     mention_is_private => 1
   })->{mentions},
-  [{nick => 'bob', name => 'Bob'}],
+  [{nick => 'bob', name => 'Bob', needinfo => 1}],
   'preview of a private comment lists only insiders'
 );
 $users{bob}{insider} = 0;
@@ -306,7 +317,133 @@ is($render->({text => '@alice', id => 1, include_mentions => 1})->{mentions},
   [], 'preview lists nobody when needinfo_mentions_enabled is off');
 $params{needinfo_mentions_enabled} = 1;
 
+# The live mention warning (POST /rest/needinfo/mentions) tells needinfo from
+# CC-only mentions.
+my $effects = \&Bugzilla::Extension::Needinfo::mention_effects;
+
+$preview_bug = FakeBug->new('');
+push @{$preview_bug->{type}{flags}},
+  bless({status => '?', requestee_id => 3}, 'FakeFlag');
+$users{alice}{blocked} = 1;
+is(
+  $effects->({thetext => '@alice @bob @u1 @me'}, {bug => $preview_bug}),
+  [
+    {nick => 'alice', name => 'Alice', needinfo => 0},
+    {nick => 'bob',   name => 'Bob',   needinfo => 0},
+    {nick => 'u1',    name => 'U1',    needinfo => 1},
+  ],
+  'warning: blocked and already needinfod users are only CCd'
+);
+$users{alice}{blocked} = 0;
+is($preview_bug->{cc}, [], '... without changing the bug');
+
+$preview_bug = FakeBug->new('', multiplicable => 0);
+push @{$preview_bug->{type}{flags}},
+  bless({status => '?', requestee_id => 9}, 'FakeFlag');
+is(
+  $effects->({thetext => '@alice'}, {bug => $preview_bug}),
+  [{nick => 'alice', name => 'Alice', needinfo => 0}],
+  'warning: non-multiplicable type with a flag only CCs'
+);
+
+is($effects->({thetext => "`\@alice`\n> \@bob"}, {bug => FakeBug->new('')}),
+  [], 'warning: mentions in code and quotes are ignored');
+
+{
+  my $mock_bug_type = mock 'FakeBug' =>
+    (override => [check_can_change_field => sub { {allowed => 0} }]);
+  is(
+    $effects->({thetext => '@alice'}, {bug => FakeBug->new('')}),
+    [{nick => 'alice', name => 'Alice', needinfo => 0}],
+    'warning: no needinfo when the user cannot change flags on the bug'
+  );
+}
+
+# The initial comment of a bug being filed: there is no bug to check
+# visibility against, so the product and the new bug's groups are used.
+my $needinfo_types = [bless({multiplicable => 1}, 'FakeType')];
+my %type_criteria;
+my $mock_flagtype = mock 'Bugzilla::FlagType' => (
+  override => [
+    match => sub { %type_criteria = %{$_[0]}; return $needinfo_types },
+  ],
+);
+my $product = FakeProduct->new(valid => [$security]);
+
+is(
+  $effects->({thetext => '@alice @hidden @me'}, {product => $product}),
+  [
+    {nick => 'alice',  name => 'Alice',  needinfo => 1},
+    {nick => 'hidden', name => 'Hidden', needinfo => 1},
+  ],
+  'new bug: users who can see the product are needinfod'
+);
+is($type_criteria{name}, 'needinfo',    '... using the needinfo flag type');
+is($type_criteria{component_id}, undef, '... of the product when no component');
+
+$users{alice}{sees_product} = 0;
+is(
+  $effects->({thetext => '@alice @bob'}, {product => $product}),
+  [{nick => 'bob', name => 'Bob', needinfo => 1}],
+  'new bug: users who cannot see the product are skipped'
+);
+delete $users{alice}{sees_product};
+
+is(
+  $effects->(
+    {thetext => '@alice @bob'},
+    {product => $product, groups => ['core-security', 'not-valid-here']}
+  ),
+  [{nick => 'bob', name => 'Bob', needinfo => 1}],
+  'new bug: selected groups limit who is mentioned, invalid ones ignored'
+);
+
+is(
+  $effects->(
+    {thetext => '@alice @bob'},
+    {product => FakeProduct->new(mandatory => [$security])}
+  ),
+  [{nick => 'bob', name => 'Bob', needinfo => 1}],
+  'new bug: mandatory product groups limit who is mentioned'
+);
+
+is(
+  $effects->(
+    {thetext => '@alice'},
+    {product => $product, component => FakeGroup->new(7, 'General')}
+  ),
+  [{nick => 'alice', name => 'Alice', needinfo => 1}],
+  'new bug with a component'
+);
+is($type_criteria{component_id}, 7, '... uses that component\'s flag types');
+
+$users{alice}{blocked} = 1;
+is(
+  $effects->({thetext => '@alice'}, {product => $product}),
+  [{nick => 'alice', name => 'Alice', needinfo => 0}],
+  'new bug: a user blocking needinfo is only CCd'
+);
+$users{alice}{blocked} = 0;
+
+$needinfo_types = [];
+is(
+  $effects->({thetext => '@alice'}, {product => $product}),
+  [{nick => 'alice', name => 'Alice', needinfo => 0}],
+  'new bug: no needinfo without a needinfo flag type'
+);
+$mock_flagtype = undef;
+
+$params{needinfo_mentions_enabled} = 0;
+is($effects->({thetext => '@alice'}, {product => $product}),
+  [], 'new bug: nobody when needinfo_mentions_enabled is off');
+$params{needinfo_mentions_enabled} = 1;
+
 $commenter->{editbugs} = 0;
+is($effects->({thetext => '@alice'}, {product => $product}),
+  [], 'new bug: nobody for commenters without editbugs');
+is($effects->({thetext => '@alice'}, {bug => FakeBug->new('')}),
+  [], 'warning: nobody for commenters without editbugs');
+
 @looked_up = ();
 $bug = FakeBug->new('@alice');
 $process->($bug);
