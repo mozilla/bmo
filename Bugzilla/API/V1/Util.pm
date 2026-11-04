@@ -359,8 +359,15 @@ sub type {
     if $type eq 'email' && Bugzilla->params->{webservice_email_filter};
 
   # Always UTC, with the timezone specifier.
-  return $value ? datetime_from($value, 'UTC')->iso8601() . 'Z' : ''
-    if $type eq 'dateTime';
+  if ($type eq 'dateTime') {
+    return '' if !$value;
+    my $dt = datetime_from($value, 'UTC');
+
+    # A value datetime_from() can't parse (e.g. two activity rows that
+    # GetBugActivity joined into one string) is returned as is, rather
+    # than failing the whole request.
+    return $dt ? $dt->iso8601() . 'Z' : "$value";
+  }
 
   if ($type eq 'base64') {
     utf8::encode($value) if utf8::is_utf8($value);
