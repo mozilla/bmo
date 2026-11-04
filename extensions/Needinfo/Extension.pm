@@ -93,6 +93,8 @@ sub bug_end_of_create {
   my ($self, $args) = @_;
   my $params = Bugzilla->input_params;
 
+  _keep_description_for_mentions($args->{bug});
+
   return unless $params->{needinfo_from};
 
   # Add extra params
@@ -348,10 +350,11 @@ sub _mentioned_users {
   } _users_for_mentions(@nicks);
 }
 
-# GitHub-style mentions: each @nickname in a new comment is CC'd and gets a
-# needinfo request. Mentions never block the comment from being saved; anyone
-# who can't be needinfo'd (blocked, already asked, no permission, or the
-# needinfo type isn't multiplicable and a flag exists) is only CC'd.
+# GitHub-style mentions: each @nickname in a new comment, or in the description
+# of a new bug, is CC'd and gets a needinfo request. Mentions never block the
+# comment from being saved; anyone who can't be needinfo'd (blocked, already
+# asked, no permission, or the needinfo type isn't multiplicable and a flag
+# exists) is only CC'd.
 #
 # Safeguards against misuse:
 # - only comments made in the web UI count, so bots and API clients posting
@@ -367,11 +370,16 @@ sub _mentioned_users {
 #   param
 sub _process_mentions {
   my ($bug, $old_bug) = @_;
+
+  # The description of a new bug, kept by bug_end_of_create. Taken before the
+  # checks below so that only the first update after creation considers it.
+  my $description = delete $bug->{needinfo_description};
+
   return unless Bugzilla->usage_mode == USAGE_MODE_BROWSER;
   return if _is_mass_edit();
 
-  my @mentioned
-    = _mentioned_users($bug, $bug->{added_comments} || [], $old_bug);
+  my @comments  = (($description // ()), @{$bug->{added_comments} || []});
+  my @mentioned = _mentioned_users($bug, \@comments, $old_bug);
   return unless @mentioned;
 
   my ($type) = grep { $_->name eq 'needinfo' } @{$bug->flag_types};
@@ -389,6 +397,27 @@ sub _process_mentions {
       or WARN('Skipped mention of ' . $mentioned->login . " on bug "
         . $bug->id . ": $@");
   }
+}
+
+# Comment 0 is inserted by Bug->create itself rather than through add_comment,
+# so it never appears in added_comments. Keep it on the bug for
+# _process_mentions, which handles it in the update that follows creation
+# (post_bug.cgi always updates the new bug to set the flags from the form).
+# Waiting for that update means the bug and its groups are committed, and that
+# needinfo flags requested on the form are known, so a user both mentioned and
+# needinfo'd explicitly gets only one request.
+sub _keep_description_for_mentions {
+  my ($bug) = @_;
+  return unless Bugzilla->params->{needinfo_mentions_enabled};
+  return unless Bugzilla->usage_mode == USAGE_MODE_BROWSER;
+
+  my $dbh         = Bugzilla->dbh;
+  my $description = $dbh->selectrow_hashref(
+    'SELECT thetext, isprivate FROM longdescs WHERE bug_id = ? '
+      . 'ORDER BY comment_id ' . $dbh->sql_limit(1),
+    undef, $bug->id
+  );
+  $bug->{needinfo_description} = $description if $description;
 }
 
 # process_bug.cgi takes a single bug as `id` and a mass edit as `id_<bug id>`
@@ -417,8 +446,8 @@ sub _cc_and_needinfo {
 # Lets the comment preview list who saving the comment would CC and needinfo,
 # so a stray @word is caught before the comment is submitted. The comment
 # editor sends include_mentions (and mention_is_private) along with the bug id
-# only for new comments on an existing bug, the only case _process_mentions
-# handles.
+# only for new comments on an existing bug; the description of a new bug has
+# no bug to check the mentioned users against yet, so it isn't previewed.
 sub webservice_bug_render_comment {
   my ($self, $args) = @_;
   my ($bug, $params) = @$args{qw(bug params)};

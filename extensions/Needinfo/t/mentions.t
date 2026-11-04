@@ -197,6 +197,28 @@ is($bug->{cc},       ['bob'],             'private comment: only insiders are CC
 is($bug->{needinfo}, ['bob@example.com'], '... and needinfod');
 $users{bob}{insider} = 0;
 
+# A new bug: bug_end_of_create keeps the description for the first update.
+$bug = FakeBug->new('');
+$bug->{needinfo_description} = {thetext => '@alice please look', isprivate => 0};
+$process->($bug);
+is($bug->{cc},       ['alice'],             'mention in a new bug description CCd');
+is($bug->{needinfo}, ['alice@example.com'], '... and needinfod');
+ok(!exists $bug->{needinfo_description}, '... and the description is used once');
+
+$bug = FakeBug->new('@bob');
+$bug->{needinfo_description} = {thetext => '@alice @bob', isprivate => 0};
+$process->($bug);
+is($bug->{needinfo}, ['alice@example.com', 'bob@example.com'],
+  'description and new comment mentions combined without duplicates');
+
+$bug = FakeBug->new('');
+$bug->{needinfo_description} = {thetext => '@alice @bob', isprivate => 1};
+$users{bob}{insider} = 1;
+$process->($bug);
+is($bug->{needinfo}, ['bob@example.com'],
+  'private description: only insiders are needinfod');
+$users{bob}{insider} = 0;
+
 my $security = FakeGroup->new(1, 'core-security');
 $bug = FakeBug->new('@alice @bob');
 $bug->{groups} = [$security];
@@ -217,6 +239,11 @@ $bug = FakeBug->new('@alice');
 $process->($bug);
 is(\@looked_up,      [], 'no lookup for comments made through the API');
 is($bug->{cc},       [], 'no CC for comments made through the API');
+$bug = FakeBug->new('');
+$bug->{needinfo_description} = {thetext => '@alice', isprivate => 0};
+$process->($bug);
+is($bug->{cc}, [], 'no CC for a description made through the API');
+ok(!exists $bug->{needinfo_description}, '... and the description is dropped');
 $usage_mode = Bugzilla::Constants::USAGE_MODE_BROWSER;
 
 $cgi->{names} = ['id_12', 'id_13', 'comment', 'dontchange'];
