@@ -51,6 +51,13 @@ Bugzilla.MentionAutocomplete = class MentionAutocomplete {
   static VALID_NICK = /^[\p{Alphabetic}\p{Nd}|._-]*[\p{Alphabetic}\p{Nd}_-]$/u;
 
   /**
+   * A fenced code block, mirroring the one `_extract_mentions` removes: it closes on a line
+   * starting with the same marker, both fence lines are included whole, and a fence that never
+   * closes runs to the end of the text.
+   */
+  static FENCED_BLOCK = /^[ \t]*(`{3,}|~{3,})[\s\S]*?(?:^[ \t]*\1[^\n]*$|(?![\s\S]))/gm;
+
+  /**
    * Initialize a new `MentionAutocomplete` instance, serving every comment `<textarea>` on the page.
    */
   constructor() {
@@ -156,37 +163,28 @@ Bugzilla.MentionAutocomplete = class MentionAutocomplete {
    * @returns {boolean} Result.
    */
   static isIgnored(text, position) {
-    const before = text.slice(0, position);
-    const lines = before.split('\n');
-
-    if (/^[ \t]*>/.test(/** @type {string} */ (lines.at(-1)))) {
+    if (/^[ \t]*>/.test(/** @type {string} */ (text.slice(0, position).split('\n').at(-1)))) {
       return true;
     }
 
-    // A fence closes on a line starting with the same marker. Both fence lines are dropped whole,
-    // and so is everything after a fence that never closes.
-    /** @type {string | null} */
-    let fence = null;
-    let onFenceLine = false;
+    // Like `_extract_mentions`, drop fenced blocks before looking for code spans. Blank them
+    // instead of removing them to keep offsets. A blanked block still separates paragraphs.
+    let inFence = false;
+    const masked = text.replace(MentionAutocomplete.FENCED_BLOCK, (block, _marker, offset) => {
+      inFence ||= position >= offset && position < offset + block.length;
 
-    for (const line of lines) {
-      const marker = line.match(/^[ \t]*(`{3,}|~{3,})/)?.[1];
+      return block.replace(/[^\n]/g, ' ');
+    });
 
-      onFenceLine = !!marker && (!fence || marker.startsWith(fence));
-
-      if (onFenceLine) {
-        fence = fence ? null : /** @type {string} */ (marker);
-      }
-    }
-
-    if (fence || onFenceLine) {
+    if (inFence) {
       return true;
     }
 
     // A code span opens and closes on backtick runs of the same length within a paragraph.
+    const before = masked.slice(0, position);
     const paragraphStart = Math.max(0, before.search(/\n[ \t]*\n(?![\s\S]*\n[ \t]*\n)/));
-    const paragraphEnd = text.slice(position).search(/\n[ \t]*\n/);
-    const paragraph = text.slice(
+    const paragraphEnd = masked.slice(position).search(/\n[ \t]*\n/);
+    const paragraph = masked.slice(
       paragraphStart,
       paragraphEnd < 0 ? undefined : position + paragraphEnd,
     );
@@ -562,6 +560,16 @@ Bugzilla.MentionAutocomplete = class MentionAutocomplete {
       event.metaKey ||
       event.shiftKey
     ) {
+      return;
+    }
+
+    // The selection may have changed without an `update()`, e.g. with Ctrl+A or Shift+ArrowDown.
+    // Leave the key to its default action then.
+    const $textarea = /** @type {HTMLTextAreaElement} */ (this.$textarea);
+
+    if (this.findMention($textarea)?.start !== this.start) {
+      this.close();
+
       return;
     }
 
