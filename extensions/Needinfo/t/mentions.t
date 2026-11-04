@@ -67,6 +67,7 @@ is([$extract->("~~~\n\@unclosed\n\@more")], [], 'unclosed fence runs to end');
   sub needinfo_blocked { $_[0]{blocked}      // 0 }
   sub can_set_flag     { $_[0]{can_set}      // 1 }
   sub can_change_flag  { $_[0]{can_request}  // 1 }
+  sub can_edit_product { $_[0]{edits_product} // 1 }
 
   package FakeBug;
   sub new {
@@ -106,6 +107,7 @@ is([$extract->("~~~\n\@unclosed\n\@more")], [], 'unclosed fence runs to end');
   sub is_multiplicable { $_[0]{multiplicable} }
   sub is_requestable   { $_[0]{requestable}  // 1 }
   sub is_requesteeble  { $_[0]{requesteeble} // 1 }
+  sub is_active        { $_[0]{active}       // 1 }
 
   package FakeFlag;
   sub status       { $_[0]{status} }
@@ -212,9 +214,25 @@ is($bug->{cc},       ['alice'], 'commenter cannot request needinfo: CCd');
 is($bug->{needinfo}, [],        '... but not needinfod');
 delete $commenter->{can_request};
 
+$bug = FakeBug->new('@alice', active => 0);
+push @{$bug->{type}{flags}},
+  bless({status => '?', requestee_id => 9}, 'FakeFlag');
+$process->($bug);
+is($bug->{cc},       ['alice'], 'inactive type with existing flags: CCd');
+is($bug->{needinfo}, [],        '... but not needinfod');
+
+$params{strict_isolation}  = 1;
+$users{bob}{edits_product} = 0;
+$bug                       = FakeBug->new('@bob @alice', multiplicable => 0);
+$process->($bug);
+is($bug->{cc}, ['alice'],
+  'strict_isolation: users who cannot edit the product are skipped');
+is($bug->{needinfo}, ['alice@example.com'], '... and do not take the needinfo');
+delete $users{bob}{edits_product};
+delete $params{strict_isolation};
+
 $bug = FakeBug->new('@boom @alice');
-ok(lives { $process->($bug) },
-  'a failing CC (e.g. strict_isolation) does not throw');
+ok(lives { $process->($bug) }, 'a failing CC does not throw');
 is($bug->{cc},       ['alice'],             '... that user is skipped');
 is($bug->{needinfo}, ['alice@example.com'], '... others still processed');
 
@@ -397,6 +415,28 @@ is(
 );
 delete $commenter->{can_request};
 
+$preview_bug = FakeBug->new('', active => 0);
+push @{$preview_bug->{type}{flags}},
+  bless({status => '?', requestee_id => 9}, 'FakeFlag');
+is(
+  $effects->({thetext => '@alice'}, {bug => $preview_bug}),
+  [{nick => 'alice', name => 'Alice', needinfo => 0}],
+  'warning: no needinfo for an inactive type with existing flags'
+);
+
+$params{strict_isolation} = 1;
+$users{bob}{edits_product} = 0;
+is(
+  $effects->(
+    {thetext => '@bob @alice'},
+    {bug     => FakeBug->new('', multiplicable => 0)}
+  ),
+  [{nick => 'alice', name => 'Alice', needinfo => 1}],
+  'warning: strict_isolation skips users who cannot edit the product'
+);
+delete $users{bob}{edits_product};
+delete $params{strict_isolation};
+
 foreach my $field (qw(requestable requesteeble)) {
   is(
     $effects->({thetext => '@alice'}, {bug => FakeBug->new('', $field => 0)}),
@@ -490,6 +530,16 @@ is(
   'new bug: a user blocking needinfo is only CCd'
 );
 $users{alice}{blocked} = 0;
+
+$params{strict_isolation} = 1;
+$users{bob}{edits_product} = 0;
+is(
+  $new_bug_effects->({thetext => '@bob @alice'}, {product => FakeProduct->new}),
+  [{nick => 'alice', name => 'Alice', needinfo => 1}],
+  'new bug: strict_isolation skips users who cannot edit the product'
+);
+delete $users{bob}{edits_product};
+delete $params{strict_isolation};
 
 $needinfo_types = [];
 is(
