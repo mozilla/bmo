@@ -16,7 +16,7 @@ use base qw(Bugzilla::Extension);
 use Bugzilla::Field;
 use Bugzilla::User;
 use Bugzilla::Install::Util qw(indicate_progress);
-use Bugzilla::WebService::Util qw(filter_wants);
+use Bugzilla::API::V1::Util qw(filter_wants);
 
 use Date::Parse;
 use Scalar::Util qw(blessed);

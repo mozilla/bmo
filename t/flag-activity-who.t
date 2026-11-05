@@ -53,8 +53,8 @@ $bug->update('2026-01-01 10:00:00');
 Bugzilla->set_user($redirector);
 $bug = Bugzilla::Bug->new($bug_id);
 my ($flag) = @{$bug->flags};
-$bug->set_flags([{id => $flag->id, status => '?', requestee => 'carol@bmo.test'}],
-  []);
+$bug->set_flags(
+  [{id => $flag->id, status => '?', requestee => 'carol@bmo.test'}], []);
 $bug->update('2026-01-01 11:00:00');
 
 $flag = Bugzilla::Flag->new($flag->id);
@@ -62,7 +62,9 @@ is($flag->setter_id, $requester->id, 'the setter is kept on redirect');
 
 my $rows = $dbh->selectall_arrayref(
   'SELECT setter_id, who FROM flag_activity WHERE flag_id = ? ORDER BY id',
-  {Slice => {}}, $flag->id);
+  {Slice => {}},
+  $flag->id
+);
 is(
   $rows,
   [
@@ -79,20 +81,21 @@ my ($redirect) = grep {
 } @$operations;
 is($redirect->{who}, 'redirector@bmo.test', 'history shows the redirector');
 
-# A checksetup that died after adding the column left it nullable: the next
-# one finishes the job.
+# A database left by bug 2088705: who nullable, with rows that pods on the
+# older code inserted without it. The next checksetup fills them and makes the
+# column NOT NULL.
 $dbh->bz_alter_column('flag_activity', 'who',
   {TYPE => 'INT3', REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}});
 $dbh->do('UPDATE flag_activity SET who = NULL WHERE flag_id = ?',
   undef, $flag->id);
-Bugzilla::Install::DB::_add_flag_activity_who();
+Bugzilla::Install::DB->update_table_definitions({});
 is(
   scalar $dbh->selectrow_array(
     'SELECT COUNT(*) FROM flag_activity WHERE who IS NULL'),
   0,
-  'an interrupted migration fills the rows left'
+  'the rows without who are filled'
 );
 ok($dbh->bz_column_info('flag_activity', 'who')->{NOTNULL},
-  'and makes the column NOT NULL');
+  'and the column is NOT NULL');
 
 done_testing;

@@ -844,9 +844,13 @@ sub update_table_definitions {
   # Bug 1949556 - dkl@mozilla.com
   $dbh->bz_add_index('audit_log', 'audit_log_object_id_idx', ['object_id']);
 
-  # Bug 2085398 - xavier.lhour@gmail.com
+  # Bug 2088705 - xavier.lhour@gmail.com
   # Before _migrate_flag_state_activity, which copies into this column.
   _add_flag_activity_who();
+
+  # Bug 2085398 - xavier.lhour@gmail.com
+  # After _add_flag_activity_who, which fills the rows without it.
+  _set_flag_activity_who_not_null();
 
   # Bug 1806896 - xavier.lhour@gmail.com
   _migrate_flag_state_activity();
@@ -4587,30 +4591,35 @@ sub _add_flag_activity_start_rows {
     [qw(bug_id fieldid bug_when)]);
 }
 
+# Nullable for now: during the rolling deploy, pods still on the previous code
+# insert rows without it. Bug 2085398 makes it NOT NULL once all pods write it.
 sub _add_flag_activity_who {
   my $dbh = Bugzilla->dbh;
 
-  # Still nullable if it died before the end: pick up from there.
-  my $who = $dbh->bz_column_info('flag_activity', 'who');
-  if (!$who || !$who->{NOTNULL}) {
-
-    # Existing rows don't record who made the change; the setter is the best
-    # value available.
-    $dbh->bz_add_column('flag_activity', 'who',
-      {TYPE => 'INT3', REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}})
-      if !$who;
-    $dbh->do('UPDATE flag_activity SET who = setter_id WHERE who IS NULL');
-    $dbh->bz_alter_column('flag_activity', 'who',
-      {
-      TYPE       => 'INT3',
-      NOTNULL    => 1,
-      REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}
-      });
-  }
+  $dbh->bz_add_column('flag_activity', 'who',
+    {TYPE => 'INT3', REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}});
 
   # For the user activity report and the changedby search.
   $dbh->bz_add_index('flag_activity', 'flag_activity_who_idx',
     [qw(who flag_when)]);
+
+  # Rows from before this column, or from pods on the previous code, don't
+  # record who made the change: the setter is the best value available. Runs
+  # every time, on the index above.
+  $dbh->do('UPDATE flag_activity SET who = setter_id WHERE who IS NULL');
+}
+
+# Every pod writes who since bug 2088705 was deployed.
+sub _set_flag_activity_who_not_null {
+  my $dbh = Bugzilla->dbh;
+  return if $dbh->bz_column_info('flag_activity', 'who')->{NOTNULL};
+
+  $dbh->bz_alter_column('flag_activity', 'who',
+    {
+    TYPE       => 'INT3',
+    NOTNULL    => 1,
+    REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}
+    });
 }
 
 sub _remove_duo_recovery_codes {

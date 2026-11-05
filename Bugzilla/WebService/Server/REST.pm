@@ -19,7 +19,8 @@ use Bugzilla::Error;
 use Bugzilla::Hook;
 use Bugzilla::Util qw(html_quote disable_utf8 enable_utf8);
 use Bugzilla::WebService::Constants;
-use Bugzilla::WebService::Util qw(fix_credentials set_rest_cors_headers taint_data);
+use Bugzilla::WebService::Util qw(fix_credentials taint_data);
+use Bugzilla::API::V1::Util qw(set_rest_cors_headers);
 
 # Load resource modules
 use Bugzilla::WebService::Server::REST::Resources::Bugzilla;

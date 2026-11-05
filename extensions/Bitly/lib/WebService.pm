@@ -19,7 +19,7 @@ use Bugzilla::Error;
 use Bugzilla::Search;
 use Bugzilla::Search::Quicksearch;
 use Bugzilla::Util qw(mojo_user_agent);
-use Bugzilla::WebService::Util 'validate';
+use Bugzilla::API::V1::Util qw(validate);
 use JSON;
 use LWP::UserAgent;
 use URI;

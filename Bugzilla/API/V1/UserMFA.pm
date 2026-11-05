@@ -13,7 +13,7 @@ use Mojo::Base qw( Mojolicious::Controller );
 use Bugzilla::Constants;
 use Bugzilla::Token;
 use Bugzilla::User;
-use Bugzilla::WebService::Util qw(merge_request_params);
+use Bugzilla::API::V1::Util qw(merge_request_params);
 
 sub setup_routes {
   my ($class, $r) = @_;

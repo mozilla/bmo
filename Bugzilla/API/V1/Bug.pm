@@ -16,7 +16,6 @@ use List::MoreUtils qw(uniq);
 use Storable qw(freeze);
 use Types::Standard -all;
 
-use Bugzilla::API::V1::Util;
 use Bugzilla::App::Plugin::Error;
 use Bugzilla::Bug;
 use Bugzilla::Comment;
@@ -29,7 +28,7 @@ use Bugzilla::Token qw(issue_hash_token);
 use Bugzilla::Util qw(remote_ip trim);
 use Bugzilla::WebService;
 use Bugzilla::WebService::Server;
-use Bugzilla::WebService::Util qw(extract_flags filter filter_wants
+use Bugzilla::API::V1::Util qw(extract_flags filter filter_wants
   merge_request_params strip_request_params validate);
 
 our %api_field_types = (

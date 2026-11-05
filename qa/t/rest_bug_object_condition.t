@@ -31,7 +31,7 @@ use Test::More;
 
 # Webservice error code for ThrowCodeError('param_must_be_numeric'), and the
 # generic code returned for the invalid_params error thrown by
-# Bugzilla::WebService::Util::validate().
+# Bugzilla::API::V1::Util::validate().
 use constant PARAM_MUST_BE_NUMERIC   => 52;
 use constant ERROR_UNKNOWN_TRANSIENT => 32000;
 
