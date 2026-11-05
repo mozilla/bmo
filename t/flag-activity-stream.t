@@ -18,7 +18,7 @@ BEGIN {
 use Bugzilla::Test::MockLocalconfig (urlbase => 'http://bmo.test');
 use Bugzilla::Test::MockDB;
 use Bugzilla::Test::MockParams (mail_delivery_method => 'None');
-use Bugzilla::Test::Util qw(create_bug create_user);
+use Bugzilla::Test::Util qw(create_bug create_user set_flag_activity_cutoff);
 use Bugzilla::Bug;
 use Bugzilla::User;
 use Test2::V0;
@@ -58,6 +58,7 @@ sub flag_activity_id {
   $bug->update('2099-01-01 10:00:00');
 
   if ($legacy) {
+    set_flag_activity_cutoff('2099-01-01 10:00:00');
     $dbh->do('DELETE FROM flag_activity WHERE bug_id = ?', undef, $bug_id);
     $dbh->do(
       'INSERT INTO bugs_activity (bug_id, who, bug_when, fieldid, removed, added)

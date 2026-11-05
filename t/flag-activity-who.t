@@ -18,7 +18,7 @@ BEGIN {
 use Bugzilla::Test::MockLocalconfig (urlbase => 'http://bmo.test');
 use Bugzilla::Test::MockDB;
 use Bugzilla::Test::MockParams (mail_delivery_method => 'None');
-use Bugzilla::Test::Util qw(create_bug create_user);
+use Bugzilla::Test::Util qw(create_bug create_user set_flag_activity_cutoff);
 use Bugzilla::Bug;
 use Bugzilla::Install::DB;
 use Bugzilla::User;
@@ -34,6 +34,7 @@ my $dbh = Bugzilla->dbh;
 my $requester  = create_user('requester@bmo.test',  '*');
 my $redirector = create_user('redirector@bmo.test', '*');
 create_user($_, '*') for qw(bob@bmo.test carol@bmo.test);
+set_flag_activity_cutoff('2025-01-01 00:00:00');
 
 my $bug_id = create_bug(
   short_desc  => 'Flag redirect test bug',

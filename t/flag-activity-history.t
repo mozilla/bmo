@@ -17,14 +17,14 @@ BEGIN {
 
 use Bugzilla::Test::MockLocalconfig (urlbase => 'http://bmo.test');
 use Bugzilla::Test::MockDB;
-use Bugzilla::Test::Util qw(create_bug create_user);
+use Bugzilla::Test::Util qw(create_bug create_user set_flag_activity_cutoff);
 use Bugzilla::Bug;
 use Bugzilla::BugMail;
 use Bugzilla::User;
 use Test2::V0;
 
-# Bug history and bugmail read the flag changes made before flag_activity
-# existed from bugs_activity, and only the newer ones from flag_activity.
+# Bug history and bugmail read the flag changes up to the cutoff from
+# bugs_activity, and only the later ones from flag_activity.
 
 create_user('automation@bmo.tld', '*');
 Bugzilla->set_user(Bugzilla::User->super_user);
@@ -33,6 +33,7 @@ my $dbh = Bugzilla->dbh;
 my $setter = create_user('setter@bmo.test', '*');
 my $alice  = create_user('alice@bmo.test',  '*');
 my $bob    = create_user('bob@bmo.test',    '*');
+set_flag_activity_cutoff('2025-01-01 00:00:00');
 
 sub new_bug {
   return create_bug(
@@ -97,9 +98,15 @@ for my $row (
 }
 
 # The last legacy change was also written to flag_activity, then the flag
-# changed again once only flag_activity was written.
+# changed again after the cutoff. A pod on the older code wrote that change to
+# bugs_activity too.
 add_flag_activity($legacy_bug, '2020-01-03 10:00:00', 42, $setter, undef, '+');
 add_flag_activity($legacy_bug, '2026-01-01 10:00:00', 42, $alice,  undef, '-');
+$dbh->do(
+  'INSERT INTO bugs_activity (bug_id, who, bug_when, fieldid, removed, added)
+   VALUES (?, ?, ?, ?, ?, ?)', undef, $legacy_bug, $alice->id,
+  '2026-01-01 10:00:00', $fieldid, 'review+', 'review-'
+);
 
 my $expected = [
   ['setter@bmo.test', '',                      'review?(bob@bmo.test)'],

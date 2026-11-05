@@ -4562,7 +4562,7 @@ sub delta_ts_non_bot {
   # was not made by one of the accounts in the bot skip list.
   if (my $bot_ids_string = $cache->{bot_ids_string}) {
     my $flag_newer
-      = Bugzilla::FlagActivity->newer_than_bugs_activity_sql('flag_activity');
+      = Bugzilla::FlagActivity->after_cutoff_sql('flag_activity');
     ($self->{delta_ts_non_bot}) = $dbh->selectrow_array(
       "SELECT MAX(bug_when)
          FROM (SELECT MAX(bug_when) AS bug_when
@@ -4869,6 +4869,9 @@ sub GetBugActivity {
   my $bug_when
     = $dbh->sql_date_format('bugs_activity.bug_when', '%Y-%m-%d %H:%i:%s');
 
+  my $ba_before_cutoff
+    = Bugzilla::FlagActivity->bugs_activity_before_cutoff_sql('bugs_activity');
+
   # Use an outer table so alias column `bug_when` will work within the `where`
   # clause. Also use `DISTINCT` to suppress duplicated changes weirdly made at
   # the same time by the same user.
@@ -4891,6 +4894,7 @@ sub GetBugActivity {
     INNER JOIN profiles
             ON profiles.userid = bugs_activity.who
          WHERE bugs_activity.bug_id = ?
+               AND $ba_before_cutoff
                $attachpart
                $suppwhere ";
 
@@ -4929,7 +4933,7 @@ sub GetBugActivity {
   }
 
   my $flag_bug_when = $dbh->sql_date_format('fsa.flag_when', '%Y-%m-%d %H:%i:%s');
-  my $flag_newer    = Bugzilla::FlagActivity->newer_than_bugs_activity_sql('fsa');
+  my $flag_newer    = Bugzilla::FlagActivity->after_cutoff_sql('fsa');
   my $flag_last     = Bugzilla::FlagActivity->last_of_request_sql('fsa');
   my $flag_prev_id  = Bugzilla::FlagActivity->previous_id_sql('fsa');
   $query .= "

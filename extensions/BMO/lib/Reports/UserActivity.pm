@@ -117,7 +117,9 @@ sub report {
     # Flag changes are in flag_activity, older ones in bugs_activity. CHAR(63)
     # is a question mark: a literal one would be taken for a placeholder by
     # the debug output below.
-    my $flag_newer   = Bugzilla::FlagActivity->newer_than_bugs_activity_sql('fsa');
+    my $flag_newer   = Bugzilla::FlagActivity->after_cutoff_sql('fsa');
+    my $ba_before_cutoff
+      = Bugzilla::FlagActivity->bugs_activity_before_cutoff_sql('bugs_activity');
     my $flag_last    = Bugzilla::FlagActivity->last_of_request_sql('fsa');
     my $flag_prev_id = Bugzilla::FlagActivity->previous_id_sql('fsa');
     my $query = "
@@ -142,6 +144,7 @@ sub report {
              WHERE profiles.login_name IN ($who_bits)
                    AND CONVERT_TZ(bugs_activity.bug_when, 'UTC', 'America/Los_Angeles') >= ?
                    AND CONVERT_TZ(bugs_activity.bug_when, 'UTC', 'America/Los_Angeles') <= ?
+                   AND $ba_before_cutoff
                    $activity_where
 
         UNION ALL

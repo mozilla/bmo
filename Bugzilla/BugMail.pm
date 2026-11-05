@@ -1046,7 +1046,9 @@ sub _get_diffs {
   my $dbh = Bugzilla->dbh;
 
   my @args       = ($bug->id);
-  my $flag_newer   = Bugzilla::FlagActivity->newer_than_bugs_activity_sql('fsa');
+  my $flag_newer   = Bugzilla::FlagActivity->after_cutoff_sql('fsa');
+  my $ba_before_cutoff
+    = Bugzilla::FlagActivity->bugs_activity_before_cutoff_sql('bugs_activity');
   my $flag_last    = Bugzilla::FlagActivity->last_of_request_sql('fsa');
   my $flag_prev_id = Bugzilla::FlagActivity->previous_id_sql('fsa');
 
@@ -1070,6 +1072,7 @@ sub _get_diffs {
         INNER JOIN fielddefs
                 ON fielddefs.id = bugs_activity.fieldid
              WHERE bugs_activity.bug_id = ?
+                   AND $ba_before_cutoff
                    $when_restriction
         UNION ALL
         SELECT 'flagtypes.name' AS field_name,

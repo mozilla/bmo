@@ -24,7 +24,8 @@ use Bugzilla;
 use Bugzilla::Constants;
 use Bugzilla::Bug;
 use Bugzilla::BugMail;
-use Bugzilla::Test::Util qw(create_group create_user);
+use Bugzilla::FlagActivity;
+use Bugzilla::Test::Util qw(create_group create_user set_flag_activity_cutoff);
 BEGIN { Bugzilla->extensions }
 
 Bugzilla->usage_mode(USAGE_MODE_TEST);
@@ -355,6 +356,11 @@ foreach my $later_first (0, 1) {
 # The mail of a new bug lists the flags set at creation, once, as bugs_activity
 # did: watchers see e.g. a needinfo requested on a new bug.
 {
+  # The mail reads the changes after the cutoff from flag_activity. The database
+  # is shared with the other test files: put it back after.
+  my $cutoff = Bugzilla::FlagActivity->cutoff;
+  set_flag_activity_cutoff('1999-12-31 00:00:00');
+
   my $bug = new_bug(assigned_to => $stranger->login);
   add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
     $requestee);
@@ -366,6 +372,8 @@ foreach my $later_first (0, 1) {
   is(scalar @flags, 1, 'the new bug mail lists the flag set at creation once');
   like($flags[0]{new}, qr/\?\(\Q@{[$requestee->login]}\E\)$/,
     'as requested from the requestee');
+
+  set_flag_activity_cutoff($cutoff);
 }
 
 # The cc_list of a flag on a private attachment only reaches insiders.

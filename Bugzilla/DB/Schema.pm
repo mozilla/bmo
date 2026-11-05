@@ -361,13 +361,12 @@ use constant ABSTRACT_SCHEMA => {
       },
     ],
     INDEXES => [
-      bugs_activity_bug_id_idx         => ['bug_id'],
-      bugs_activity_bug_field_when_idx => ['bug_id', 'fieldid', 'bug_when'],
-      bugs_activity_who_idx            => ['who'],
-      bugs_activity_bug_when_idx       => ['bug_when'],
-      bugs_activity_fieldid_idx        => ['fieldid'],
-      bugs_activity_added_idx          => ['added'],
-      bugs_activity_removed_idx        => ['removed'],
+      bugs_activity_bug_id_idx   => ['bug_id'],
+      bugs_activity_who_idx      => ['who'],
+      bugs_activity_bug_when_idx => ['bug_when'],
+      bugs_activity_fieldid_idx  => ['fieldid'],
+      bugs_activity_added_idx    => ['added'],
+      bugs_activity_removed_idx  => ['removed'],
     ],
   },
 
@@ -777,6 +776,13 @@ use constant ABSTRACT_SCHEMA => {
       flag_activity_status_when_idx => ['status', 'flag_when'],
       flag_activity_who_idx         => ['who', 'flag_when'],
     ],
+  },
+
+  # One row: flag changes up to this time are read from bugs_activity, later
+  # ones from flag_activity.
+  # See Bugzilla::FlagActivity->cutoff.
+  flag_activity_migration => {
+    FIELDS => [cutoff => {TYPE => 'DATETIME', NOTNULL => 1},],
   },
 
   # "flagtypes" defines the types of flags that can be set.

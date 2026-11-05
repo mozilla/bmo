@@ -18,7 +18,7 @@ BEGIN {
 use Bugzilla::Test::MockLocalconfig (urlbase => 'http://bmo.test');
 use Bugzilla::Test::MockDB;
 use Bugzilla::Test::MockParams (mail_delivery_method => 'None');
-use Bugzilla::Test::Util qw(create_bug create_user);
+use Bugzilla::Test::Util qw(create_bug create_user set_flag_activity_cutoff);
 use Bugzilla::Bug;
 use Bugzilla::Install::DB;
 use Bugzilla::User;
@@ -62,13 +62,17 @@ $dbh->do(
   '2099-01-01 10:00:00', $fieldid, '', 'needinfo?(bob@bmo.test)'
 );
 
-# The index is in the schema of a new database; older ones don't have it yet.
+# checksetup already ran on this database: forget it, so that it walks the
+# flags again.
 sub add_start_rows {
-  $dbh->bz_drop_index('bugs_activity', 'bugs_activity_bug_field_when_idx');
+  $dbh->do('DELETE FROM flag_activity_migration');
   Bugzilla::Install::DB::_add_flag_activity_start_rows();
 }
 
 add_start_rows() for 1 .. 2;
+
+# The flag was set before checksetup ran, the next change comes after.
+set_flag_activity_cutoff('2099-01-01 10:30:00');
 is(
   scalar $dbh->selectrow_array(
     'SELECT COUNT(*) FROM flag_activity WHERE flag_id = ?', undef, $flag->id
@@ -128,7 +132,7 @@ is(
   'a flag without a modification date is dated at its creation'
 );
 
-# Once the index is there, checksetup doesn't walk the flags again.
+# Once the cutoff is set, checksetup doesn't walk the flags again.
 $dbh->do('DELETE FROM flag_activity WHERE flag_id = ?', undef, $undated->id);
 Bugzilla::Install::DB::_add_flag_activity_start_rows();
 is(

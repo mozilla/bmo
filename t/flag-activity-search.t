@@ -17,13 +17,13 @@ BEGIN {
 
 use Bugzilla::Test::MockLocalconfig (urlbase => 'http://bmo.test');
 use Bugzilla::Test::MockDB;
-use Bugzilla::Test::Util qw(create_bug create_user);
+use Bugzilla::Test::Util qw(create_bug create_user set_flag_activity_cutoff);
 use Bugzilla::Search;
 use Bugzilla::User;
 use Test2::V0;
 
-# Search changed* on flags matches changes in flag_activity and the older
-# ones that are only in bugs_activity.
+# Search changed* on flags matches the changes up to the cutoff in
+# bugs_activity, and the later ones in flag_activity.
 
 create_user('automation@bmo.tld', '*');
 Bugzilla->set_user(Bugzilla::User->super_user);
@@ -32,6 +32,7 @@ my $dbh = Bugzilla->dbh;
 my $alice = create_user('alice@bmo.test', '*');
 my $bob   = create_user('bob@bmo.test',   '*');
 my $carol = create_user('carol@bmo.test', '*');
+set_flag_activity_cutoff('2025-01-01 00:00:00');
 
 sub new_bug {
   return create_bug(
@@ -148,7 +149,7 @@ $dbh->do(
   $carol->id, $carol->id, $guessed_bug, '+'
 );
 is(search(changedby => 'carol@bmo.test'), [],
-  'changedby skips a flag_activity row older than bugs_activity');
+  'changedby skips a flag_activity row up to the cutoff');
 is(search_anything(changedby => 'carol@bmo.test'), [],
   'anything changedby skips it too');
 

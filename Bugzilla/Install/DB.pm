@@ -4558,12 +4558,12 @@ sub _migrate_flag_state_activity {
 # flags. Other flags last changed before then have no row there, so their next
 # change would show no previous value in history and bugmail. Give each of them
 # a row with its current state, dated at its last change: history and bugmail
-# don't show it, as it isn't newer than that change in bugs_activity.
+# don't show it, as it is older than the cutoff.
 sub _add_flag_activity_start_rows {
   my $dbh = Bugzilla->dbh;
 
-  # The index is added at the end, so this runs once, or again if it died.
-  return if $dbh->bz_index_info('bugs_activity', 'bugs_activity_bug_field_when_idx');
+  # The cutoff is set at the end, so this runs once, or again if it died.
+  return if $dbh->selectrow_array('SELECT 1 FROM flag_activity_migration');
 
   my ($max_id) = $dbh->selectrow_array('SELECT MAX(id) FROM flags');
   $max_id //= 0;
@@ -4586,9 +4586,9 @@ sub _add_flag_activity_start_rows {
   }
   print "Added a flag_activity row for $added flags.\n" if $added > 0;
 
-  # For FlagActivity->newer_than_bugs_activity_sql.
-  $dbh->bz_add_index('bugs_activity', 'bugs_activity_bug_field_when_idx',
-    [qw(bug_id fieldid bug_when)]);
+  # See Bugzilla::FlagActivity->cutoff.
+  $dbh->do(
+    'INSERT INTO flag_activity_migration (cutoff) VALUES (LOCALTIMESTAMP(0))');
 }
 
 # Nullable for now: during the rolling deploy, pods still on the previous code

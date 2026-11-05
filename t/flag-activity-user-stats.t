@@ -21,7 +21,7 @@ use Bugzilla::Test::MockParams (
   mail_delivery_method               => 'None',
   last_change_time_non_bot_skip_list => 'automation@bmo.tld',
 );
-use Bugzilla::Test::Util qw(create_bug create_user);
+use Bugzilla::Test::Util qw(create_bug create_user set_flag_activity_cutoff);
 use Bugzilla::Bug;
 use Bugzilla::User;
 use Bugzilla::Extension::UserProfile::Util
@@ -92,7 +92,8 @@ sub product_count {
 }
 is(product_count(), 1, 'a flag change counts in the activity by product');
 
-# An older change is in both tables: count it once.
+# A pod on the older code writes a change after the cutoff to both tables:
+# count it once.
 my ($fieldid)
   = $dbh->selectrow_array(
   "SELECT id FROM fielddefs WHERE name = 'flagtypes.name'");
@@ -104,8 +105,9 @@ $dbh->do(
 update_statistics_by_user($human->id);
 is(product_count(), 1, 'a change in both tables is counted once');
 
-# bugs_activity knows the bot made this change; flag_activity only has the
-# setter, the human, as a guess.
+# Up to the cutoff, bugs_activity knows the bot made this change; flag_activity
+# only has the setter, the human, as a guess.
+set_flag_activity_cutoff('2099-01-01 13:30:00');
 $dbh->do(
   'INSERT INTO bugs_activity (bug_id, who, bug_when, fieldid, removed, added)
    VALUES (?, ?, ?, ?, ?, ?)', undef, $bug_id, $bot->id,
