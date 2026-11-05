@@ -4614,6 +4614,9 @@ sub _set_flag_activity_who_not_null {
   my $dbh = Bugzilla->dbh;
   return if $dbh->bz_column_info('flag_activity', 'who')->{NOTNULL};
 
+  # MySQL can't make a column of a foreign key NOT NULL. Drop the key:
+  # bz_setup_foreign_keys adds it back at the end of checksetup.
+  $dbh->bz_drop_fk('flag_activity', 'who');
   $dbh->bz_alter_column('flag_activity', 'who',
     {
     TYPE       => 'INT3',
