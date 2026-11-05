@@ -195,29 +195,31 @@ sub report {
     my $query = "
             SELECT DISTINCT b.bug_id
               FROM bugs b
-                   INNER JOIN flags f ON f.bug_id = b.bug_id\n";
-
-    if ($q->{start_date}) {
-      $query .= "INNER JOIN bugs_activity a ON a.bug_id = b.bug_id\n";
-    }
-
-    $query .= "WHERE ";
-
-    if ($q->{start_date}) {
-      push @where,  "(a.fieldid = ?)";
-      push @params, $q->{field_id};
-
-      push @where,  "(CONVERT_TZ(a.bug_when, 'UTC', 'America/Los_Angeles') >= ?)";
-      push @params, $q->{start_date} . ' 00:00:00';
-      push @where,  "(CONVERT_TZ(a.bug_when, 'UTC', 'America/Los_Angeles') <= ?)";
-      push @params, $q->{end_date} . ' 23:59:59';
-
-      push @where,  "(a.added LIKE ?)";
-      push @params, '%' . $q->{flag_name} . $q->{flag_status} . '%';
-    }
+                   INNER JOIN flags f ON f.bug_id = b.bug_id
+             WHERE ";
 
     my ($type_id) = $dbh->selectrow_array("SELECT id FROM flagtypes WHERE name = ?",
       undef, $q->{flag_name});
+
+    if ($q->{start_date}) {
+      my @range = ($q->{start_date} . ' 00:00:00', $q->{end_date} . ' 23:59:59');
+
+      # Flag changes are in flag_activity; older ones only in bugs_activity.
+      push @where, "(EXISTS (
+          SELECT 1 FROM bugs_activity a
+           WHERE a.bug_id = b.bug_id AND a.fieldid = ?
+                 AND CONVERT_TZ(a.bug_when, 'UTC', 'America/Los_Angeles') BETWEEN ? AND ?
+                 AND a.added LIKE ?)
+        OR EXISTS (
+          SELECT 1 FROM flag_activity fa
+           WHERE fa.bug_id = b.bug_id
+                 AND fa.type_id = ? AND fa.status = ?
+                 AND CONVERT_TZ(fa.flag_when, 'UTC', 'America/Los_Angeles') BETWEEN ? AND ?))";
+      push @params, $q->{field_id}, @range,
+        '%' . $q->{flag_name} . $q->{flag_status} . '%',
+        $type_id, $q->{flag_status}, @range;
+    }
+
     push @where,  "(f.type_id = ?)";
     push @params, $type_id;
 

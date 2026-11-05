@@ -24,7 +24,8 @@ use Bugzilla;
 use Bugzilla::Constants;
 use Bugzilla::Bug;
 use Bugzilla::BugMail;
-use Bugzilla::Test::Util qw(create_group create_user);
+use Bugzilla::FlagActivity;
+use Bugzilla::Test::Util qw(create_group create_user set_flag_activity_cutoff);
 BEGIN { Bugzilla->extensions }
 
 Bugzilla->usage_mode(USAGE_MODE_TEST);
@@ -86,10 +87,10 @@ sub new_bug {
 sub add_activity {
   my ($bug, $flag_id, $when, $status, $setter, $requestee, %extra) = @_;
   $dbh->do(
-    'INSERT INTO flag_activity (flag_when, type_id, flag_id, setter_id,
+    'INSERT INTO flag_activity (flag_when, type_id, flag_id, setter_id, who,
                                 requestee_id, bug_id, attachment_id, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)', undef, $when,
-    $extra{type_id} // $type_id, $flag_id, $setter->id,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', undef, $when,
+    $extra{type_id} // $type_id, $flag_id, $setter->id, $setter->id,
     $requestee ? $requestee->id : undef, $bug->id, $extra{attachment_id}, $status
   );
 }
@@ -350,6 +351,29 @@ foreach my $later_first (0, 1) {
   is(scalar @raw, 1, 'the cc_list address with no account is mailed');
   like($raw[0], qr/Uplift request: public reasons/, 'with the public comments');
   unlike($raw[0], qr/private reasons/, 'but not the private ones');
+}
+
+# The mail of a new bug lists the flags set at creation, once, as bugs_activity
+# did: watchers see e.g. a needinfo requested on a new bug.
+{
+  # The mail reads the changes after the cutoff from flag_activity. The database
+  # is shared with the other test files: put it back after.
+  my $cutoff = Bugzilla::FlagActivity->cutoff;
+  set_flag_activity_cutoff('1999-12-31 00:00:00');
+
+  my $bug = new_bug(assigned_to => $stranger->login);
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
+    $requestee);
+  $dbh->do('UPDATE bugs SET lastdiffed = NULL WHERE bug_id = ?', undef, $bug->id);
+
+  my ($mail) = grep { $_->{to_user}->id == $stranger->id }
+    sent_mails(Bugzilla::Bug->new($bug->id), $requester);
+  my @flags = grep { $_->{field_name} eq 'flagtypes.name' } @{$mail->{diffs}};
+  is(scalar @flags, 1, 'the new bug mail lists the flag set at creation once');
+  like($flags[0]{new}, qr/\?\(\Q@{[$requestee->login]}\E\)$/,
+    'as requested from the requestee');
+
+  set_flag_activity_cutoff($cutoff);
 }
 
 # The cc_list of a flag on a private attachment only reaches insiders.

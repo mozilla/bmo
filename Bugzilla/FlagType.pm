@@ -487,6 +487,16 @@ must be in order to request or clear a flag.
 
 Returns the number of flags belonging to the flagtype.
 
+=item C<has_activity>
+
+Returns 1 if the flagtype has rows in flag_activity, 0 otherwise. Such a
+flagtype cannot be deleted, as its rows would be deleted with it.
+
+=item C<remove_from_db>
+
+Deletes the flagtype. Throws C<flag_type_has_activity> if it has rows in
+flag_activity.
+
 =item C<inclusions>
 
 Return a hash of product/component IDs and names
@@ -529,6 +539,24 @@ sub request_group {
     $self->{'request_group'} = new Bugzilla::Group($self->{'request_group_id'});
   }
   return $self->{'request_group'};
+}
+
+# flag_activity is the only record of the changes to the type's flags, and its
+# rows are deleted with the type: such a type can only be deactivated.
+sub has_activity {
+  my $self = shift;
+  my $dbh  = Bugzilla->dbh;
+  $self->{'has_activity'} //= $dbh->selectrow_array(
+    'SELECT 1 FROM flag_activity WHERE type_id = ? ' . $dbh->sql_limit(1),
+    undef, $self->id) ? 1 : 0;
+  return $self->{'has_activity'};
+}
+
+sub remove_from_db {
+  my $self = shift;
+  ThrowUserError('flag_type_has_activity', {flagtype => $self})
+    if $self->has_activity;
+  $self->SUPER::remove_from_db(@_);
 }
 
 sub flag_count {

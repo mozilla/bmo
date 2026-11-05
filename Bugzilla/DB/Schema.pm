@@ -748,9 +748,10 @@ use constant ABSTRACT_SCHEMA => {
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
       },
       # The user who made the change. Not always the setter: redirecting a
-      # request keeps the original setter. Nullable until all pods write it.
+      # request keeps the original setter.
       who          => {
         TYPE       => 'INT3',
+        NOTNULL    => 1,
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
       },
       requestee_id => {
@@ -775,6 +776,13 @@ use constant ABSTRACT_SCHEMA => {
       flag_activity_status_when_idx => ['status', 'flag_when'],
       flag_activity_who_idx         => ['who', 'flag_when'],
     ],
+  },
+
+  # One row: flag changes up to this time are read from bugs_activity, later
+  # ones from flag_activity.
+  # See Bugzilla::FlagActivity->cutoff.
+  flag_activity_migration => {
+    FIELDS => [cutoff => {TYPE => 'DATETIME', NOTNULL => 1},],
   },
 
   # "flagtypes" defines the types of flags that can be set.
