@@ -227,6 +227,18 @@ is_deeply(needinfo_from($bug_id), [$hackbot->login],
 $bug_id = file_bug(comment => '@' . $admin->nick . ' note to self');
 is_deeply(needinfo_from($bug_id), [], 'the reporter is not needinfod');
 
+# Cloning prefills the description with the original one under a header (see
+# enter_bug.cgi); only the mentions the reporter adds count.
+my $original_text = "\@nimention-alice can you look?\nSteps to reproduce";
+my $original_id   = file_bug(comment => $original_text);
+$bug_id
+  = file_bug(comment => "+++ This bug was initially created as a clone of Bug "
+    . "#$original_id +++\n\n\n\@nimention-bob this is the follow-up\n\n"
+    . $original_text);
+is_deeply(needinfo_from($bug_id), [$bob->login],
+  'clone: mentions copied from the original description are ignored');
+is_deeply(cc_list($bug_id), [$bob->login], '... and not CCd');
+
 set_mentions_enabled(0);
 $bug_id = file_bug(comment => '@nimention-alice');
 is_deeply(needinfo_from($bug_id), [],
