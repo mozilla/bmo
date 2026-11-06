@@ -545,46 +545,6 @@ sub _update_nickname {
   $self->audit_log({nickname => [$old, $new]}) if $self->AUDIT_UPDATES;
 }
 
-# _generate_nickname's check can race with another save that claims the same
-# nickname, which profiles_nickname_idx (UNIQUE) then rejects. Write the
-# nickname in its own statement so a collision falls back to no nickname, as
-# _generate_nickname would have chosen, instead of failing the whole save.
-# MySQL rolls back only the failed statement, not the enclosing transaction.
-sub _store_nickname {
-  my ($self, $nick) = @_;
-  my $dbh = Bugzilla->dbh;
-  my $sql = 'UPDATE profiles SET nickname = ? WHERE userid = ?';
-
-  if (defined $nick) {
-    return $self->{nickname} = $nick
-      if eval { $dbh->do($sql, undef, $nick, $self->id); 1 };
-    my $dup
-      = qr/Duplicate entry .* for key '(?:profiles\.)?profiles_nickname_idx'/s;
-    die $@ unless $@ =~ $dup;
-  }
-
-  $dbh->do($sql, undef, undef, $self->id);
-  return $self->{nickname} = undef;
-}
-
-# Does for nickname what Bugzilla::Object::update does for UPDATE_COLUMNS,
-# but through _store_nickname so a collision can't abort the update.
-sub _update_nickname {
-  my ($self, $old_self, $changes) = @_;
-  my $old = $old_self->{nickname};
-  return if ($old // '') eq ($self->{nickname} // '');
-
-  my $new = $self->_store_nickname($self->{nickname});
-  return if ($old // '') eq ($new // '');
-
-  $changes->{nickname} = [$old, $new];
-  $self->audit_log({nickname => $changes->{nickname}}) if $self->AUDIT_UPDATES;
-  Bugzilla->memcached->clear({table => $self->DB_TABLE, id => $self->id})
-    if $self->USE_MEMCACHED;
-  $self->_object_cache_remove({id   => $self->id});
-  $self->_object_cache_remove({name => $self->name}) if $self->name;
-}
-
 sub set_name {
   my ($self, $name) = @_;
   $self->set('realname', $name);
