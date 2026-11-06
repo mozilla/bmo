@@ -268,6 +268,10 @@ sub _process_needinfo_params {
 # Returns the unique nicknames @mentioned in a comment, in order of first
 # appearance. Mentions inside quoted lines (> ...) and code are ignored, as
 # are email addresses (the @ must not follow a word character).
+#
+# The @mention autocomplete mirrors these rules in
+# extensions/Needinfo/web/js/mention-autocomplete.js (TRIGGER, VALID_NICK,
+# FENCED_BLOCK and isIgnored). Keep both in sync when changing either.
 sub _extract_mentions {
   my ($text) = @_;
   return () unless defined $text;

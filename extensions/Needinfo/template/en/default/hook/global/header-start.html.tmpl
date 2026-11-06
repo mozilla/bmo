@@ -33,5 +33,9 @@
     js_BUGZILLA.string.MentionAutocomplete = {
       label => 'Users to mention',
     };
+    # Lets /rest/user/suggest leave out accounts that can't see the bug.
+    js_BUGZILLA.mention_autocomplete = {
+      bug_id => mention_bug.id,
+    };
   END;
 %]

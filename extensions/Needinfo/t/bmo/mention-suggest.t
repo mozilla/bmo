@@ -25,7 +25,8 @@ BEGIN {
 use Bugzilla;
 BEGIN { Bugzilla->extensions }
 
-use Bugzilla::Test::Util qw(create_user issue_api_key);
+use Bugzilla::Constants  qw(GRANT_DIRECT);
+use Bugzilla::Test::Util qw(create_bug create_group create_user issue_api_key);
 
 use Test::More;
 use Test::Mojo;
@@ -49,14 +50,53 @@ is($nicked->nick,           "${prefix}nick", 'nicked account has a nickname');
 is($login_only->{nickname}, '', 'login-only account has no nickname');
 ok(!$disabled->is_enabled, 'disabled account is disabled');
 
+# With a bug_id the autocomplete only offers accounts that can see the bug, as
+# _mentioned_users drops the others on save. The requester and $insider are in
+# the group restricting $secure_bug, $nicked isn't, and nobody is in the group
+# restricting $hidden_bug. Group membership is memcached per user, so it is
+# granted before the requester's first API call.
+my $dbh = Bugzilla->dbh;
+Bugzilla->set_user(Bugzilla::User->super_user);
+
+my $insider = create_user("$prefix-insider\@example.com",
+  '*', realname => "Mention Insider [:${prefix}nzinside]");
+
+sub new_bug {
+  my ($desc) = @_;
+  return create_bug(
+    short_desc  => "Mention suggest $prefix $desc",
+    comment     => 'Bug for the @mention suggest tests',
+    bug_type    => 'defect',
+    assigned_to => 'nobody@mozilla.org',
+  );
+}
+
+sub restricted_bug {
+  my ($group, @members) = @_;
+  $dbh->do(
+    'INSERT INTO user_group_map (user_id, group_id, isbless, grant_type)
+     VALUES (?, ?, 0, ?)', undef, $_->id, $group->id, GRANT_DIRECT
+  ) foreach @members;
+  my $bug = new_bug('restricted to ' . $group->name);
+  $dbh->do('INSERT INTO bug_group_map (bug_id, group_id) VALUES (?, ?)',
+    undef, $bug->id, $group->id);
+  return $bug;
+}
+
+my $public_bug = new_bug('public');
+my $secure_bug = restricted_bug(create_group("$prefix-secure", isbuggroup => 1),
+  $requester, $insider);
+my $hidden_bug
+  = restricted_bug(create_group("$prefix-hidden", isbuggroup => 1));
+
 my $api_key = issue_api_key($requester->login)->api_key;
 my $headers = {'X-Bugzilla-API-Key' => $api_key};
 my $t       = Test::Mojo->new('Bugzilla::App');
 
 sub suggested_logins {
-  my ($match) = @_;
+  my ($match, %form) = @_;
   $t->get_ok('/rest/user/suggest' => $headers => form =>
-      {match => $match, include_fields => 'name,real_name,nick,gravatar'})
+      {match => $match, include_fields => 'name,real_name,nick,gravatar', %form})
     ->status_is(200);
   return [sort map { $_->{name} } @{$t->tx->res->json->{users} || []}];
 }
@@ -80,5 +120,20 @@ is_deeply(suggested_logins("\@${prefix}zz"), [], 'no match returns no users');
 
 $t->get_ok('/rest/user/suggest' => form => {match => "\@${prefix}ni"})
   ->status_isnt(200, 'logged-out users get no suggestions');
+
+# "@<prefix>n" matches $nicked and $insider ($disabled is never returned).
+is_deeply(
+  suggested_logins("\@${prefix}n", bug_id => $public_bug->id),
+  [sort $nicked->login, $insider->login],
+  'a public bug keeps every matching account'
+);
+
+is_deeply(suggested_logins("\@${prefix}n", bug_id => $secure_bug->id),
+  [$insider->login], 'a restricted bug leaves out accounts that cannot see it');
+
+$t->get_ok('/rest/user/suggest' => $headers => form =>
+    {match => "\@${prefix}n", bug_id => $hidden_bug->id})
+  ->status_isnt(200,
+  'a bug the requester cannot see fails rather than revealing who can see it');
 
 done_testing;

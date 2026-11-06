@@ -182,7 +182,7 @@ Bugzilla.MentionAutocomplete = class MentionAutocomplete {
 
     // A code span opens and closes on backtick runs of the same length within a paragraph.
     const before = masked.slice(0, position);
-    const paragraphStart = Math.max(0, before.search(/\n[ \t]*\n(?![\s\S]*\n[ \t]*\n)/));
+    const paragraphStart = [...before.matchAll(/\n[ \t]*\n/g)].at(-1)?.index ?? 0;
     const paragraphEnd = masked.slice(position).search(/\n[ \t]*\n/);
     const paragraph = masked.slice(
       paragraphStart,
@@ -282,8 +282,12 @@ Bugzilla.MentionAutocomplete = class MentionAutocomplete {
     const key = query.toLowerCase();
 
     if (!this.cache.has(key)) {
+      // Set by the `global/header-start` hook. Accounts that can't see the bug are left out, as
+      // `_mentioned_users` drops them on save
+      const bugId = BUGZILLA.mention_autocomplete?.bug_id;
       const request = Bugzilla.API.get('user/suggest', {
         match: `@${query}`,
+        ...(bugId ? { bug_id: bugId } : {}),
         include_fields: 'name,real_name,nick,gravatar',
       })
         .then(({ users }) => {
