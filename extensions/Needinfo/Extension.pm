@@ -412,6 +412,7 @@ sub _keep_description_for_mentions {
   return unless Bugzilla->usage_mode == USAGE_MODE_BROWSER;
 
   my $description = _description_of($bug->id) or return;
+  return unless _extract_mentions($description->{thetext});
   $description->{thetext}      = _without_cloned_text($description->{thetext});
   $bug->{needinfo_description} = $description;
 }

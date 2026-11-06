@@ -92,13 +92,17 @@ block_needinfo($hackbot, 'editbugs');
 # A group restricting bugs that none of the mentioned users are in, for the
 # last test. Set up before the app runs any request: set_groups audits the
 # change with remote_ip(), which wants a controller once a request has run.
-my $product   = Bugzilla::Product->check('Firefox');
-my $sec_group = Bugzilla::Group->create({
-  name        => "needinfo-mention-sec-$$",
+my $product = Bugzilla::Product->check('Firefox');
+
+# Reused on a rerun: the restricted bug filed below keeps it from being removed.
+my $sec_group
+  = Bugzilla::Group->new({name => 'needinfo-mention-sec'})
+  || Bugzilla::Group->create({
+  name        => 'needinfo-mention-sec',
   description => 'Temp security group for Bug 2087012 test',
   isbuggroup  => 1,
   silently    => 1,
-});
+  });
 $dbh->do(
   'INSERT IGNORE INTO group_control_map
      (group_id, product_id, entry, membercontrol, othercontrol, canedit)
