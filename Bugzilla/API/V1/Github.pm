@@ -28,8 +28,8 @@ use Mojo::Util  qw(secure_compare);
 
 use constant BUG_RE => qr/\b[Bb]ug(?:[ -]|: )(\d+)\b/;
 
-# Commit titles that undo earlier work. A push made up only of these must not
-# close the bug it references. Anchored to the start of the title so a normal
+# Commit titles that undo earlier work. A push with any of these for a bug
+# must not close it. Anchored to the start of the title so a normal
 # commit that merely mentions the word "revert" still closes the bug.
 use constant REVERT_RE => qr/^(?:Revert\b|Backed out (?:\d+ )?changesets?\b)/i;
 

@@ -545,8 +545,8 @@ foreach my $title (
 my $mixed_bug_id = create_test_bug('Test GitHub Push Commenting (mixed)');
 my ($mixed_comment_id, $mixed_expected) = push_titles(
   $mixed_bug_id,
-  "Revert \"Bug $mixed_bug_id - First attempt\"",
-  "Bug $mixed_bug_id - Second attempt"
+  "Bug $mixed_bug_id - First attempt",
+  "Revert \"Bug $mixed_bug_id - First attempt\""
 );
 check_bug($mixed_bug_id, $mixed_comment_id,
   $mixed_expected . $revert_note . $comment_trailer, 'CONFIRMED');
