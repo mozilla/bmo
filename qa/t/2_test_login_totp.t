@@ -21,6 +21,28 @@ use QA::Util;
 my ($sel, $config) = get_selenium();
 my $mfa_help_url = qr{/using/two-factor-authentication\.md$};
 
+# The TOTP pages update after an API call returns: enrollment fills in the
+# secret, and the verification page checks the code before submitting the
+# form. Poll until $check is true instead of checking the page right away.
+sub wait_until {
+  my ($check) = @_;
+  foreach (1 .. WAIT_TIME / 1000) {
+    return 1 if $check->();
+    sleep 1;
+  }
+  return 0;
+}
+
+# Wait for the verification page to submit the form after a valid code.
+sub wait_for_verification {
+  wait_until(sub { $sel->get_title ne 'Account Verification' });
+}
+
+# Wait for the verification page to show an error after an invalid code.
+sub wait_for_verification_error {
+  wait_until(sub { $sel->get_text('verify-totp-error') ne '' });
+}
+
 # Enable TOTP for the admin user
 log_in($sel, $config, 'admin');
 
@@ -75,6 +97,15 @@ like(
 );
 $sel->click_ok('mfa-select-totp');
 $sel->type_ok('mfa-password', $config->{admin_user_passwd});
+
+# The secret is filled in once the enroll API call returns
+wait_until(sub {
+  $sel->driver->execute_script('
+    var iframe = document.getElementById("mfa-enable-totp-frame").contentWindow;
+    var secret = iframe.document.getElementById("secret");
+    return secret ? secret.textContent.trim() : "";
+  ');
+});
 
 # Hack needed to click the show-text link in the TOTP iframe
 # and then return the text based secret
@@ -155,12 +186,14 @@ $sel->title_is('Account Verification');
 # Enter an inccorrect TOTP code
 $sel->type_ok('code', '123456');
 $sel->click_ok('//input[@value="Submit"]');
+wait_for_verification_error();
 my $error = $sel->get_text('verify-totp-error');
 ok($error eq 'Invalid verification code.', 'Correct error generated for invalid code');
 
 # Now enter the correct code
 $sel->type_ok('code', $auth->code);
 $sel->click_ok('//input[@value="Submit"]');
+wait_for_verification();
 $sel->title_is('Bugzilla Main Page');
 logout($sel);
 
@@ -181,6 +214,7 @@ $sel->click_ok('log_in', undef, 'Submit credentials');
 $sel->title_is('Account Verification');
 $sel->type_ok('code', $recovery_codes[0]);
 $sel->click_ok('//input[@value="Submit"]');
+wait_for_verification();
 $sel->title_is('Bugzilla Main Page');
 logout($sel);
 
@@ -201,12 +235,14 @@ $sel->click_ok('log_in', undef, 'Submit credentials');
 $sel->title_is('Account Verification');
 $sel->type_ok('code', $recovery_codes[0]);
 $sel->click_ok('//input[@value="Submit"]');
+wait_for_verification_error();
 $error = $sel->get_text('verify-totp-error');
 ok($error eq 'Invalid verification code.', 'Correct error generated for invalid code');
 
 # Now enter a different valid recovery code
 $sel->type_ok('code', $recovery_codes[1]);
 $sel->click_ok('//input[@value="Submit"]');
+wait_for_verification();
 $sel->title_is('Bugzilla Main Page');
 
 # Disable TOTP for the admin account
