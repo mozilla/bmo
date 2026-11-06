@@ -313,5 +313,65 @@ $process->($bug);
 is(\@looked_up,       [], 'no lookup for commenters without editbugs');
 is($bug->{cc},        [], 'no CC for commenters without editbugs');
 is($bug->{needinfo},  [], 'no needinfo for commenters without editbugs');
+$commenter->{editbugs} = 1;
+
+# Clones: mentions copied from the original description don't count.
+{
+  my $remove = \&Bugzilla::Extension::Needinfo::_remove_copied_lines;
+  is($remove->("\@alice look\n\n\@bob too", "\@alice look\n\n\@bob too"),
+    q{}, 'unchanged copy leaves only blank lines');
+  is($remove->("\@carol new\n\@alice look", '@alice look'),
+    '@carol new', 'added line kept');
+  is(
+    $remove->('@alice look again', '@alice look'),
+    '@alice look again',
+    'edited line kept'
+  );
+  is($remove->("\@alice look\n\@alice look", '@alice look'),
+    '@alice look', 'a line repeated by the reporter is kept once');
+  is($remove->("a\r\n\@bob", "a\r\n"), '@bob', 'CRLF line endings');
+
+  my %descriptions = (
+    7 => {thetext => "\@alice please look\nsteps", isprivate => 0},
+    8 => {thetext => '@alice private',             isprivate => 1},
+  );
+  my $mock_desc = mock 'Bugzilla::Extension::Needinfo' =>
+    (override => [_description_of => sub { $descriptions{$_[0]} }]);
+  my $without = \&Bugzilla::Extension::Needinfo::_without_cloned_text;
+  my $header
+    = "+++ This bug was initially created as a clone of Bug #%d +++\n\n\n";
+
+  is(
+    $without->("\@alice please look\nsteps"),
+    "\@alice please look\nsteps",
+    'not a clone: text unchanged'
+  );
+  is(
+    [
+      $extract->($without->(
+        sprintf($header, 7) . "\@bob see below\n\n" . "\@alice please look\nsteps"
+      ))
+    ],
+    ['bob'],
+    'clone: only mentions the reporter added'
+  );
+  is([$extract->($without->(sprintf($header, 7) . '@alice please look again'))],
+    ['alice'], 'clone: an edited copied line counts');
+
+  is([$extract->($without->(sprintf($header, 8) . '@alice private'))],
+    ['alice'], 'private source description, not an insider: nothing removed');
+  $commenter->{insider} = 1;
+  is([$extract->($without->(sprintf($header, 8) . '@alice private'))],
+    [], '... removed for an insider');
+  $commenter->{insider} = 0;
+
+  $commenter->{sees_bug} = 0;
+  is([$extract->($without->(sprintf($header, 7) . '@alice please look'))],
+    ['alice'], 'source bug not visible: nothing removed');
+  $commenter->{sees_bug} = 1;
+
+  is([$extract->($without->(sprintf($header, 99) . '@alice please look'))],
+    ['alice'], 'source bug gone: nothing removed');
+}
 
 done_testing;

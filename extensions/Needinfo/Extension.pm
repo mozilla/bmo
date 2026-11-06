@@ -411,13 +411,59 @@ sub _keep_description_for_mentions {
   return unless Bugzilla->params->{needinfo_mentions_enabled};
   return unless Bugzilla->usage_mode == USAGE_MODE_BROWSER;
 
-  my $dbh         = Bugzilla->dbh;
-  my $description = $dbh->selectrow_hashref(
+  my $description = _description_of($bug->id) or return;
+  $description->{thetext}      = _without_cloned_text($description->{thetext});
+  $bug->{needinfo_description} = $description;
+}
+
+sub _description_of {
+  my ($bug_id) = @_;
+  my $dbh = Bugzilla->dbh;
+  return $dbh->selectrow_hashref(
     'SELECT thetext, isprivate FROM longdescs WHERE bug_id = ? '
-      . 'ORDER BY comment_id ' . $dbh->sql_limit(1),
-    undef, $bug->id
+      . 'ORDER BY comment_id '
+      . $dbh->sql_limit(1),
+    undef, $bug_id
   );
-  $bug->{needinfo_description} = $description if $description;
+}
+
+# The header enter_bug.cgi puts above the description it copies when cloning
+# a bug (see template/en/default/bug/create/create.html.tmpl). Keep the two in
+# sync.
+use constant CLONE_HEADER_RE => qr/
+  \A \s* \+\+\+ [ ] This [ ] \w+ [ ] was [ ] initially [ ] created [ ] as [ ]
+  a [ ] clone [ ] of [ ] \w+ [ ] \#(\d+) [ ] \+\+\+ [^\n]* (?:\n|\z)
+/x;
+
+# A clone's description starts with the description of the bug it was cloned
+# from, so mentions in it would needinfo everyone mentioned there again. Drop
+# the copied lines and keep only what the reporter wrote or edited. If the
+# reporter removed the clone header, nothing marks the text as copied and all
+# of it counts.
+sub _without_cloned_text {
+  my ($text)      = @_;
+  my ($source_id) = $text =~ CLONE_HEADER_RE or return $text;
+  $text =~ s/${\CLONE_HEADER_RE}//;
+
+  # enter_bug.cgi only copies a description the reporter can see, so only
+  # remove it under the same conditions.
+  my $user = Bugzilla->user;
+  return $text unless $user->can_see_bug($source_id);
+  my $source = _description_of($source_id) or return $text;
+  return $text if $source->{isprivate} && !$user->is_insider;
+
+  return _remove_copied_lines($text, $source->{thetext});
+}
+
+# Removes the lines of $text that appear unchanged in $source, each as many
+# times as $source has it, so a line the reporter repeats on purpose still
+# counts. Blank lines are kept so paragraphs (which end code spans) survive.
+sub _remove_copied_lines {
+  my ($text, $source) = @_;
+  my %copied;
+  $copied{$_}++ for grep {/\S/} split /\r?\n/, $source;
+  return join "\n",
+    grep { !(/\S/ && $copied{$_} && $copied{$_}--) } split /\r?\n/, $text;
 }
 
 # process_bug.cgi takes a single bug as `id` and a mass edit as `id_<bug id>`
