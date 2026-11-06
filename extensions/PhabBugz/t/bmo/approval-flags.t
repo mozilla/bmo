@@ -210,6 +210,35 @@ sub approval_flags {
     {}, 'changes-planned never creates a flag');
 }
 
+# Abandoning a revision rejects its approval request
+foreach my $case (['pending', '?'], ['granted', '+']) {
+  my ($what, $before) = @$case;
+  my ($revision, $attachment, $raw) = revision_attachment(
+    reviewers => [{phid => $relman_phab->{phid}, status => 'accepted'}]);
+  apply_flags($attachment, $revision, $author_phab, 1);
+  apply_flags($attachment, $revision, $relman_phab, 0) if $before eq '+';
+  is_deeply(
+    approval_flags($attachment),
+    {'approval-mozilla-beta' => $before},
+    "$what request is `$before` before abandoning"
+  );
+
+  $raw->{fields}{status}{value} = 'abandoned';
+  apply_flags($attachment, reload($revision), $author_phab, 0);
+  is_deeply(
+    approval_flags($attachment),
+    {'approval-mozilla-beta' => '-'},
+    "author abandoning sets a $what request to `-`"
+  );
+}
+
+{
+  my ($revision, $attachment) = revision_attachment(status => 'abandoned');
+  apply_flags($attachment, $revision, $author_phab, 0);
+  is_deeply(approval_flags($attachment),
+    {}, 'abandoning a revision without an approval flag creates none');
+}
+
 # Repository name -> flag name
 {
   my ($release, $release_attachment)
@@ -317,6 +346,34 @@ foreach my $case (
     $attachment ? approval_flags($attachment) : {},
     {'approval-mozilla-beta' => '+'},
     'feed: approval granted'
+  );
+
+  # New revision, then the author abandons it while approval is pending
+  my $abandoned_bug = $env->bug;
+  my $abandoned_raw = $conduit->add_revision(revision_obj(
+    bug_id          => $abandoned_bug->id,
+    author_phid     => $author_phab->{phid},
+    repository_phid => $repo{'firefox-beta'}{phid},
+  ));
+  $story->(
+    $abandoned_raw, $author_phab->{phid},
+    "phabtest-author created D$abandoned_raw->{id}: uplift."
+  );
+  ok(!$run->(), 'feed: new uplift revision to abandon');
+
+  $abandoned_raw->{fields}{status}{value} = 'abandoned';
+  $story->(
+    $abandoned_raw, $author_phab->{phid},
+    "phabtest-author abandoned D$abandoned_raw->{id}."
+  );
+  ok(!$run->(), 'feed: author abandons');
+  my ($abandoned_attachment) = @{$attachments->($abandoned_bug)};
+  ok($abandoned_attachment && $abandoned_attachment->isobsolete,
+    'feed: abandoned revision attachment is obsolete');
+  is_deeply(
+    $abandoned_attachment ? approval_flags($abandoned_attachment) : {},
+    {'approval-mozilla-beta' => '-'},
+    'feed: pending approval is set to `-`, not removed by obsoleting'
   );
 
   # Revision on a bug where the approval flag is not enabled
