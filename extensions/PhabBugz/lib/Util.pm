@@ -72,11 +72,14 @@ sub set_attachment_approval_flags {
     'needs-revision'  => '-',
   };
 
+  # Abandoning withdraws the uplift request, whoever the changer is.
+  my $is_abandoned = $revision->status eq 'abandoned';
+
   # Find the current review status of the revision changer
   my $status          = undef;
   my $reviewer_status = undef;
 
-  if ($is_new) {
+  if ($is_new || $is_abandoned) {
     $reviewer_status = $revision->status;
     $status          = $revision_status_flag_map->{$reviewer_status};
   }
@@ -133,6 +136,13 @@ sub set_attachment_approval_flags {
     # Ignore for all flags except the approval flag.
     next if $flag->name ne $approval_flag_name;
 
+    # The changer is usually the author, who cannot set `-`, so phab-bot sets it.
+    if ($is_abandoned) {
+      INFO("Revision is abandoned. Set existing `$approval_flag_name` flag to `-`.");
+      push @old_flags, {id => $flag->id, status => $status};
+      last;
+    }
+
     # Set the flag to it's new status. If it already has that status,
     # it will be a non-change. We also need to check to make sure the
     # flag change is allowed.
@@ -158,7 +168,8 @@ sub set_attachment_approval_flags {
 
   # If we didn't find an existing approval flag to update, add it now.
   # Also check to make sure we have permission to create the flag.
-  if (!@old_flags && $status ne 'X') {
+  # Abandoned revisions never create a flag, they only reject an existing one.
+  if (!@old_flags && $status ne 'X' && !$is_abandoned) {
     if ($approval_flag) {
 
   # If setting to + then at least one accepted reviewer needs to be a release manager.
