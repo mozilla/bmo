@@ -4290,6 +4290,19 @@ sub _make_nicknames_unique {
   my $index = $dbh->bz_index_info('profiles', 'profiles_nickname_idx');
   return if $index && $index->{TYPE} eq 'UNIQUE';
 
+  # Fail before touching the schema, so a rerun after cleanup starts clean.
+  # GROUP BY compares with the column's collation, as the UNIQUE index will.
+  my $dupes = $dbh->selectall_arrayref(
+    "SELECT nickname, GROUP_CONCAT(userid ORDER BY userid) FROM profiles
+      WHERE nickname != '' GROUP BY nickname HAVING COUNT(*) > 1"
+  );
+  if (@$dupes) {
+    die "profiles_nickname_idx can't be made UNIQUE: these users share a"
+      . " nickname. Clear or change all but one per line, then rerun"
+      . " checksetup.pl.\n"
+      . join('', map {"  '$_->[0]': userid $_->[1]\n"} @$dupes);
+  }
+
   $dbh->bz_alter_column('profiles', 'nickname', {TYPE => 'varchar(255)'});
   $dbh->do("UPDATE profiles SET nickname = NULL WHERE nickname = ''");
   $dbh->bz_drop_index('profiles', 'profiles_nickname_idx');
