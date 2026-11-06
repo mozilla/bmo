@@ -93,6 +93,8 @@ sub bug_end_of_create {
   my ($self, $args) = @_;
   my $params = Bugzilla->input_params;
 
+  _keep_description_for_mentions($args->{bug});
+
   return unless $params->{needinfo_from};
 
   # Add extra params
@@ -348,10 +350,11 @@ sub _mentioned_users {
   } _users_for_mentions(@nicks);
 }
 
-# GitHub-style mentions: each @nickname in a new comment is CC'd and gets a
-# needinfo request. Mentions never block the comment from being saved; anyone
-# who can't be needinfo'd (blocked, already asked, no permission, or the
-# needinfo type isn't multiplicable and a flag exists) is only CC'd.
+# GitHub-style mentions: each @nickname in a new comment, or in the description
+# of a new bug, is CC'd and gets a needinfo request. Mentions never block the
+# comment from being saved; anyone who can't be needinfo'd (blocked, already
+# asked, no permission, or the needinfo type isn't multiplicable and a flag
+# exists) is only CC'd.
 #
 # Safeguards against misuse:
 # - only comments made in the web UI count, so bots and API clients posting
@@ -367,11 +370,16 @@ sub _mentioned_users {
 #   param
 sub _process_mentions {
   my ($bug, $old_bug) = @_;
+
+  # The description of a new bug, kept by bug_end_of_create. Taken before the
+  # checks below so that only the first update after creation considers it.
+  my $description = delete $bug->{needinfo_description};
+
   return unless Bugzilla->usage_mode == USAGE_MODE_BROWSER;
   return if _is_mass_edit();
 
-  my @mentioned
-    = _mentioned_users($bug, $bug->{added_comments} || [], $old_bug);
+  my @comments  = (($description // ()), @{$bug->{added_comments} || []});
+  my @mentioned = _mentioned_users($bug, \@comments, $old_bug);
   return unless @mentioned;
 
   my ($type) = grep { $_->name eq 'needinfo' } @{$bug->flag_types};
@@ -389,6 +397,74 @@ sub _process_mentions {
       or WARN('Skipped mention of ' . $mentioned->login . " on bug "
         . $bug->id . ": $@");
   }
+}
+
+# Comment 0 is inserted by Bug->create itself rather than through add_comment,
+# so it never appears in added_comments. Keep it on the bug for
+# _process_mentions, which handles it in the update that follows creation
+# (post_bug.cgi always updates the new bug to set the flags from the form).
+# Waiting for that update means the bug and its groups are committed, and that
+# needinfo flags requested on the form are known, so a user both mentioned and
+# needinfo'd explicitly gets only one request.
+sub _keep_description_for_mentions {
+  my ($bug) = @_;
+  return unless Bugzilla->params->{needinfo_mentions_enabled};
+  return unless Bugzilla->usage_mode == USAGE_MODE_BROWSER;
+
+  my $description = _description_of($bug->id) or return;
+  return unless _extract_mentions($description->{thetext});
+  $description->{thetext}      = _without_cloned_text($description->{thetext});
+  $bug->{needinfo_description} = $description;
+}
+
+sub _description_of {
+  my ($bug_id) = @_;
+  my $dbh = Bugzilla->dbh;
+  return $dbh->selectrow_hashref(
+    'SELECT thetext, isprivate FROM longdescs WHERE bug_id = ? '
+      . 'ORDER BY comment_id '
+      . $dbh->sql_limit(1),
+    undef, $bug_id
+  );
+}
+
+# The header enter_bug.cgi puts above the description it copies when cloning
+# a bug (see template/en/default/bug/create/create.html.tmpl). Keep the two in
+# sync.
+use constant CLONE_HEADER_RE => qr/
+  \A \s* \+\+\+ [ ] This [ ] \w+ [ ] was [ ] initially [ ] created [ ] as [ ]
+  a [ ] clone [ ] of [ ] \w+ [ ] \#(\d+) [ ] \+\+\+ [^\n]* (?:\n|\z)
+/x;
+
+# A clone's description starts with the description of the bug it was cloned
+# from, so mentions in it would needinfo everyone mentioned there again. Drop
+# the copied lines and keep only what the reporter wrote or edited. If the
+# reporter removed the clone header, nothing marks the text as copied and all
+# of it counts.
+sub _without_cloned_text {
+  my ($text)      = @_;
+  my ($source_id) = $text =~ CLONE_HEADER_RE or return $text;
+  $text =~ s/${\CLONE_HEADER_RE}//;
+
+  # enter_bug.cgi only copies a description the reporter can see, so only
+  # remove it under the same conditions.
+  my $user = Bugzilla->user;
+  return $text unless $user->can_see_bug($source_id);
+  my $source = _description_of($source_id) or return $text;
+  return $text if $source->{isprivate} && !$user->is_insider;
+
+  return _remove_copied_lines($text, $source->{thetext});
+}
+
+# Removes the lines of $text that appear unchanged in $source, each as many
+# times as $source has it, so a line the reporter repeats on purpose still
+# counts. Blank lines are kept so paragraphs (which end code spans) survive.
+sub _remove_copied_lines {
+  my ($text, $source) = @_;
+  my %copied;
+  $copied{$_}++ for grep {/\S/} split /\r?\n/, $source;
+  return join "\n",
+    grep { !(/\S/ && $copied{$_} && $copied{$_}--) } split /\r?\n/, $text;
 }
 
 # process_bug.cgi takes a single bug as `id` and a mass edit as `id_<bug id>`
@@ -417,8 +493,8 @@ sub _cc_and_needinfo {
 # Lets the comment preview list who saving the comment would CC and needinfo,
 # so a stray @word is caught before the comment is submitted. The comment
 # editor sends include_mentions (and mention_is_private) along with the bug id
-# only for new comments on an existing bug, the only case _process_mentions
-# handles.
+# only for new comments on an existing bug; the description of a new bug has
+# no bug to check the mentioned users against yet, so it isn't previewed.
 sub webservice_bug_render_comment {
   my ($self, $args) = @_;
   my ($bug, $params) = @$args{qw(bug params)};

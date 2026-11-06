@@ -29,6 +29,7 @@ use constant DB_COLUMNS => qw(
   type_id
   flag_id
   setter_id
+  who
   requestee_id
   bug_id
   attachment_id
@@ -69,6 +70,7 @@ use constant VALIDATORS => {
   type_id   => _check_param_required('type_id'),
   flag_id   => _check_param_required('flag_id'),
   setter_id => _check_param_required('setter_id'),
+  who       => _check_param_required('who'),
   bug_id    => _check_param_required('bug_id'),
   status    => \&_check_status,
 };
@@ -77,6 +79,7 @@ sub flag_when     { return $_[0]->{flag_when} }
 sub type_id       { return $_[0]->{type_id} }
 sub flag_id       { return $_[0]->{flag_id} }
 sub setter_id     { return $_[0]->{setter_id} }
+sub who           { return $_[0]->{who} }
 sub bug_id        { return $_[0]->{bug_id} }
 sub requestee_id  { return $_[0]->{requestee_id} }
 sub attachment_id { return $_[0]->{attachment_id} }
