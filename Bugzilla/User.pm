@@ -101,7 +101,7 @@ use constant VALIDATORS => {
   disabledtext             => \&_check_disabledtext,
   login_name               => \&check_login_name_for_creation,
   realname                 => \&_check_realname,
-  nickname                 => \&_check_realname,
+  nickname                 => \&_check_nickname,
   extern_id                => \&_check_extern_id,
   is_enabled               => \&_check_is_enabled,
   password_change_required => \&Bugzilla::Object::check_boolean,
@@ -124,7 +124,6 @@ sub UPDATE_COLUMNS {
     password_change_reason
     mfa
     mfa_required_date
-    nickname
     bounce_count
     modification_ts
   );
@@ -281,8 +280,14 @@ sub update {
 
   my $group_changes = delete $self->{_group_changes};
 
-  my $changes = $self->SUPER::update(@_);
-  my $dbh     = Bugzilla->dbh;
+  my $dbh = Bugzilla->dbh;
+
+  # One transaction, so the nickname claim commits with the rest of the save.
+  $dbh->bz_start_transaction();
+  my ($changes, $old_self) = $self->SUPER::update(@_);
+  $self->_update_nickname($changes, $old_self->{nickname});
+  $dbh->bz_commit_transaction();
+
   $self->_update_groups($group_changes, $changes);
 
   if (exists $changes->{login_name}) {
@@ -411,6 +416,9 @@ sub _check_password {
 
 sub _check_realname { return trim($_[1]) || ''; }
 
+# "No nickname" is NULL, not '', so profiles_nickname_idx can be UNIQUE.
+sub _check_nickname { return trim($_[1]) || undef; }
+
 sub _check_is_enabled {
   my ($invocant, $is_enabled, undef, $params) = @_;
 
@@ -483,17 +491,59 @@ sub set_login {
 sub _generate_nickname {
   my ($name, $login, $id) = @_;
   my ($nick) = extract_nicks($name);
-  if (!$nick) {
-    $nick = "";
-  }
+  return undef unless $nick;
   my ($count)
     = Bugzilla->dbh->selectrow_array(
     'SELECT COUNT(*) FROM profiles WHERE nickname = ? AND userid != ?',
     undef, $nick, $id);
-  if ($count) {
-    $nick = "";
+  return $count ? undef : $nick;
+}
+
+# profiles_nickname_idx is UNIQUE, but _generate_nickname's COUNT(*) check can
+# race a concurrent save choosing the same nickname. So nickname is left out of
+# UPDATE_COLUMNS and written here on its own with UPDATE IGNORE: a nickname
+# taken in the meantime is skipped, leaving NULL (no nickname, the same
+# fallback _generate_nickname uses), instead of a duplicate-key error aborting
+# the whole save. Only nickname is written, so that index's conflict is the
+# only error IGNORE can hide. Returns the nickname actually stored.
+sub _claim_nickname {
+  my ($self, $nick) = @_;
+  my $dbh = Bugzilla->dbh;
+
+  my $claimed;
+  $dbh->bz_start_transaction();
+  $dbh->do('UPDATE profiles SET nickname = NULL WHERE userid = ?',
+    undef, $self->id);
+  if (defined $nick) {
+    $dbh->do(
+      $dbh->sql_update_ignore . ' profiles SET nickname = ? WHERE userid = ?',
+      undef, $nick, $self->id);
+    ($claimed)
+      = $dbh->selectrow_array('SELECT nickname FROM profiles WHERE userid = ?',
+      undef, $self->id);
   }
-  return $nick;
+  $dbh->bz_commit_transaction();
+
+  Bugzilla->memcached->clear({table => 'profiles', id => $self->id});
+  $self->_object_cache_remove({id => $self->id});
+  $self->_object_cache_remove({name => $self->name}) if $self->name;
+
+  return $self->{nickname} = $claimed;
+}
+
+# Writes a changed nickname for update(), recording it in $changes and the
+# audit log the way Bugzilla::Object::update does for other columns. $old is
+# the nickname from the row SUPER::update loaded. This runs after the
+# object_end_of_update hook, so hook consumers don't see nickname changes.
+sub _update_nickname {
+  my ($self, $changes, $old) = @_;
+  return if ($old // '') eq ($self->{nickname} // '');
+
+  my $new = $self->_claim_nickname($self->{nickname});
+  return if ($old // '') eq ($new // '');
+
+  $changes->{nickname} = [$old, $new];
+  $self->audit_log({nickname => [$old, $new]}) if $self->AUDIT_UPDATES;
 }
 
 sub set_name {
@@ -2719,13 +2769,17 @@ sub create {
   my $dbh = Bugzilla->dbh;
 
   $dbh->bz_start_transaction();
-  $params->{nickname}
+
+  # Inserted as NULL and claimed after the INSERT; see _claim_nickname.
+  my $nickname
     = _generate_nickname($params->{realname}, $params->{login_name}, 0);
+  $params->{nickname} = undef;
 
   my $modification_ts = $dbh->selectrow_array('SELECT LOCALTIMESTAMP(0)');
   $params->{modification_ts} = $modification_ts;
 
   my $user = $class->SUPER::create($params);
+  $user->_claim_nickname($nickname) if defined $nickname;
 
   # Turn on all email for the new user
   require Bugzilla::BugMail;
