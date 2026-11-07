@@ -316,7 +316,9 @@ $(function() {
 
     // toggle obsolete/external attachments
     let attachObsoleteShowing = false;
-    let attachExternalShowing = false;
+    // The external choice persists across bug pages via Bugzilla.Storage
+    // (localStorage), regardless of the remember_collapsed setting.
+    let attachExternalShowing = Bugzilla.Storage.get('attachments-external.visibility') === 'show';
 
     function updateAttachmentRows() {
         // A row may be obsolete, external, or both. It is only visible when
@@ -342,8 +344,13 @@ $(function() {
     $('#attachments-external-btn').click(function(event) {
         event.preventDefault();
         attachExternalShowing = !attachExternalShowing;
+        Bugzilla.Storage.set('attachments-external.visibility', attachExternalShowing ? 'show' : 'hide');
         updateAttachmentRows();
     });
+
+    if (attachExternalShowing) {
+        updateAttachmentRows();
+    }
 
     // top btn
     $('#top-btn')
