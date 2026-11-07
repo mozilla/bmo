@@ -515,7 +515,8 @@ sub _claim_nickname {
   $dbh->do('UPDATE profiles SET nickname = NULL WHERE userid = ?',
     undef, $self->id);
   if (defined $nick) {
-    $dbh->do('UPDATE IGNORE profiles SET nickname = ? WHERE userid = ?',
+    $dbh->do(
+      $dbh->sql_update_ignore . ' profiles SET nickname = ? WHERE userid = ?',
       undef, $nick, $self->id);
     ($claimed)
       = $dbh->selectrow_array('SELECT nickname FROM profiles WHERE userid = ?',

@@ -111,6 +111,29 @@ my ($audit) = $dbh->selectrow_array(
 );
 ok($audit, 'nickname changes are still audit logged');
 
+# Saving a user who already has a nickname takes a different path through
+# _update_nickname than a first assignment, so cover changing and clearing one.
+my $renamed = "nickrenamed$run";
+$alice->set_name("Alice [:$renamed]");
+my $changes = eval { $alice->update() };
+ok($changes, 'changing an existing nickname does not die') or diag $@;
+is(stored_nickname($alice), $renamed, 'the changed nickname is stored');
+is_deeply(
+  $changes->{nickname},
+  [$nick, $renamed],
+  'the nickname change is reported in the changes hash'
+);
+
+$alice->set_name('Alice');
+$changes = eval { $alice->update() };
+ok($changes, 'clearing an existing nickname does not die') or diag $@;
+is(stored_nickname($alice), undef, 'the cleared nickname is stored as NULL');
+is_deeply(
+  $changes->{nickname},
+  [$renamed, undef],
+  'the cleared nickname is reported in the changes hash'
+);
+
 my @cleanup = map { $_->id } grep {defined} $alice, $bob, $new, $raced;
 $dbh->do(
   'UPDATE profiles SET nickname = NULL WHERE userid IN ('
