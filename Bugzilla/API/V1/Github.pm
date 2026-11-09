@@ -28,6 +28,11 @@ use Mojo::Util  qw(secure_compare);
 
 use constant BUG_RE => qr/\b[Bb]ug(?:[ -]|: )(\d+)\b/;
 
+# Commit titles that undo earlier work. A push with any of these for a bug
+# must not close it. Anchored to the start of the title so a normal
+# commit that merely mentions the word "revert" still closes the bug.
+use constant REVERT_RE => qr/^(?:Revert\b|Backed out (?:\d+ )?changesets?\b)/i;
+
 sub setup_routes {
   my ($class, $r) = @_;
   $r->post('/github/pull_request')->to('V1::Github#pull_request');
@@ -309,7 +314,8 @@ sub push_comment {
     my $comment_text = "Authored by $author\n$url\n[$branch] $message";
 
     $update_bugs{$bug_id} ||= [];
-    push @{$update_bugs{$bug_id}}, {text => $comment_text};
+    push @{$update_bugs{$bug_id}},
+      {text => $comment_text, is_revert => $message =~ REVERT_RE ? 1 : 0};
   }
 
   # Restrict this request to the bugs the authenticated webhook credential can
@@ -376,6 +382,21 @@ sub push_comment {
       $comment_text .= $comment->{text} . "\n\n";
     }
 
+    # Close the bug as RESOLVED/FIXED unless it has the 'leave-open' keyword
+    # or is already closed. If any commit for this bug is a revert/backout,
+    # leave it open and say why, since it would otherwise have been closed.
+    # A push can carry a fix and a revert of that fix together, so one revert
+    # is enough to make "fixed" unsafe to assume.
+    my $close_bug
+      = !$bug->has_keyword('leave-open')
+      && $bug->status ne 'RESOLVED'
+      && $bug->status ne 'VERIFIED';
+    if ($close_bug && grep { $_->{is_revert} } @{$update_bugs{$bug_id}}) {
+      $close_bug = 0;
+      $comment_text .= "Bug left open because one or more of the pushed commits "
+        . "is a revert or backout.\n\n";
+    }
+
     # Attribute the automated comment to the webhook credential that triggered
     # it, so the bot behind a github-automation action is visible in bug history
     # (not just server logs) and any leaked-key abuse is traceable on the bug.
@@ -388,11 +409,7 @@ sub push_comment {
       }
     };
 
-    # If the bug does not have the keyword 'leave-open', we close the bug as RESOLVED/FIXED.
-    if (!$bug->has_keyword('leave-open')
-      && $bug->status ne 'RESOLVED'
-      && $bug->status ne 'VERIFIED')
-    {
+    if ($close_bug) {
       # Set the bugs status to RESOLVED/FIXED
       $set_all->{bug_status} = 'RESOLVED';
       $set_all->{resolution} = 'FIXED';
