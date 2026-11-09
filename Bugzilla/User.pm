@@ -288,6 +288,9 @@ sub update {
   $self->_update_nickname($changes, $old_self->{nickname});
   $dbh->bz_commit_transaction();
 
+  # The evictions above ran before this commit. Drop any old row cached since.
+  Bugzilla->memcached->clear({table => 'profiles', id => $self->id});
+  
   $self->_update_groups($group_changes, $changes);
 
   if (exists $changes->{login_name}) {
