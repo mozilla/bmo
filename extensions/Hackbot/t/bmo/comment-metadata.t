@@ -24,6 +24,7 @@ BEGIN {
 use Bugzilla;
 BEGIN { Bugzilla->extensions }
 use Bugzilla::App ();
+use Bugzilla::Bug;
 use Bugzilla::Comment;
 use Bugzilla::Config    qw(SetParam write_params);
 use Bugzilla::Constants qw(bz_locations);
@@ -213,6 +214,25 @@ is($forged->hackbot,   undef,         'another user: no metadata');
 my $plain = post_comment($hackbot, 'A plain comment');
 is($plain->body_full, 'A plain comment', 'plain Hackbot comment is unchanged');
 is($plain->hackbot,   undef, 'plain Hackbot comment has no metadata');
+
+# Attachment comments are shown through their own template, which doesn't hide
+# the block, so it isn't read there either.
+$t->post_ok(
+  "/rest/bug/$bug_id/attachment" => api_headers($hackbot) => json => {
+    ids          => [$bug_id],
+    data         => 'cGF0Y2g=',
+    file_name    => 'fix.txt',
+    summary      => 'fix',
+    content_type => 'text/plain',
+    comment      => "$block$text",
+  }
+)->status_is(201, 'the attachment is added')
+  or diag $t->tx->res->body;
+my $attachment_comment
+  = Bugzilla::Bug->new($bug_id)->comments({order => 'oldest_to_newest'})->[-1];
+ok($attachment_comment->type, 'the attachment has its own comment type');
+is($attachment_comment->hackbot, undef,
+  'an attachment comment has no metadata');
 
 # The hackbot_user param.
 my $check = \&Bugzilla::Extension::Hackbot::Config::check_hackbot_user;

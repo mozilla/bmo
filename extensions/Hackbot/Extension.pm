@@ -32,13 +32,15 @@ sub _hackbot_user_id {
 }
 
 # Anyone can type a front matter block into a comment, so only the Hackbot
-# account's comments are parsed. Returns the same list as parse_front_matter.
+# account's comments are parsed, and only plain ones: the text of other types
+# (attachments, duplicates) is formatted without the comment_body_full hook, so
+# their block would stay visible. Returns the same list as parse_front_matter.
 # A page reads each comment several times (header, badge, tags, text), so the
 # result is kept on the comment for as long as its text is unchanged.
 sub _parse_comment {
   my ($comment) = @_;
   my $user_id = _hackbot_user_id() or return;
-  return unless ($comment->{who} // 0) == $user_id;
+  return if ($comment->{who} // 0) != $user_id || $comment->type;
 
   my $body   = $comment->body;
   my $parsed = $comment->{hackbot_front_matter};
