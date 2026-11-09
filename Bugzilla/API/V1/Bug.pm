@@ -31,11 +31,6 @@ use Bugzilla::WebService::Server;
 use Bugzilla::API::V1::Util qw(extract_flags filter filter_wants
   merge_request_params strip_request_params validate);
 
-our %api_field_types = (
-  %{{map { $_ => 'double' } Bugzilla::Bug::NUMERIC_COLUMNS()}},
-  %{{map { $_ => 'dateTime' } Bugzilla::Bug::DATE_COLUMNS()}},
-);
-
 our %api_field_names = reverse %{Bugzilla::Bug::FIELD_MAP()};
 
 # This doesn't normally belong in FIELD_MAP, but we do want to translate
@@ -1004,17 +999,18 @@ sub changeset_to_hash {
 
   foreach my $change (@{$changeset->{changes}}) {
     my $field_name     = delete $change->{fieldname};
-    my $api_field_type = $api_field_types{$field_name} || 'string';
     my $api_field_name = $api_field_names{$field_name} || $field_name;
     my $attach_id      = delete $change->{attachid};
     my $comment        = delete $change->{comment};
 
-    $change->{field_name}    = $self->type('string',        $api_field_name);
-    $change->{removed}       = $self->type($api_field_type, $change->{removed});
-    $change->{added}         = $self->type($api_field_type, $change->{added});
-    $change->{attachment_id} = $self->type('int', $attach_id)      if $attach_id;
-    $change->{comment_id}    = $self->type('int', $comment->id)    if $comment;
-    $change->{comment_count} = $self->type('int', $comment->count) if $comment;
+    # removed/added are documented as strings: the raw activity values,
+    # which for a date field may be several joined values, not one date.
+    $change->{field_name}    = $self->type('string', $api_field_name);
+    $change->{removed}       = $self->type('string', $change->{removed});
+    $change->{added}         = $self->type('string', $change->{added});
+    $change->{attachment_id} = $self->type('int',    $attach_id)      if $attach_id;
+    $change->{comment_id}    = $self->type('int',    $comment->id)    if $comment;
+    $change->{comment_count} = $self->type('int',    $comment->count) if $comment;
 
     push(@{$item->{changes}}, $change);
   }

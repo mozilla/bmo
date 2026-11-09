@@ -16,7 +16,7 @@ use Mojo::JSON qw(decode_json true false);
 use Bugzilla;
 use Bugzilla::Error;
 use Bugzilla::Logging;
-use Bugzilla::Util qw(datetime_from email_filter);
+use Bugzilla::Util qw(datetime_from email_filter truncate_string);
 use Bugzilla::WebService::Constants;
 
 use MIME::Base64 qw(encode_base64);
@@ -359,8 +359,21 @@ sub type {
     if $type eq 'email' && Bugzilla->params->{webservice_email_filter};
 
   # Always UTC, with the timezone specifier.
-  return $value ? datetime_from($value, 'UTC')->iso8601() . 'Z' : ''
-    if $type eq 'dateTime';
+  if ($type eq 'dateTime') {
+    return '' if !$value;
+    my $dt = datetime_from($value, 'UTC');
+
+    return $dt->iso8601() . 'Z' if $dt;
+
+    # A value datetime_from() can't parse (e.g. two activity rows that
+    # GetBugActivity joined into one string) is returned as is, rather
+    # than failing the whole request. Log it so other bad data that ends
+    # up here doesn't go unnoticed.
+    WARN( "type() could not parse dateTime value: '"
+        . truncate_string("$value", 100, '...')
+        . "'");
+    return "$value";
+  }
 
   if ($type eq 'base64') {
     utf8::encode($value) if utf8::is_utf8($value);

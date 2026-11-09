@@ -463,4 +463,99 @@ $t->put_ok($url
   ->json_is('/message' =>
     'You are not allowed to react to comments on this bug.');
 
+# Revert and backout commits must comment on the bug but not close it, and the
+# comment must say why the bug was left open.
+my $revert_note
+  = "\n\nBug left open because one or more of the pushed commits "
+  . "is a revert or backout.";
+
+sub create_test_bug {
+  my ($summary) = @_;
+  $t->post_ok($url
+      . 'rest/bug' => {'X-Bugzilla-API-Key' => $api_key} => json => {
+      product     => 'Firefox',
+      component   => 'General',
+      summary     => $summary,
+      type        => 'defect',
+      version     => 'unspecified',
+      severity    => 'blocker',
+      description => 'This is a new test bug',
+      })->status_is(200)->json_has('/id');
+  return $t->tx->res->json->{id};
+}
+
+sub push_titles {
+  my ($bug_id, @titles) = @_;
+  my $payload = {
+    ref        => 'refs/heads/master',
+    repository => {
+      full_name      => 'mozilla-bteam/bmo',
+      default_branch => 'master',
+    },
+    commits => [
+      map { {
+        author  => {username => 'foobar', name => 'Foo Bar'},
+        url     => "https://github.com/mozilla-bteam/bmo/commit/$_",
+        message => $titles[$_],
+      } } 0 .. $#titles
+    ],
+  };
+  $t->post_ok(
+    $url
+      . 'rest/github/push_comment' => {
+      'X-Hub-Signature-256' => generate_payload_signature($secret, $payload),
+      'X-GitHub-Event'      => 'push'
+      } => json => $payload
+  )->status_is(200)->json_has("/bugs/$bug_id/id");
+
+  my $comment_id = $t->tx->res->json->{bugs}->{$bug_id}->{id};
+  my $expected   = join "\n\n",
+    map {"Authored by https://github.com/foobar\n"
+      . "https://github.com/mozilla-bteam/bmo/commit/$_\n[master] $titles[$_]"}
+    0 .. $#titles;
+  return ($comment_id, $expected);
+}
+
+sub check_bug {
+  my ($bug_id, $comment_id, $expected_text, $status) = @_;
+  $t->get_ok(
+    $url . "rest/bug/comment/$comment_id" => {'X-Bugzilla-API-Key' => $api_key})
+    ->status_is(200)->json_is("/comments/$comment_id/text", $expected_text);
+  $t->get_ok($url
+      . "rest/bug/$bug_id?include_fields=id,status" =>
+      {'X-Bugzilla-API-Key' => $api_key})->status_is(200)
+    ->json_is('/bugs/0/status', $status);
+}
+
+foreach my $title (
+  'Revert "Bug %d - Some change"',
+  'Backed out changeset abcdef123456 (Bug %d) for test failures',
+  'Backed out 2 changesets (Bug %d) for test failures',
+  )
+{
+  my $revert_bug_id = create_test_bug('Test GitHub Push Commenting (revert)');
+  my ($comment_id, $expected)
+    = push_titles($revert_bug_id, sprintf($title, $revert_bug_id));
+  check_bug($revert_bug_id, $comment_id,
+    $expected . $revert_note . $comment_trailer, 'CONFIRMED');
+}
+
+# A push mixing a fix and a revert for the same bug leaves it open
+# (bug 2084270 comment 9 was closed by exactly this kind of push).
+my $mixed_bug_id = create_test_bug('Test GitHub Push Commenting (mixed)');
+my ($mixed_comment_id, $mixed_expected) = push_titles(
+  $mixed_bug_id,
+  "Bug $mixed_bug_id - First attempt",
+  "Revert \"Bug $mixed_bug_id - First attempt\""
+);
+check_bug($mixed_bug_id, $mixed_comment_id,
+  $mixed_expected . $revert_note . $comment_trailer, 'CONFIRMED');
+
+# "revert" appearing later in the title is a normal commit and closes the bug.
+my $word_bug_id = create_test_bug('Test GitHub Push Commenting (revert word)');
+my ($word_comment_id, $word_expected)
+  = push_titles($word_bug_id, "Bug $word_bug_id - Revert button styling fix");
+check_bug($word_bug_id, $word_comment_id, $word_expected . $comment_trailer,
+  'RESOLVED');
+
 done_testing();
