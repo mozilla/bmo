@@ -1124,6 +1124,8 @@ Bugzilla.BugModal.InstantUpdater = class InstantUpdater {
     this.$commentTextArea.readOnly = false;
     this.$commentTextArea.hidden = false;
     this.$commentTextArea.value = '';
+    // Let listeners know, e.g. to clear the @mention warning and the saved comment draft
+    this.$commentTextArea.dispatchEvent(new InputEvent('input'));
 
     // Switch to preview mode to show the comment box
     document.querySelector('#add-comment [data-command="edit"]').click();

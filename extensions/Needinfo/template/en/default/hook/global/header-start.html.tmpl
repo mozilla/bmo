@@ -39,3 +39,8 @@
     };
   END;
 %]
+
+[%# Lets the comment editor warn, as the user types, who the comment's
+  # @mentions would needinfo. The server still decides per bug. %]
+[% js_BUGZILLA.param.needinfo_mentions_enabled
+     = (user.id && Param('needinfo_mentions_enabled')) ? 1 : 0 %]
