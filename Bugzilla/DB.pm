@@ -52,7 +52,7 @@ sub dbh {
   my $now   = Time::HiRes::time();
 
   if ( $entry
-    && $entry->{pid} == $$
+    && $entry->{pid} == $PID
     && $entry->{dbh}{Active}
     && $now - $entry->{checked} < DBH_CHECK_INTERVAL)
   {
@@ -60,7 +60,7 @@ sub dbh {
   }
 
   my $dbh = $self->connector->dbh;
-  $cache->{refaddr $self} = {dbh => $dbh, pid => $$, checked => $now};
+  $cache->{refaddr $self} = {dbh => $dbh, pid => $PID, checked => $now};
   return $dbh;
 }
 has [qw(dsn user pass attrs)] => (is => 'ro', required => 1);

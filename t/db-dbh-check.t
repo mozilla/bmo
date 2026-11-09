@@ -18,6 +18,7 @@ use Bugzilla::Test::MockLocalconfig (
   db_name   => ':memory:'
 );
 use Bugzilla;
+use Class::Method::Modifiers qw(install_modifier);
 use Scalar::Util qw(refaddr);
 use Test2::V0;
 
@@ -25,11 +26,7 @@ use Test2::V0;
 # request, not once per query.
 
 my $checks = 0;
-{
-  no warnings 'redefine';
-  my $orig = \&DBIx::Connector::dbh;
-  *DBIx::Connector::dbh = sub { $checks++; goto &$orig };
-}
+install_modifier('DBIx::Connector', 'before', 'dbh', sub { $checks++ });
 
 my $db    = Bugzilla->dbh;
 my $entry = sub { Bugzilla->request_cache->{bz_db_checked_dbh}{refaddr $db} };
