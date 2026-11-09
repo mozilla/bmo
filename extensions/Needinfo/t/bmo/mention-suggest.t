@@ -47,7 +47,7 @@ my $disabled = create_user(
 );
 
 is($nicked->nick,           "${prefix}nick", 'nicked account has a nickname');
-is($login_only->{nickname}, '', 'login-only account has no nickname');
+is($login_only->{nickname}, undef, 'login-only account has no nickname');
 ok(!$disabled->is_enabled, 'disabled account is disabled');
 
 # With a bug_id the autocomplete only offers accounts that can see the bug, as
