@@ -19,7 +19,6 @@ use Bugzilla::User;
 our $VERSION = '1';
 
 BEGIN {
-  no warnings 'redefine';
   *Bugzilla::Comment::hackbot = \&_comment_hackbot;
 }
 

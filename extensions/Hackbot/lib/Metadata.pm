@@ -27,9 +27,12 @@ our @EXPORT_OK = qw(parse_front_matter);
 #
 # It is only ever generated, so this reads that one shape rather than YAML in
 # general. Anything else is an ordinary comment that happens to start with a
-# rule, and unknown keys are skipped so that fields can be added.
-my $FRONT_MATTER = qr/\A---\nhackbot:\n((?:  [a-z_]+: [^\n]*\n)+)---(?:\n+|\z)/;
-my $IDENTIFIER   = qr/\A[A-Za-z0-9._-]+\z/;
+# rule, and unknown keys are skipped so that fields can be added. The /a flag
+# keeps the character classes to ASCII.
+my $FRONT_MATTER
+  = qr/\A---\nhackbot:\n((?:  [[:lower:]_]+: [^\n]*\n)+)---(?:\n+|\z)(.*)\z/as;
+my $FIELD      = qr/^  ([[:lower:]_]+): ([^\n]*?)\s*$/am;
+my $IDENTIFIER = qr/\A[[:alnum:]._-]+\z/a;
 
 # Returns the metadata hash and the comment text without the block, or an empty
 # list when the text doesn't start with a valid block. The url key is left out
@@ -37,10 +40,9 @@ my $IDENTIFIER   = qr/\A[A-Za-z0-9._-]+\z/;
 sub parse_front_matter {
   my ($text) = @_;
 
-  return unless defined $text && $text =~ $FRONT_MATTER;
-  my ($block, $body) = ($1, substr($text, $+[0]));
+  my ($block, $body) = ($text // '') =~ $FRONT_MATTER or return;
 
-  my %fields = $block =~ /^  ([a-z_]+): ([^\n]*?)\s*$/mg;
+  my %fields = $block =~ /$FIELD/g;
 
   my %metadata;
   foreach my $key (qw(run action agent)) {
