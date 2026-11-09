@@ -267,9 +267,15 @@ sub _attachment {
 
 sub _comment {
   my ($self, $comment, $is_shallow) = @_;
+
+  # The text people read, as in bugmail: extensions can hide parts of it with
+  # the comment_body_full hook. body_full formats the text of other comment
+  # types (attachments, duplicates), so those keep the stored text.
+  my $body = $comment->type ? $comment->body : $comment->body_full;
+
   my $rh = {
     id            => _integer($comment->id),
-    body          => _string($comment->body),
+    body          => _string($body),
     creation_time => _time($comment->creation_ts),
     is_private    => _boolean($comment->is_private),
     number        => _integer($comment->count),

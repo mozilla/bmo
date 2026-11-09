@@ -167,7 +167,7 @@
             [% Hook.process('user', 'bug/comments.html.tmpl') %]
           </td>
         [% END %]
-
+        [% Hook.process('before_comment_actions', 'bug_modal/activity_stream.html.tmpl') %]
         <td rowspan="2" class="comment-actions"><div role="group">
           [% IF user.is_insider && bug.check_can_change_field('longdesc', 0, 1).allowed %]
             [% IF comment.is_private %]

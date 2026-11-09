@@ -406,6 +406,8 @@ sub body_full {
   }
   else {
     $body = $self->body;
+    Bugzilla::Hook::process('comment_body_full',
+      {comment => $self, body => \$body});
   }
   if ($params->{wrap} and !$self->already_wrapped) {
     $body = wrap_comment($body);

@@ -1869,8 +1869,7 @@ a.lightbox-icon.markdown {
   .comment .comment-actions > [role="group"] {
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 4px 0;
-    width: 128px;
+    width: 64px;
   }
 
   .comment .comment-actions > [role="group"] .comment-private {
