@@ -271,7 +271,7 @@ sub render_comment {
   # Extensions can add params and return values. When id is given, the Needinfo
   # extension accepts include_mentions and mention_is_private and returns
   # mentions: the users that saving the comment on that bug would CC and
-  # needinfo, shown by the comment preview.
+  # needinfo. (The comment editor's live warning uses POST /needinfo/mentions.)
   my $result = {html => $html};
   Bugzilla::Hook::process('webservice_bug_render_comment',
     {webservice => $self, bug => $bug, params => $params, result => $result});

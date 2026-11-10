@@ -15,4 +15,32 @@
     ;
     style_urls.push('extensions/Needinfo/web/styles/needinfo.css');
   END;
+
+  # `@nickname` autocompletion in the comment editor. Only offered where a
+  # mention would take effect when saved (see _mentioned_users and
+  # _process_mentions in Extension.pm): the feature is enabled, and a logged-in
+  # user with editbugs on the product is commenting on an existing bug. New
+  # bugs, mass edits and anonymous users get no suggestions.
+  mention_bug = attachment.bug || bug;
+  IF use_text_editor
+      && user.id
+      && Param('needinfo_mentions_enabled')
+      && mention_bug.id
+      && user.in_group('editbugs', mention_bug.product_id)
+    ;
+    style_urls.push('extensions/Needinfo/web/styles/mention-autocomplete.css');
+    javascript_urls.push('extensions/Needinfo/web/js/mention-autocomplete.js');
+    js_BUGZILLA.string.MentionAutocomplete = {
+      label => 'Users to mention',
+    };
+    # Lets /rest/user/suggest leave out accounts that can't see the bug.
+    js_BUGZILLA.mention_autocomplete = {
+      bug_id => mention_bug.id,
+    };
+  END;
 %]
+
+[%# Lets the comment editor warn, as the user types, who the comment's
+  # @mentions would needinfo. The server still decides per bug. %]
+[% js_BUGZILLA.param.needinfo_mentions_enabled
+     = (user.id && Param('needinfo_mentions_enabled')) ? 1 : 0 %]
