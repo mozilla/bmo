@@ -716,6 +716,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const updateComment = () => {
     if ($commentPane) {
       $form.comment.value = '';
+      // Let the text editor know, e.g. to clear the @mention warning
+      $form.comment.dispatchEvent(new InputEvent('input'));
       $form.needinfo.checked = false;
       $form.needinfo_role.value = 'other';
       $form.needinfo_from.value = '';
