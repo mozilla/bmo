@@ -28,7 +28,7 @@ use base qw(Bugzilla::WebService);
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Util qw(detaint_natural);
-use Bugzilla::WebService::Util qw(validate);
+use Bugzilla::API::V1::Util qw(validate);
 use Bugzilla::Field;
 
 use constant PUBLIC_METHODS => qw(

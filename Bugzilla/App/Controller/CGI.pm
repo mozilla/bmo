@@ -24,7 +24,7 @@ use Bugzilla::Constants qw(
   USAGE_MODE_MOJO_REST
 );
 use Bugzilla::Logging;
-use Bugzilla::WebService::Util qw(set_rest_cors_headers);
+use Bugzilla::API::V1::Util qw(set_rest_cors_headers);
 
 my %SEEN;
 use constant REQUEST_TOO_LARGE_ERROR => 'request_too_large';

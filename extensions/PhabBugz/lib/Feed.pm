@@ -743,6 +743,18 @@ sub process_revision_change {
   my $attachment = create_revision_attachment($bug, $revision, $timestamp,
     $revision->author->bugzilla_user);
 
+  # Sync the `approval-mozilla-{repo}+` flags. This must happen before obsoleting
+  # the attachment, which removes pending `?` requests.
+  INFO('If uplift repository we may need to set approval flags');
+  if ($revision->repository && $revision->repository->is_uplift_repo()) {
+    INFO('Uplift repository detected. Setting attachment approval flags');
+
+    # set the approval flags. This ensures that users who create revisions will
+    # set the flag to `?`, and only approvals from `mozilla-next-drivers` group
+    # members will set the flag to `+` or `-`.
+    set_attachment_approval_flags($attachment, $revision, $changer, $is_new);
+  }
+
   # Attachment obsoletes and desscription
   my $make_obsolete = $revision->status eq 'abandoned' ? 1 : 0;
   INFO('Updating obsolete status on attachmment ' . $attachment->id . " to $make_obsolete");
@@ -752,17 +764,6 @@ sub process_revision_change {
   if ($new_attach_description ne $attachment->description) {
     INFO('Updating description on attachment ' . $attachment->id);
     $attachment->set_description($new_attach_description);
-  }
-
-  # Sync the `approval-mozilla-{repo}+` flags.
-  INFO('If uplift repository we may need to set approval flags');
-  if ($revision->repository && $revision->repository->is_uplift_repo()) {
-    INFO('Uplift repository detected. Setting attachment approval flags');
-
-    # set the approval flags. This ensures that users who create revisions will
-    # set the flag to `?`, and only approvals from `mozilla-next-drivers` group
-    # members will set the flag to `+` or `-`.
-    set_attachment_approval_flags($attachment, $revision, $changer, $is_new);
   }
 
   $attachment->update($timestamp);

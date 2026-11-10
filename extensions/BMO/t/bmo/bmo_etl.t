@@ -199,50 +199,14 @@ $t->post_ok(
   'http://bq:9050/bigquery/v2/projects/test/queries' => json => $query)
   ->status_is(200)->json_is('/rows/0/f/0/v' => $bug_id_1);
 
-<<<<<<< HEAD
-### Section: 7 - Add an additional bug and then run the export script again
-# Run with the same timestamp to make sure it adds the bug.
-# Simulate a script stop and resume condition
-$t->post_ok($url
-    . 'rest/bug' => {'X-Bugzilla-API-Key' => $admin_api_key} => json =>
-    $new_bug_1)->status_is(200)->json_has('/id');
-
-my $bug_id_3 = $t->tx->res->json->{id};
-
-$t->post_ok($url
-    . "rest/bug/$bug_id_3/attachment"        =>
-    {'X-Bugzilla-API-Key' => $admin_api_key} => json => $new_attach_1)
-  ->status_is(201)->json_has('/attachments');
-
-($attach_id) = keys %{$t->tx->res->json->{attachments}};
-||||||| eacb5a0df
-### Section 7: Exporting again on the same day (with the same snapshot date) will cause the script to exit
-=======
 ### Section 7: Exporting again with the same snapshot date succeeds without sending data again
->>>>>>> master
 
 @cmd = (
   './extensions/BMO/bin/export_bmo_etl.pl',
-  '--snapshot-date', $snapshot_date,
+  '--debug', '--snapshot-date', $snapshot_date,
 );
 
 ($output, $error, $rv) = capture { system @cmd; };
-<<<<<<< HEAD
-ok(!$rv, 'Data exported to BigQuery test instance without error');
-
-$query = {
-  query => 'SELECT summary FROM test.bugzilla.bugs WHERE id = '
-    . $bug_id_3
-    . ' AND snapshot_date = \''
-    . $snapshot_date . '\';',
-  useLegacySql => false
-};
-$t->post_ok(
-  'http://bq:9050/bigquery/v2/projects/test/queries' => json => $query)
-  ->status_is(200)->json_is('/rows/0/f/0/v' => $new_bug_1->{summary});
-||||||| eacb5a0df
-ok($rv, 'Duplicate data exported to BigQuery test instance should fail');
-=======
 ok(!$rv, 'Exporting an already exported snapshot date exits successfully');
 
 ### Section 8: Each row is published exactly once and staging tables are removed
@@ -335,6 +299,5 @@ ok($rv, 'Export should fail with an invalid snapshot date');
 
 $lock_count = $dbh->selectrow_array('SELECT COUNT(*) FROM bmo_etl_locked');
 is($lock_count, 0, 'Invalid snapshot date does not leave a lock behind');
->>>>>>> master
 
 done_testing;

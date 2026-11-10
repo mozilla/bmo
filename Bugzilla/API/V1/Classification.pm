@@ -12,7 +12,7 @@ use Mojo::Base qw( Mojolicious::Controller );
 
 use Bugzilla::Classification;
 use Bugzilla::Constants;
-use Bugzilla::WebService::Util qw(filter);
+use Bugzilla::API::V1::Util qw(filter);
 
 sub setup_routes {
   my ($class, $r) = @_;

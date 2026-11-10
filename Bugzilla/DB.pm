@@ -2047,6 +2047,26 @@ with optional offset (e.g. LIMIT 1, 1) (scalar)
 
 =back
 
+=item C<sql_update_ignore>
+
+=over
+
+=item B<Description>
+
+Returns the leading keywords of an UPDATE that skips rows whose new
+values would violate a unique key, instead of raising an error.
+
+Abstract method, should be overridden by database specific code.
+
+=item B<Params> (none)
+
+=item B<Returns>
+
+SQL to start such an UPDATE, followed by the table name
+(e.g. UPDATE IGNORE) (scalar)
+
+=back
+
 =item C<sql_from_days>
 
 =over

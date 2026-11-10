@@ -23,7 +23,7 @@ use Bugzilla::Milestone;
 use Bugzilla::Product;
 use Bugzilla::Status;
 use Bugzilla::Version;
-use Bugzilla::WebService::Util qw(filter);
+use Bugzilla::API::V1::Util qw(filter);
 
 use constant PRODUCT_SPECIFIC_FIELDS => qw(version target_milestone component);
 

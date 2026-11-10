@@ -12,7 +12,7 @@ use Mojo::Base qw( Mojolicious::Controller );
 
 use Mojo::JSON qw(true);
 
-use Bugzilla::API::V1::Util;
+use Bugzilla::Bug;
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Group;
@@ -21,8 +21,8 @@ use Bugzilla::Logging;
 use Bugzilla::User;
 use Bugzilla::User::APIKey;
 use Bugzilla::Util qw(detaint_natural mojo_user_agent trim);
-use Bugzilla::WebService::Util
-  qw(filter filter_wants merge_request_params params_to_objects translate);
+use Bugzilla::API::V1::Util qw(filter filter_wants merge_request_params
+  params_to_objects strip_request_params translate);
 
 use Digest::HMAC_SHA1 qw(hmac_sha1_hex);
 use Try::Tiny;
@@ -144,6 +144,14 @@ sub suggest {
   my $s = $params->{match};
   return $self->render(json => {users => []}) if length($s) < 3;
 
+  # Optionally keep only accounts that can see a bug, e.g. for @mentions on
+  # it. check() fails unless the caller can see the bug too, so this can't be
+  # used to learn who has access to a bug the caller can't see.
+  my $bug;
+  if ($params->{bug_id}) {
+    $bug = Bugzilla::Bug->check({id => $params->{bug_id}, cache => 1});
+  }
+
   my $dbh    = Bugzilla->dbh;
   my @select = ('userid AS id');
   my $order  = 'last_activity_ts DESC';
@@ -182,6 +190,12 @@ sub suggest {
     {Slice => {}}
   );
   my $user_objects = Bugzilla::User->new_from_list([map { $_->{id} } @$results]);
+
+  # Everyone can see a bug in no groups. The filter runs after LIMIT, so on a
+  # restricted bug fewer than 25 accounts may come back.
+  if ($bug && @{$bug->groups_in}) {
+    $user_objects = [grep { $_->can_see_bug($bug->id) } @$user_objects];
+  }
 
   my @user_data = map { {
     id        => $self->type('int',    $_->id),
@@ -454,11 +468,19 @@ sub update {
 
   # Drop the request-level keys that are not user fields and pass everything
   # else through, so set_all() still raises unknown_method on an unrecognized
-  # field rather than silently ignoring it.
-  my $values = translate($params, MAPPED_FIELDS);
-  delete @$values{qw(ids names include_fields exclude_fields
-    Bugzilla_api_key Bugzilla_api_token Bugzilla_login Bugzilla_password
-    Bugzilla_token api_key token)};
+  # field rather than silently ignoring it. login and password are user
+  # fields too. The legacy server took them sent together as the caller's
+  # credentials; native auth never does, so refuse the pair rather than
+  # guess: email and password change both. Strip before translate(), which
+  # maps email to login.
+  return $self->user_error('invalid_params',
+    {type_error => 'login and password cannot be sent together, use email'})
+    if exists $params->{login} && exists $params->{password};
+
+  my $values = strip_request_params($params, qw(ids names));
+  $values->{$_} = $params->{$_}
+    for grep { exists $params->{$_} } qw(login password);
+  $values = translate($values, MAPPED_FIELDS);
 
   my $dbh = Bugzilla->dbh;
   $dbh->bz_start_transaction();

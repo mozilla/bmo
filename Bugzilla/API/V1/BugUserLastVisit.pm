@@ -12,8 +12,8 @@ use Mojo::Base qw( Mojolicious::Controller );
 
 use Bugzilla::Bug;
 use Bugzilla::Constants;
-use Bugzilla::Util             qw(datetime_from);
-use Bugzilla::WebService::Util qw(filter merge_request_params);
+use Bugzilla::Util          qw(datetime_from);
+use Bugzilla::API::V1::Util qw(filter merge_request_params);
 
 sub setup_routes {
   my ($class, $r) = @_;

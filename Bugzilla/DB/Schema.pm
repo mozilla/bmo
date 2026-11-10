@@ -773,6 +773,12 @@ use constant ABSTRACT_SCHEMA => {
         NOTNULL    => 1,
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
       },
+      # The user who made the change. Not always the setter: redirecting a
+      # request keeps the original setter. Nullable until all pods write it.
+      who          => {
+        TYPE       => 'INT3',
+        REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
+      },
       requestee_id => {
         TYPE       => 'INT3',
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
@@ -793,6 +799,7 @@ use constant ABSTRACT_SCHEMA => {
       flag_activity_type_id_idx     => ['type_id'],
       flag_activity_bug_id_idx      => ['bug_id'],
       flag_activity_status_when_idx => ['status', 'flag_when'],
+      flag_activity_who_idx         => ['who', 'flag_when'],
     ],
   },
 
@@ -1055,7 +1062,7 @@ use constant ABSTRACT_SCHEMA => {
       login_name     => {TYPE => 'varchar(255)', NOTNULL => 1},
       cryptpassword  => {TYPE => 'varchar(128)'},
       realname       => {TYPE => 'varchar(255)', NOTNULL => 1, DEFAULT => "''"},
-      nickname       => {TYPE => 'varchar(255)', NOTNULL => 1, DEFAULT => "''"},
+      nickname       => {TYPE => 'varchar(255)'},
       disabledtext   => {TYPE => 'MEDIUMTEXT',   NOTNULL => 1, DEFAULT => "''"},
       disable_mail   => {TYPE => 'BOOLEAN',      NOTNULL => 1, DEFAULT => 'FALSE'},
       mybugslink     => {TYPE => 'BOOLEAN',      NOTNULL => 1, DEFAULT => 'TRUE'},
@@ -1075,7 +1082,7 @@ use constant ABSTRACT_SCHEMA => {
       profiles_login_name_idx      => {FIELDS => ['login_name'], TYPE => 'UNIQUE'},
       profiles_extern_id_idx       => {FIELDS => ['extern_id'],  TYPE => 'UNIQUE'},
       profiles_modification_ts_idx => ['modification_ts'],
-      profiles_nickname_idx        => ['nickname'],
+      profiles_nickname_idx        => {FIELDS => ['nickname'], TYPE => 'UNIQUE'},
       profiles_realname_ft_idx     => {FIELDS => ['realname'], TYPE => 'FULLTEXT'},
     ],
   },

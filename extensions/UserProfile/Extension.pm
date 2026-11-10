@@ -17,7 +17,7 @@ use Bugzilla::Constants;
 use Bugzilla::Extension::UserProfile::Util;
 use Bugzilla::Install::Filesystem;
 use Bugzilla::User;
-use Bugzilla::WebService::Util qw(filter_wants);
+use Bugzilla::API::V1::Util qw(filter_wants);
 use Bugzilla::Util qw(datetime_from time_ago);
 
 use Email::Address;

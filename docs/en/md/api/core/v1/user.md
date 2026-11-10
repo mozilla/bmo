@@ -70,7 +70,7 @@ using the `ids` or `names` parameters respectively.
 | **names** | array | Additional login names of users to update. |
 | full_name | string | The new name of the user. |
 | email | string | The email of the user. Note that email used to login to Bugzilla. Also note that you can only update one user at a time when changing the login name / email. (An error will be thrown if you try to update this field for multiple users at once.) |
-| password | string | The password of the user. |
+| password | string | The password of the user. Sending it with `login` is an error: send it with `email` to change both. |
 | email_enabled | boolean | A boolean value to enable/disable sending bug-related mail to the user. |
 | login_denied_text | string | A text field that holds the reason for disabling a user from logging into Bugzilla. If empty, then the user account is enabled; otherwise it is disabled/closed. |
 | groups | object | These specify the groups that this user is directly a member of. To set these, you should pass an object as the value. The object's items are described in the Groups update objects below. |

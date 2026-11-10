@@ -211,6 +211,8 @@ sub sql_limit {
   }
 }
 
+sub sql_update_ignore { return 'UPDATE OR IGNORE'; }
+
 sub sql_from_days {
   my ($self, $days) = @_;
   return "DATETIME($days)";

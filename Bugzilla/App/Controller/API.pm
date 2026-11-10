@@ -17,7 +17,7 @@ use Try::Tiny;
 
 use Bugzilla::Constants;
 use Bugzilla::Logging;
-use Bugzilla::WebService::Util qw(set_rest_cors_headers);
+use Bugzilla::API::V1::Util qw(set_rest_cors_headers);
 
 use constant SUPPORTED_VERSIONS => qw(V1);
 

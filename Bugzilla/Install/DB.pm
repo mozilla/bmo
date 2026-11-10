@@ -778,6 +778,10 @@ sub update_table_definitions {
 
   $dbh->bz_add_index('profiles', 'profiles_realname_ft_idx',
     {TYPE => 'FULLTEXT', FIELDS => ['realname']});
+
+  # Bug 2089200 - dkl@mozilla.com - must run before _migrate_nicknames(),
+  # which saves users through Bugzilla::User and so writes NULL nicknames.
+  _make_nicknames_unique();
   _migrate_nicknames();
 
   # Bug 1354589 - dkl@mozilla.com
@@ -843,6 +847,10 @@ sub update_table_definitions {
 
   # Bug 1949556 - dkl@mozilla.com
   $dbh->bz_add_index('audit_log', 'audit_log_object_id_idx', ['object_id']);
+
+  # Bug 2088705 - xavier.lhour@gmail.com
+  # Before _migrate_flag_state_activity, which copies into this column.
+  _add_flag_activity_who();
 
   # Bug 1806896 - xavier.lhour@gmail.com
   _migrate_flag_state_activity();
@@ -4266,7 +4274,7 @@ sub _migrate_nicknames {
   my $dbh = Bugzilla->dbh;
   my $sth
     = $dbh->prepare(
-    'SELECT userid FROM profiles WHERE realname LIKE "%:%" AND is_enabled = 1 AND NOT nickname'
+    'SELECT userid FROM profiles WHERE realname LIKE "%:%" AND is_enabled = 1 AND nickname IS NULL'
     );
   $sth->execute();
   while (my ($user_id) = $sth->fetchrow_array) {
@@ -4274,6 +4282,36 @@ sub _migrate_nicknames {
     $user->set_name($user->name);
     $user->update();
   }
+}
+
+# "No nickname" used to be stored as '', which every user without one shared,
+# so the nickname index couldn't be UNIQUE. Store it as NULL instead (a UNIQUE
+# index allows any number of NULLs) and let the database enforce uniqueness
+# rather than relying on Bugzilla::User::_generate_nickname alone. The index
+# uses the column's collation, so case and accent variants also collide.
+sub _make_nicknames_unique {
+  my $dbh   = Bugzilla->dbh;
+  my $index = $dbh->bz_index_info('profiles', 'profiles_nickname_idx');
+  return if $index && $index->{TYPE} eq 'UNIQUE';
+
+  # Fail before touching the schema, so a rerun after cleanup starts clean.
+  # GROUP BY compares with the column's collation, as the UNIQUE index will.
+  my $dupes = $dbh->selectall_arrayref(
+    "SELECT nickname, GROUP_CONCAT(userid ORDER BY userid) FROM profiles
+      WHERE nickname != '' GROUP BY nickname HAVING COUNT(*) > 1"
+  );
+  if (@$dupes) {
+    die "profiles_nickname_idx can't be made UNIQUE: these users share a"
+      . " nickname. Clear or change all but one per line, then rerun"
+      . " checksetup.pl.\n"
+      . join('', map {"  '$_->[0]': userid $_->[1]\n"} @$dupes);
+  }
+
+  $dbh->bz_alter_column('profiles', 'nickname', {TYPE => 'varchar(255)'});
+  $dbh->do("UPDATE profiles SET nickname = NULL WHERE nickname = ''");
+  $dbh->bz_drop_index('profiles', 'profiles_nickname_idx');
+  $dbh->bz_add_index('profiles', 'profiles_nickname_idx',
+    {FIELDS => ['nickname'], TYPE => 'UNIQUE'});
 }
 
 sub _migrate_preference_categories {
@@ -4531,14 +4569,32 @@ sub _migrate_flag_state_activity {
   # id is not carried over: nothing references flag_activity.id externally.
   $dbh->do(
     'INSERT INTO flag_activity
-       (flag_when, type_id, flag_id, setter_id, requestee_id, bug_id,
+       (flag_when, type_id, flag_id, setter_id, who, requestee_id, bug_id,
         attachment_id, status)
-     SELECT flag_when, type_id, flag_id, setter_id, requestee_id, bug_id,
-            attachment_id, status
+     SELECT flag_when, type_id, flag_id, setter_id, setter_id, requestee_id,
+            bug_id, attachment_id, status
        FROM flag_state_activity'
   );
 
   $dbh->bz_drop_table('flag_state_activity');
+}
+
+# Nullable for now: during the rolling deploy, pods still on the previous code
+# insert rows without it. Bug 2085398 makes it NOT NULL once all pods write it.
+sub _add_flag_activity_who {
+  my $dbh = Bugzilla->dbh;
+
+  $dbh->bz_add_column('flag_activity', 'who',
+    {TYPE => 'INT3', REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}});
+
+  # For the user activity report and the changedby search.
+  $dbh->bz_add_index('flag_activity', 'flag_activity_who_idx',
+    [qw(who flag_when)]);
+
+  # Rows from before this column, or from pods on the previous code, don't
+  # record who made the change: the setter is the best value available. Runs
+  # every time, on the index above.
+  $dbh->do('UPDATE flag_activity SET who = setter_id WHERE who IS NULL');
 }
 
 sub _remove_duo_recovery_codes {

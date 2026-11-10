@@ -12,7 +12,6 @@ use Mojo::Base qw( Mojolicious::Controller );
 
 use List::MoreUtils qw(uniq);
 
-use Bugzilla::API::V1::Util;
 use Bugzilla::Bug;
 use Bugzilla::BugMail;
 use Bugzilla::Comment;
@@ -22,7 +21,7 @@ use Bugzilla::Error;
 use Bugzilla::Hook;
 use Bugzilla::Template;
 use Bugzilla::Util qw(datetime_from detaint_natural remote_ip trim);
-use Bugzilla::WebService::Util qw(merge_request_params);
+use Bugzilla::API::V1::Util qw(merge_request_params);
 
 sub setup_routes {
   my ($class, $r) = @_;
@@ -272,7 +271,7 @@ sub render_comment {
   # Extensions can add params and return values. When id is given, the Needinfo
   # extension accepts include_mentions and mention_is_private and returns
   # mentions: the users that saving the comment on that bug would CC and
-  # needinfo, shown by the comment preview.
+  # needinfo. (The comment editor's live warning uses POST /needinfo/mentions.)
   my $result = {html => $html};
   Bugzilla::Hook::process('webservice_bug_render_comment',
     {webservice => $self, bug => $bug, params => $params, result => $result});
