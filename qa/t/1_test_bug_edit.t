@@ -299,8 +299,11 @@ $sel->is_text_present_ok(
 $sel->is_element_present_ok(
   '//input[@type="checkbox" and @name="groups" and @value="QA-Selenium-TEST"]');
 ok(
-  !$sel->is_editable(
-    '//input[@type="checkbox" and @name="groups" and @value="QA-Selenium-TEST"]'),
+  $sel->driver->execute_script(q{
+    return document.querySelector(
+      'input[type="checkbox"][name="groups"][value="QA-Selenium-TEST"]'
+    ).disabled;
+  }),
   "QA-Selenium-TEST group not editable"
 );
 ok(
