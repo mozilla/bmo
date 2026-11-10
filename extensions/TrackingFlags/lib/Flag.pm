@@ -89,6 +89,7 @@ sub new {
   # loads all of them) instead of running a query for every lookup.
   if ( ref $param eq 'HASH'
     && defined $param->{name}
+    && !defined $param->{id}
     && !exists $param->{condition}
     && exists $cache->{'tracking_flags'})
   {
