@@ -53,5 +53,7 @@ $sel->driver->execute_script('
 ');
 $sel->click_ok('//a[@data-product="QA-Selenium-TEST"]',
   undef, "Choose QA-Selenium-TEST product");
+ok(wait_for_js($sel, 'return !document.querySelector("#submit-button").disabled'),
+  "Product details are loaded");
 $sel->is_text_present_ok("Product: QA-Selenium-TEST");
 logout($sel);
