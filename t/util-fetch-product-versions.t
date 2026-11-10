@@ -12,7 +12,7 @@ use lib qw( . lib local/lib/perl5 );
 
 BEGIN { $ENV{LOG4PERL_CONFIG_FILE} = 'log4perl-t.conf' }
 
-use Bugzilla::Test::MockLocalconfig ();
+use Bugzilla::Test::MockLocalconfig;
 use Bugzilla;
 use Bugzilla::Memcached;
 use Bugzilla::Util qw(fetch_product_versions);
