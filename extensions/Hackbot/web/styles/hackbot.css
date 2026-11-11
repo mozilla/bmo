@@ -42,7 +42,7 @@
   content: '\e65f';
 }
 
-@media screen and (width < 768px) {
+@media screen and (max-width: 799px) {
   .hackbot-meta {
     justify-content: center;
     flex-wrap: wrap;
