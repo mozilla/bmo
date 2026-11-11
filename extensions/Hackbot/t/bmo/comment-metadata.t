@@ -42,7 +42,7 @@ use Test::Mojo;
 # request, so set them there, and put them back afterwards. Bugmail is sent
 # while the comment is posted and written to a file, so it can be read here.
 my %original_params = map { $_ => Bugzilla->params->{$_} // '' }
-  qw(hackbot_user use_mailer_queue mail_delivery_method);
+  qw(hackbot_user use_mailer_queue mail_delivery_method edit_comments_admins_group);
 
 sub set_params {
   my (%params) = @_;
@@ -205,6 +205,17 @@ $comment->update_text({
 });
 is($comment->hackbot,   undef, 'a removed block leaves no metadata');
 is($comment->body_full, 'Edited, with no block.', '... and the text is whole');
+
+# Saving an inline edit returns the HTML the page shows, without the block.
+# Admins edit other people's comments as edit-comments admins.
+set_params(edit_comments_admins_group => 'admin');
+my $edited   = post_comment($hackbot, "$block$text");
+my $edit_url = '/rest/editcomments/comment/' . $edited->id;
+$t->put_ok($edit_url => api_headers($admin) => json =>
+    {new_comment => "${block}Edited text."})->status_is(200);
+my $edit_html = $t->tx->res->json('/html');
+unlike($edit_html, qr/hackbot:|run: abc-123/, 'the edit response has no block');
+like($edit_html, qr/Edited text\./, '... and has the new text');
 
 # Anyone can type the block.
 my $forged = post_comment($other, "$block$text");
