@@ -1051,6 +1051,12 @@ sub _get_diffs {
     = Bugzilla::FlagActivity->bugs_activity_before_cutoff_sql('bugs_activity');
   my $flag_last    = Bugzilla::FlagActivity->last_of_request_sql('fsa');
   my $flag_prev_id = Bugzilla::FlagActivity->previous_id_sql('fsa');
+  my $flag_old_req
+    = $dbh->sql_string_concat('ft.name', q{'?('}, 'preq.login_name', q{')'});
+  my $flag_old = $dbh->sql_string_concat('ft.name', 'prev.status');
+  my $flag_new_req
+    = $dbh->sql_string_concat('ft.name', q{'?('}, 'req.login_name', q{')'});
+  my $flag_new = $dbh->sql_string_concat('ft.name', 'fsa.status');
 
   # If lastdiffed is NULL, then we don't limit the search on time.
   my $when_restriction      = '';
@@ -1080,13 +1086,13 @@ sub _get_diffs {
                fsa.flag_when AS bug_when,
                CASE WHEN prev.id IS NULL THEN ''
                     WHEN prev.status = '?' AND preq.login_name IS NOT NULL
-                         THEN CONCAT(ft.name, '?(', preq.login_name, ')')
-                    ELSE CONCAT(ft.name, prev.status)
+                         THEN $flag_old_req
+                    ELSE $flag_old
                END AS old,
                CASE WHEN fsa.status = 'X' THEN ''
                     WHEN fsa.status = '?' AND req.login_name IS NOT NULL
-                         THEN CONCAT(ft.name, '?(', req.login_name, ')')
-                    ELSE CONCAT(ft.name, fsa.status)
+                         THEN $flag_new_req
+                    ELSE $flag_new
                END AS new,
                fsa.attachment_id AS attach_id,
                NULL AS comment_id,
