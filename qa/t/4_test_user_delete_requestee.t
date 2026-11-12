@@ -24,11 +24,13 @@ set_parameters($sel,
 # flag_activity.requestee_id keeps a user from being deleted, so the
 # confirmation page must not offer it.
 my $dbh = Bugzilla->dbh;
-$dbh->do("INSERT INTO profiles (login_name, realname, cryptpassword)
-          VALUES ('requestee\@selenium.bugzilla.org', 'Requestee', '*')");
+$dbh->do(
+  "INSERT INTO profiles (login_name, realname, cryptpassword)
+          VALUES ('requestee\@selenium.bugzilla.org', 'Requestee', '*')"
+);
 my $user_id = $dbh->bz_last_key('profiles', 'userid');
-my ($admin_id) = $dbh->selectrow_array(
-  'SELECT userid FROM profiles WHERE login_name = ?',
+my ($admin_id)
+  = $dbh->selectrow_array('SELECT userid FROM profiles WHERE login_name = ?',
   undef, $config->{admin_user_login});
 my ($bug_id)  = $dbh->selectrow_array('SELECT MIN(bug_id) FROM bugs');
 my ($type_id) = $dbh->selectrow_array('SELECT MIN(id) FROM flagtypes');
@@ -40,14 +42,15 @@ $dbh->do(
 );
 
 # The page has its verdict only if there is also something safe to report.
-$dbh->do('INSERT INTO cc (bug_id, who) VALUES (?, ?)', undef, $bug_id, $user_id);
+$dbh->do('INSERT INTO cc (bug_id, who) VALUES (?, ?)', undef, $bug_id,
+  $user_id);
 
 $sel->open_ok("/editusers.cgi?action=del&userid=$user_id");
 $sel->is_text_present_ok('named in the flag history');
 $sel->is_text_present_ok('You cannot delete this user account');
 
-$dbh->do('DELETE FROM cc WHERE who = ?', undef, $user_id);
+$dbh->do('DELETE FROM cc WHERE who = ?',                     undef, $user_id);
 $dbh->do('DELETE FROM flag_activity WHERE requestee_id = ?', undef, $user_id);
-$dbh->do('DELETE FROM profiles WHERE userid = ?', undef, $user_id);
+$dbh->do('DELETE FROM profiles WHERE userid = ?',            undef, $user_id);
 
 logout($sel);

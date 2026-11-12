@@ -100,12 +100,12 @@ sub find_activity_id_for_flag {
   my $stream  = $self->activity_stream;
 
   if (!exists $self->{activity_cache}->{flag}->{$flag_id}) {
+
     # flag_activity records each change against the flag's object id, so we
     # can look up the exact timestamp without relying on flag-type name matching.
     my ($flag_when, $who) = Bugzilla->dbh->selectrow_array(
       "SELECT flag_when, who FROM flag_activity WHERE flag_id = ?
-       ORDER BY id DESC LIMIT 1",
-      undef, $flag_id
+       ORDER BY id DESC LIMIT 1", undef, $flag_id
     );
 
     # flag_activity only logged review, feedback and needinfo before, so other
@@ -117,15 +117,12 @@ sub find_activity_id_for_flag {
         = ($flag->modification_date, $flag->setter->id, $flag->type->name);
     }
 
-    SEARCH: foreach my $change_set (reverse @$stream) {
+  SEARCH: foreach my $change_set (reverse @$stream) {
       foreach my $activity (@{$change_set->{activity}}) {
-        next
-          unless $activity->{who}->id == $who && $activity->{when} eq $flag_when;
+        next unless $activity->{who}->id == $who && $activity->{when} eq $flag_when;
         foreach my $change (@{$activity->{changes}}) {
           next unless $change->{fieldname} eq 'flagtypes.name';
-          next
-            if defined $flagtype_name
-            && $change->{flagtype_name} ne $flagtype_name;
+          next if defined $flagtype_name && $change->{flagtype_name} ne $flagtype_name;
           $self->{activity_cache}->{flag}->{$flag_id} = $change_set->{id};
           last SEARCH;
         }
@@ -217,8 +214,7 @@ sub _add_activities_to_stream {
     : Bugzilla::Bug::GetBugActivity($bug->id);
 
   # allow other extensions to alter history
-  Bugzilla::Hook::process('inline_history_activity',
-    {activity => $raw_activity});
+  Bugzilla::Hook::process('inline_history_activity', {activity => $raw_activity});
 
   my %attachment_cache;
   foreach my $attachment (@{$bug->attachments}) {
@@ -262,7 +258,7 @@ sub _add_activities_to_stream {
       my $column = $dbh->bz_column_info($table, $field);
       if ($column && $column->{TYPE} eq 'BOOLEAN') {
         $change->{removed} = '';
-        $change->{added} = $change->{added} ? 'true' : 'false';
+        $change->{added}   = $change->{added} ? 'true' : 'false';
       }
 
       # load field object (only required for custom fields), and set the
@@ -274,7 +270,8 @@ sub _add_activities_to_stream {
       }
 
       # identify buglist changes
-      if ($change->{fieldname} =~ /^(?:dependson|blocked|regress(?:ed_by|es)|dup_id|duplicates)$/
+      if ($change->{fieldname}
+        =~ /^(?:dependson|blocked|regress(?:ed_by|es)|dup_id|duplicates)$/
         || ($field_obj && $field_obj->type == FIELD_TYPE_BUG_ID))
       {
         $change->{buglist} = 1;

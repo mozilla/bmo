@@ -119,8 +119,7 @@ EOF
 EOF
 
   # bugs touched
-  my $flag_newer
-    = Bugzilla::FlagActivity->after_cutoff_sql('flag_activity');
+  my $flag_newer = Bugzilla::FlagActivity->after_cutoff_sql('flag_activity');
   _update_statistics($statistics, 'touched', [($user_id) x 3], <<EOF);
     SELECT COUNT(*) FROM (
         SELECT bugs_activity.bug_id
@@ -209,8 +208,7 @@ sub last_user_activity {
 
   # last comment, or change to a bug (excluding CC changes) or to its flags
   my ($user_id) = @_;
-  my $flag_newer
-    = Bugzilla::FlagActivity->after_cutoff_sql('flag_activity');
+  my $flag_newer = Bugzilla::FlagActivity->after_cutoff_sql('flag_activity');
   return Bugzilla->dbh->selectrow_array(
     <<EOF, undef, $user_id, $user_id, _field_id('cc'), $user_id);
     SELECT MAX(bug_when)
@@ -300,8 +298,8 @@ sub _activity_by_product {
   my %products;
 
   # changes, without the flag changes after the cutoff, counted below
-  my $before = Bugzilla::FlagActivity->bugs_activity_before_cutoff_sql(
-    'bugs_activity');
+  my $before
+    = Bugzilla::FlagActivity->bugs_activity_before_cutoff_sql('bugs_activity');
   my $rows = $dbh->selectall_arrayref(<<EOF, {Slice => {}}, $user_id);
     SELECT products.name AS product, count(*) AS count
       FROM bugs_activity
@@ -404,7 +402,7 @@ sub _set_stats {
     if ($statistics->{$name}->{id}) {
       $dbh->do(
         "UPDATE $table SET count = ? WHERE user_id = ? AND $name_field = ?",
-        undef, $statistics->{$name}->{count},
+        undef,    $statistics->{$name}->{count},
         $user_id, $name,
       );
     }

@@ -16,7 +16,7 @@ use warnings;
 
 use Bugzilla::Constants;
 use Bugzilla::Hook;
-use Bugzilla::Install ();
+use Bugzilla::Install       ();
 use Bugzilla::Install::Util qw(indicate_progress install_string);
 use Bugzilla::Util;
 use Bugzilla::Series;
@@ -72,8 +72,10 @@ sub update_fielddefs_definition {
   # If the largest fielddefs sortkey is less than 100, then
   # we're using the old sorting system, and we should convert
   # it to the new one before adding any new definitions.
-  if (!$dbh->selectrow_arrayref(
-    'SELECT COUNT(id) FROM fielddefs WHERE sortkey >= 100'))
+  if (
+    !$dbh->selectrow_arrayref(
+      'SELECT COUNT(id) FROM fielddefs WHERE sortkey >= 100')
+    )
   {
     print "Updating the sortkeys for the fielddefs table...\n";
     my $field_ids
@@ -754,8 +756,7 @@ sub update_table_definitions {
   $dbh->bz_add_column('profiles', 'password_change_reason',
     {TYPE => 'varchar(64)'});
 
-  $dbh->bz_add_column('profiles', 'mfa',
-    {TYPE => 'varchar(8)',, DEFAULT => "''"});
+  $dbh->bz_add_column('profiles', 'mfa', {TYPE => 'varchar(8)', DEFAULT => "''"});
 
   $dbh->bz_add_column('profiles', 'mfa_required_date', {TYPE => 'DATETIME'});
 
@@ -790,7 +791,7 @@ sub update_table_definitions {
     {TYPE => 'MEDIUMTEXT'});
 
   # Bug 1522341, 1541617, 1546788 - kohei.yoshino@gmail.com
-  $dbh->bz_add_column('bugs', 'bug_type', {TYPE => 'varchar(20)'});
+  $dbh->bz_add_column('bugs',       'bug_type',         {TYPE => 'varchar(20)'});
   $dbh->bz_add_column('components', 'default_bug_type', {TYPE => 'varchar(20)'});
   $dbh->bz_add_column('products',   'default_bug_type', {TYPE => 'varchar(20)'});
   $dbh->bz_alter_column('bugs', 'bug_type',
@@ -806,7 +807,8 @@ sub update_table_definitions {
   _populate_api_keys_creation_ts();
 
   # Bug 1612290 - dkl@mozilla.com
-  $dbh->bz_add_column('profiles', 'bounce_count', {TYPE => 'INT1', NOTNULL => 1, DEFAULT => 0});
+  $dbh->bz_add_column('profiles', 'bounce_count',
+    {TYPE => 'INT1', NOTNULL => 1, DEFAULT => 0});
 
   # Bug 1588221 - dkl@mozilla.com
   $dbh->bz_alter_column('bugs_activity', 'attach_id', {TYPE => 'INT5'});
@@ -814,8 +816,9 @@ sub update_table_definitions {
     {TYPE => 'BIGSERIAL', NOTNULL => 1, PRIMARYKEY => 1});
   $dbh->bz_alter_column('attach_data', 'id',
     {TYPE => 'INT5', NOTNULL => 1, PRIMARYKEY => 1});
-  $dbh->bz_alter_column('flags',            'attach_id', {TYPE => 'INT5'});
-  $dbh->bz_alter_column('user_request_log', 'attach_id', {TYPE => 'INT5', NOTNULL => 0});
+  $dbh->bz_alter_column('flags', 'attach_id', {TYPE => 'INT5'});
+  $dbh->bz_alter_column('user_request_log', 'attach_id',
+    {TYPE => 'INT5', NOTNULL => 0});
   _populate_attachment_storage_class();
 
   # Bug 1682404 - dkl@mozilla.com
@@ -823,7 +826,7 @@ sub update_table_definitions {
     {TYPE => 'varchar(255)', NOTNULL => 1, DEFAULT => "'Mozilla'"});
 
   # Bug 1697642 - dkl@mozilla.com
-  $dbh->bz_add_column('logincookies', 'auth_method',{TYPE => 'varchar(40)'});
+  $dbh->bz_add_column('logincookies', 'auth_method', {TYPE => 'varchar(40)'});
 
   # Bug 1761594 - dkl@mozilla.com
   $dbh->bz_add_column('oauth2_client', 'hostname',
@@ -2111,7 +2114,7 @@ sub _convert_attachment_statuses_to_flags {
       while (($added, $who, $when) = $sth2->fetchrow_array()) {
         last if $added =~ /(^|[, ]+)\Q$status\E([, ]+|$)/;
       }
-      $who = $dbh->quote($who);    # "NULL" by default if $who is undefined
+      $who  = $dbh->quote($who);                      # "NULL" by default if $who is undefined
       $when = $when ? $dbh->quote($when) : "NOW()";
 
 
@@ -2383,7 +2386,7 @@ sub _copy_old_charts_into_database {
       # We also add a new query for "Open", so that migrated products get
       # the same set as new products (see editproducts.cgi.)
       my @openedstatuses = ("UNCONFIRMED", "NEW", "ASSIGNED", "REOPENED");
-      my $query = join("&", map {"bug_status=$_"} @openedstatuses);
+      my $query          = join("&", map {"bug_status=$_"} @openedstatuses);
       my $series
         = new Bugzilla::Series(undef, $product, $all_name, $open_name, undef, 1,
         $query_prod . $query, 1);
@@ -2794,7 +2797,7 @@ sub _change_all_mysql_booleans_to_tinyint {
     my $quip_info_sth = $dbh->column_info(undef, undef, 'quips', '%');
     my $quips_cols    = $quip_info_sth->fetchall_hashref("COLUMN_NAME");
     my $approved_col  = $quips_cols->{'approved'};
-    if ($approved_col->{TYPE_NAME} eq 'TINYINT'
+    if (  $approved_col->{TYPE_NAME} eq 'TINYINT'
       and defined $approved_col->{COLUMN_SIZE}
       and $approved_col->{COLUMN_SIZE} == 1)
     {
@@ -2883,9 +2886,11 @@ sub _fix_attachments_submitter_id_idx {
   if (
     $dbh->bz_index_info('attachments', 'attachments_submitter_id_idx')
     && (
-      scalar(@{
-        $dbh->bz_index_info('attachments', 'attachments_submitter_id_idx')->{FIELDS}
-      }) < 2
+      scalar(
+        @{
+          $dbh->bz_index_info('attachments', 'attachments_submitter_id_idx')->{FIELDS}
+        }
+      ) < 2
     )
     )
   {
@@ -3788,7 +3793,7 @@ sub _set_attachment_comment_type {
     my $text = $comments{$id};
     next if $text !~ /^\Q$string\E(\d+)/;
     my $attachment_id = $1;
-    my @lines = split("\n", $text);
+    my @lines         = split("\n", $text);
     if ($type == CMT_ATTACHMENT_CREATED) {
 
       # Now we have to remove the text up until we find a line that's
@@ -3857,7 +3862,7 @@ sub _convert_flagtypes_fks_to_set_null {
 }
 
 sub _fix_decimal_types {
-  my $dbh = Bugzilla->dbh;
+  my $dbh  = Bugzilla->dbh;
   my $type = {TYPE => 'decimal(7,2)', NOTNULL => 1, DEFAULT => '0'};
   $dbh->bz_alter_column('bugs',      'estimated_time', $type);
   $dbh->bz_alter_column('bugs',      'remaining_time', $type);
@@ -3866,7 +3871,7 @@ sub _fix_decimal_types {
 
 sub _fix_series_creator_fk {
   my $dbh = Bugzilla->dbh;
-  my $fk = $dbh->bz_fk_info('series', 'creator');
+  my $fk  = $dbh->bz_fk_info('series', 'creator');
   if ($fk and $fk->{DELETE} eq 'SET NULL') {
     $fk->{DELETE} = 'CASCADE';
     $dbh->bz_alter_fk('series', 'creator', $fk);
@@ -4023,7 +4028,7 @@ sub _migrate_user_tags {
 
     indicate_progress({current => ++$current, total => $total, every => 25});
 
-    my $uri = URI->new("buglist.cgi?$query", 'http');
+    my $uri         = URI->new("buglist.cgi?$query", 'http');
     my $bug_id_list = $uri->query_param_delete('bug_id');
     if (!$bug_id_list) {
       warn "No bug_id param for tag $name from user $user_id: $query";
@@ -4120,7 +4125,7 @@ sub _rename_tags_to_tag {
 
 sub _on_delete_set_null_for_audit_log_userid {
   my $dbh = Bugzilla->dbh;
-  my $fk = $dbh->bz_fk_info('audit_log', 'user_id');
+  my $fk  = $dbh->bz_fk_info('audit_log', 'user_id');
   if ($fk and !defined $fk->{DELETE}) {
     $fk->{DELETE} = 'SET NULL';
     $dbh->bz_alter_fk('audit_log', 'user_id', $fk);
@@ -4191,7 +4196,7 @@ sub _fix_dependencies_dupes {
 sub _fix_flagclusions_indexes {
   my $dbh = Bugzilla->dbh;
   foreach my $table ('flaginclusions', 'flagexclusions') {
-    my $index = $table . '_type_id_idx';
+    my $index    = $table . '_type_id_idx';
     my $idx_info = $dbh->bz_index_info($table, $index);
     if ($idx_info && $idx_info->{'TYPE'} ne 'UNIQUE') {
 
@@ -4307,14 +4312,11 @@ sub _populate_oauth2_scopes {
   # if there are no scopes, then we're creating a database from scratch
   my ($scope_count) = $dbh->selectrow_array('SELECT COUNT(*) FROM oauth2_scope');
   if (!$scope_count) {
-    $dbh->do(
-      "INSERT INTO oauth2_scope (id, name, description) VALUES " .
-      "(1, 'user:read', 'View basic account information such as email address.')"
+    $dbh->do("INSERT INTO oauth2_scope (id, name, description) VALUES "
+        . "(1, 'user:read', 'View basic account information such as email address.')"
     );
-    $dbh->do(
-      "INSERT INTO oauth2_scope (id, name, description) VALUES " .
-      "(2, 'api:modify', 'Read and modify data in Bugzilla using the Web API.')"
-    );
+    $dbh->do("INSERT INTO oauth2_scope (id, name, description) VALUES "
+        . "(2, 'api:modify', 'Read and modify data in Bugzilla using the Web API.')");
   }
 
   # Bug 1658317 - dkl@mozilla - Update column names if this is an existing DB
@@ -4332,7 +4334,9 @@ sub _populate_oauth2_scopes {
   }
 
   # Bug 1670319 - dkl@mozilla.com - Add new api:modify scope to scope list
-  my ($scope_found) = $dbh->selectrow_array("SELECT 1 FROM oauth2_scope WHERE name = 'api:modify'");
+  my ($scope_found)
+    = $dbh->selectrow_array(
+    "SELECT 1 FROM oauth2_scope WHERE name = 'api:modify'");
   if (!$scope_found) {
     $dbh->do("INSERT INTO oauth2_scope (name, description) VALUES "
         . "('api:modify', 'Read and modify data in Bugzilla using the Web API.')");
@@ -4407,7 +4411,9 @@ sub _populate_api_keys_creation_ts {
 
   # We do not have a way to tell when an API key was originally created
   # so we use the last_used timestamp as the initial creation value.
-  $dbh->do('UPDATE user_api_keys SET creation_ts = COALESCE(last_used, LOCALTIMESTAMP(0))');
+  $dbh->do(
+    'UPDATE user_api_keys SET creation_ts = COALESCE(last_used, LOCALTIMESTAMP(0))'
+  );
 
   $dbh->bz_alter_column('user_api_keys', 'creation_ts',
     {TYPE => 'DATETIME', NOTNULL => 1});
@@ -4424,13 +4430,15 @@ sub _add_products_default_version {
   # Import the alphabetically last version for each product as the product's
   # default version, just like the Enter Bug page selecting the last one by
   # default before this migration.
-  my $sth = $dbh->prepare('SELECT product_id, MAX(value) AS version
-    FROM versions GROUP BY product_id HAVING version != "unspecified"');
+  my $sth = $dbh->prepare(
+    'SELECT product_id, MAX(value) AS version
+    FROM versions GROUP BY product_id HAVING version != "unspecified"'
+  );
   $sth->execute();
 
   while (my ($product_id, $version) = $sth->fetchrow_array()) {
-    $dbh->do('UPDATE products SET default_version = ? WHERE id = ?', undef,
-      ($version, $product_id));
+    $dbh->do('UPDATE products SET default_version = ? WHERE id = ?',
+      undef, ($version, $product_id));
   }
 }
 
@@ -4438,7 +4446,8 @@ sub _populate_attachment_storage_class {
   my $dbh = Bugzilla->dbh;
 
   # Return if we have already made these changes
-  my $count = $dbh->selectrow_array('SELECT COUNT(id) FROM attachment_storage_class');
+  my $count
+    = $dbh->selectrow_array('SELECT COUNT(id) FROM attachment_storage_class');
   if (!$count) {
     $dbh->do(
       "INSERT INTO attachment_storage_class (id, storage_class) SELECT attachments.attach_id, 'database' FROM attachments ORDER BY attachments.attach_id"
@@ -4513,11 +4522,13 @@ sub _migrate_profiles_modification_ts {
     }
 
     my $modification_ts = 0;
+
     # IF we could not find anything then use todays date
     if (!$audit_log_when && !$profiles_act_when && !$creation_when) {
       $modification_ts = $now_when;
     }
-    # We used unix timestamps to make value comparison easier without using DateTime instance of each.
+
+# We used unix timestamps to make value comparison easier without using DateTime instance of each.
     else {
       $modification_ts = max($audit_log_when, $profiles_act_when, $creation_when);
     }
@@ -4580,8 +4591,8 @@ sub _add_flag_activity_start_rows {
          FROM flags
         WHERE id > ? AND id <= ?
               AND NOT EXISTS (SELECT 1 FROM flag_activity
-                               WHERE flag_activity.flag_id = flags.id)',
-      undef, $from, $from + $batch_size
+                               WHERE flag_activity.flag_id = flags.id)', undef,
+      $from, $from + $batch_size
     );
   }
   print "Added a flag_activity row for $added flags.\n" if $added > 0;
@@ -4617,12 +4628,15 @@ sub _set_flag_activity_who_not_null {
   # MySQL can't make a column of a foreign key NOT NULL. Drop the key:
   # bz_setup_foreign_keys adds it back at the end of checksetup.
   $dbh->bz_drop_fk('flag_activity', 'who');
-  $dbh->bz_alter_column('flag_activity', 'who',
+  $dbh->bz_alter_column(
+    'flag_activity',
+    'who',
     {
-    TYPE       => 'INT3',
-    NOTNULL    => 1,
-    REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}
-    });
+      TYPE       => 'INT3',
+      NOTNULL    => 1,
+      REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}
+    }
+  );
 }
 
 sub _remove_duo_recovery_codes {

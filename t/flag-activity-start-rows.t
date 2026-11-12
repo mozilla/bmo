@@ -75,7 +75,8 @@ add_start_rows() for 1 .. 2;
 set_flag_activity_cutoff('2099-01-01 10:30:00');
 is(
   scalar $dbh->selectrow_array(
-    'SELECT COUNT(*) FROM flag_activity WHERE flag_id = ?', undef, $flag->id
+    'SELECT COUNT(*) FROM flag_activity WHERE flag_id = ?',
+    undef, $flag->id
   ),
   1,
   'one starting row, however many times checksetup runs'
@@ -87,7 +88,8 @@ sub flag_history {
     map {
       my $when = $_->{when};
       map {"$when: $_->{removed} -> $_->{added}"}
-        grep { $_->{fieldname} eq 'flagtypes.name' } @{$_->{changes}}
+        grep { $_->{fieldname} eq 'flagtypes.name' }
+        @{$_->{changes}}
     } @$activity
   ];
 }
@@ -116,7 +118,8 @@ $bug = Bugzilla::Bug->new($bug_id);
 $bug->set_flags([],
   [{type_id => $needinfo_id, status => '?', requestee => 'bob@bmo.test'}]);
 $bug->update('2099-01-01 12:00:00');
-my ($undated) = grep { $_->status eq '?' } @{Bugzilla::Bug->new($bug_id)->flags};
+my ($undated)
+  = grep { $_->status eq '?' } @{Bugzilla::Bug->new($bug_id)->flags};
 $dbh->do('DELETE FROM flag_activity WHERE flag_id = ?', undef, $undated->id);
 $dbh->do('UPDATE flags SET modification_date = NULL WHERE id = ?',
   undef, $undated->id);
@@ -124,10 +127,12 @@ $dbh->do('UPDATE flags SET modification_date = NULL WHERE id = ?',
 add_start_rows();
 is(
   scalar $dbh->selectrow_array(
-    'SELECT flag_when FROM flag_activity WHERE flag_id = ?', undef, $undated->id
+    'SELECT flag_when FROM flag_activity WHERE flag_id = ?',
+    undef, $undated->id
   ),
   scalar $dbh->selectrow_array(
-    'SELECT creation_date FROM flags WHERE id = ?', undef, $undated->id
+    'SELECT creation_date FROM flags WHERE id = ?',
+    undef, $undated->id
   ),
   'a flag without a modification date is dated at its creation'
 );
@@ -137,7 +142,8 @@ $dbh->do('DELETE FROM flag_activity WHERE flag_id = ?', undef, $undated->id);
 Bugzilla::Install::DB::_add_flag_activity_start_rows();
 is(
   scalar $dbh->selectrow_array(
-    'SELECT COUNT(*) FROM flag_activity WHERE flag_id = ?', undef, $undated->id
+    'SELECT COUNT(*) FROM flag_activity WHERE flag_id = ?',
+    undef, $undated->id
   ),
   0,
   'the start rows are only added once'

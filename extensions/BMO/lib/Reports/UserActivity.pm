@@ -25,12 +25,12 @@ sub report {
 
   my @who    = ();
   my $from   = trim($input->{'from'} || '');
-  my $to     = trim($input->{'to'} || '');
+  my $to     = trim($input->{'to'}   || '');
   my $action = $input->{'action'} || '';
 
   # fix non-breaking hyphens
   $from =~ s/\N{U+2011}/-/g;
-  $to =~ s/\N{U+2011}/-/g;
+  $to   =~ s/\N{U+2011}/-/g;
 
   if ($from eq '') {
     my $dt = DateTime->now()->subtract('weeks' => 1);
@@ -117,18 +117,19 @@ sub report {
     # Flag changes are in flag_activity, older ones in bugs_activity. CHAR(63)
     # is a question mark: a literal one would be taken for a placeholder by
     # the debug output below.
-    my $flag_newer   = Bugzilla::FlagActivity->after_cutoff_sql('fsa');
+    my $flag_newer = Bugzilla::FlagActivity->after_cutoff_sql('fsa');
     my $ba_before_cutoff
       = Bugzilla::FlagActivity->bugs_activity_before_cutoff_sql('bugs_activity');
-    my $flag_last    = Bugzilla::FlagActivity->last_of_request_sql('fsa');
-    my $flag_prev_id = Bugzilla::FlagActivity->previous_id_sql('fsa');
-    my $flag_removed_req = $dbh->sql_string_concat('ft.name', 'prev.status',
-      q{'('}, 'preq.login_name', q{')'});
+    my $flag_last        = Bugzilla::FlagActivity->last_of_request_sql('fsa');
+    my $flag_prev_id     = Bugzilla::FlagActivity->previous_id_sql('fsa');
+    my $flag_removed_req = $dbh->sql_string_concat('ft.name', 'prev.status', q{'('},
+      'preq.login_name', q{')'});
     my $flag_removed = $dbh->sql_string_concat('ft.name', 'prev.status');
-    my $flag_added_req = $dbh->sql_string_concat('ft.name', 'fsa.status',
-      q{'('}, 'req.login_name', q{')'});
+    my $flag_added_req
+      = $dbh->sql_string_concat('ft.name', 'fsa.status', q{'('}, 'req.login_name',
+      q{')'});
     my $flag_added = $dbh->sql_string_concat('ft.name', 'fsa.status');
-    my $query = "
+    my $query      = "
         SELECT
                    fielddefs.name,
                    bugs_activity.bug_id,
@@ -160,8 +161,7 @@ sub report {
                    fsa.bug_id,
                    fsa.attachment_id AS attach_id,
                    "
-      . $dbh->sql_date_format('fsa.flag_when', '%Y-%m-%d %H:%i:%s')
-      . " AS ts,
+      . $dbh->sql_date_format('fsa.flag_when', '%Y-%m-%d %H:%i:%s') . " AS ts,
                    CASE WHEN prev.id IS NULL THEN ''
                         WHEN prev.status = CHAR(63) AND preq.login_name IS NOT NULL
                              THEN $flag_removed_req

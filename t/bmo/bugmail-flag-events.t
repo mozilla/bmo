@@ -90,7 +90,7 @@ sub add_activity {
     'INSERT INTO flag_activity (flag_when, type_id, flag_id, setter_id, who,
                                 requestee_id, bug_id, attachment_id, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', undef, $when,
-    $extra{type_id} // $type_id, $flag_id, $setter->id, $setter->id,
+    $extra{type_id} // $type_id,         $flag_id, $setter->id, $setter->id,
     $requestee ? $requestee->id : undef, $bug->id, $extra{attachment_id}, $status
   );
 }
@@ -100,8 +100,8 @@ sub add_activity {
 sub flag_type {
   my ($name, $target_type, @cc) = @_;
   my ($id)
-    = $dbh->selectrow_array('SELECT id FROM flagtypes WHERE name = ?',
-    undef, $name);
+    = $dbh->selectrow_array('SELECT id FROM flagtypes WHERE name = ?', undef,
+    $name);
   return $id if $id;
   $dbh->do(
     'INSERT INTO flagtypes (name, description, cc_list, target_type,
@@ -165,13 +165,15 @@ sub sent_mails {
     = map { $next_flag_id++ } 1 .. 6;
 
   # Before the window.
-  add_activity($bug, $granted,   '1999-12-31 23:00:00', '?', $requester, $requestee);
+  add_activity($bug, $granted, '1999-12-31 23:00:00', '?', $requester,
+    $requestee);
   add_activity($bug, $regranted, '1999-12-31 23:00:00', '+', $requestee);
 
   # In the window.
-  add_activity($bug, $asked,        '2000-01-01 00:00:10', '?', $requester, $requestee);
-  add_activity($bug, $granted,      '2000-01-01 00:00:20', '+', $requestee);
-  add_activity($bug, $auto_cleared, '2000-01-01 00:00:30', '?', $requester, $requestee);
+  add_activity($bug, $asked, '2000-01-01 00:00:10', '?', $requester, $requestee);
+  add_activity($bug, $granted, '2000-01-01 00:00:20', '+', $requestee);
+  add_activity($bug, $auto_cleared, '2000-01-01 00:00:30',
+    '?', $requester, $requestee);
   add_activity($bug, $auto_cleared, '2000-01-01 00:00:30', 'X', $requestee);
   add_activity($bug, $regranted,    '2000-01-01 00:00:40', 'X', $requester);
   add_activity($bug, $no_requestee, '2000-01-01 00:00:50', '?', $requester);
@@ -186,16 +188,20 @@ sub sent_mails {
   is_deeply(
     [map { [$_->{action}, $_->{status}] } @events],
     [
-      ['requested', '?'], ['answered', '+'], ['requested', '?'],
-      ['answered',  'X'], ['set',      'X'], ['set',       '?'],
+      ['requested', '?'],
+      ['answered',  '+'],
+      ['requested', '?'],
+      ['answered',  'X'],
+      ['set',       'X'],
+      ['set',       '?'],
     ],
     'one event per in-window row, classified'
   );
   is($events[0]{requestee_id}, $requestee->id, 'a request carries its requestee');
-  is($events[1]{requester_id}, $requester->id,
-    "an answer finds its requester from a '?' before the window");
-  is($events[3]{requester_id}, $requester->id,
-    "an 'X' auto-clear in the same second as its '?' is an answer");
+  is($events[1]{requester_id},
+    $requester->id, "an answer finds its requester from a '?' before the window");
+  is($events[3]{requester_id},
+    $requester->id, "an 'X' auto-clear in the same second as its '?' is an answer");
   ok(!$events[4]{requester_id},
     'clearing an already granted flag has no requester to notify');
 }
@@ -203,26 +209,29 @@ sub sent_mails {
 # Send: a request reaches the requestee and the flag type cc_list only.
 {
   my $bug = new_bug();
-  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
-    $requestee);
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10',
+    '?', $requester, $requestee);
   my $sent = sent_to($bug, $requester);
 
   ok($sent->{$requestee->login}, 'requestee with no role on the bug is mailed');
   ok($sent->{$type_cc->login},   'flag type cc_list account is mailed');
-  ok(!$sent->{$requester->login}, 'requester is not mailed about their own request');
-  ok(!$sent->{$stranger->login},  'unrelated user is not mailed');
+  ok(!$sent->{$requester->login},
+    'requester is not mailed about their own request');
+  ok(!$sent->{$stranger->login}, 'unrelated user is not mailed');
 }
 
 # Send: an answer reaches the requester, not the person who answered.
 {
   my $bug     = new_bug();
   my $flag_id = $next_flag_id++;
-  add_activity($bug, $flag_id, '1999-12-31 23:00:00', '?', $requester, $requestee);
+  add_activity($bug, $flag_id, '1999-12-31 23:00:00', '?', $requester,
+    $requestee);
   add_activity($bug, $flag_id, '2000-01-01 00:00:10', '+', $requestee);
   my $sent = sent_to($bug, $requestee);
 
   ok($sent->{$requester->login}, 'requester is told their request was answered');
-  ok(!$sent->{$requestee->login}, 'answerer is not mailed about their own answer');
+  ok(!$sent->{$requestee->login},
+    'answerer is not mailed about their own answer');
 }
 
 # An answer to a flag re-requested by someone else goes to the latest
@@ -231,20 +240,20 @@ my $requester2 = create_user('flagmail-requester2@mozilla.example', '*');
 foreach my $later_first (0, 1) {
   my $bug     = new_bug();
   my $flag_id = $next_flag_id++;
-  my @asks    = (
-    ['1999-12-31 23:00:00', $requester],
-    ['1999-12-31 23:30:00', $requester2],
-  );
+  my @asks
+    = (['1999-12-31 23:00:00', $requester], ['1999-12-31 23:30:00', $requester2],
+    );
   @asks = reverse @asks if $later_first;
   add_activity($bug, $flag_id, $_->[0], '?', $_->[1], $requestee) for @asks;
   add_activity($bug, $flag_id, '2000-01-01 00:00:10', '+', $requestee);
 
-  my $order = $later_first ? 'later request inserted first' : 'inserted in time order';
+  my $order
+    = $later_first ? 'later request inserted first' : 'inserted in time order';
   my @events
     = Bugzilla::BugMail::_get_flag_mail_events($bug, $window_start, $window_end,
     {});
-  is($events[0]{requester_id}, $requester2->id,
-    "an answer goes to the latest requester ($order)");
+  is($events[0]{requester_id},
+    $requester2->id, "an answer goes to the latest requester ($order)");
 
   my $sent = sent_to($bug, $requestee);
   ok($sent->{$requester2->login}, "the latest requester is mailed ($order)");
@@ -255,52 +264,63 @@ foreach my $later_first (0, 1) {
 # old flag mail had, whether the flag was requested or answered.
 {
   my $bug = new_bug();
-  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
-    $requestee);
-  my ($mail) = grep { $_->{to_user}->id == $requestee->id }
-    sent_mails($bug, $requester);
-  is($mail->{bugmailtype}, 'changed request', 'a request is marked as request mail');
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10',
+    '?', $requester, $requestee);
+  my ($mail)
+    = grep { $_->{to_user}->id == $requestee->id } sent_mails($bug, $requester);
+  is(
+    $mail->{bugmailtype},
+    'changed request',
+    'a request is marked as request mail'
+  );
 
   $bug = new_bug();
   my $flag_id = $next_flag_id++;
-  add_activity($bug, $flag_id, '1999-12-31 23:00:00', '?', $requester, $requestee);
+  add_activity($bug, $flag_id, '1999-12-31 23:00:00', '?', $requester,
+    $requestee);
   add_activity($bug, $flag_id, '2000-01-01 00:00:10', '+', $requestee);
-  ($mail) = grep { $_->{to_user}->id == $requester->id }
-    sent_mails($bug, $requestee);
-  is($mail->{bugmailtype}, 'changed request', 'an answer is marked as request mail');
+  ($mail)
+    = grep { $_->{to_user}->id == $requester->id } sent_mails($bug, $requestee);
+  is(
+    $mail->{bugmailtype},
+    'changed request',
+    'an answer is marked as request mail'
+  );
 }
 
 # Send: cancelling your own request doesn't mail you.
 {
   my $bug     = new_bug();
   my $flag_id = $next_flag_id++;
-  add_activity($bug, $flag_id, '1999-12-31 23:00:00', '?', $requester, $requestee);
+  add_activity($bug, $flag_id, '1999-12-31 23:00:00', '?', $requester,
+    $requestee);
   add_activity($bug, $flag_id, '2000-01-01 00:00:10', 'X', $requester);
   my $sent = sent_to($bug, $requester);
 
-  ok(!$sent->{$requester->login}, 'requester is not mailed for cancelling their own request');
-  ok($sent->{$type_cc->login},    'flag type cc_list account is still mailed');
+  ok(!$sent->{$requester->login},
+    'requester is not mailed for cancelling their own request');
+  ok($sent->{$type_cc->login}, 'flag type cc_list account is still mailed');
 }
 
 # Send: someone mailed only because of a flag gets the flag section and the
 # comments (so a requestee sees the question), but no diffs.
 {
   my $bug = new_bug();
-  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
-    $requestee);
-  my ($mail) = grep { $_->{to_user}->id == $requestee->id }
-    sent_mails($bug, $requester);
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10',
+    '?', $requester, $requestee);
+  my ($mail)
+    = grep { $_->{to_user}->id == $requestee->id } sent_mails($bug, $requester);
 
-  is(scalar @{$mail->{flag_events}}, 1,
-    'requestee with no role on the bug gets the flag event');
+  is(scalar @{$mail->{flag_events}},
+    1, 'requestee with no role on the bug gets the flag event');
   ok(scalar @{$mail->{new_comments}}, 'and the comments');
   ok(!@{$mail->{diffs}},              'but no diffs');
 
   $bug = new_bug(cc => [$requestee->login]);
-  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
-    $requestee);
-  ($mail) = grep { $_->{to_user}->id == $requestee->id }
-    sent_mails($bug, $requester);
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10',
+    '?', $requester, $requestee);
+  ($mail)
+    = grep { $_->{to_user}->id == $requestee->id } sent_mails($bug, $requester);
 
   ok(scalar @{$mail->{new_comments}},
     'requestee who is also CCed gets the comments too');
@@ -316,14 +336,14 @@ foreach my $later_first (0, 1) {
     {});
   my $sent = sent_to($bug, $requester);
 
-  ok($sent->{$type_cc->login}, "a '?' with no requestee reaches the flag type cc_list");
+  ok($sent->{$type_cc->login},
+    "a '?' with no requestee reaches the flag type cc_list");
   ok(!$sent->{$requester->login} && !$sent->{$requestee->login},
     'and no requestee or requester');
 
-  my ($accounts, $raw)
-    = Bugzilla::BugMail::_get_flag_type_cc($bug, \@events, {});
+  my ($accounts, $raw) = Bugzilla::BugMail::_get_flag_type_cc($bug, \@events, {});
   ok($accounts->{$type_cc->id}, 'cc_list account is an account recipient');
-  ok($raw->{$raw_cc},           'cc_list address with no account takes the raw mail path');
+  ok($raw->{$raw_cc}, 'cc_list address with no account takes the raw mail path');
 }
 
 # The cc_list address with no account gets the new public comments, as with
@@ -362,16 +382,20 @@ foreach my $later_first (0, 1) {
   set_flag_activity_cutoff('1999-12-31 00:00:00');
 
   my $bug = new_bug(assigned_to => $stranger->login);
-  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
-    $requestee);
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10',
+    '?', $requester, $requestee);
   $dbh->do('UPDATE bugs SET lastdiffed = NULL WHERE bug_id = ?', undef, $bug->id);
 
-  my ($mail) = grep { $_->{to_user}->id == $stranger->id }
+  my ($mail)
+    = grep { $_->{to_user}->id == $stranger->id }
     sent_mails(Bugzilla::Bug->new($bug->id), $requester);
   my @flags = grep { $_->{field_name} eq 'flagtypes.name' } @{$mail->{diffs}};
   is(scalar @flags, 1, 'the new bug mail lists the flag set at creation once');
-  like($flags[0]{new}, qr/\?\(\Q@{[$requestee->login]}\E\)$/,
-    'as requested from the requestee');
+  like(
+    $flags[0]{new},
+    qr/\?\(\Q@{[$requestee->login]}\E\)$/,
+    'as requested from the requestee'
+  );
 
   set_flag_activity_cutoff($cutoff);
 }
@@ -383,8 +407,8 @@ foreach my $later_first (0, 1) {
   my $raw      = 'flagmail-insider-list@mozilla.example';
   my $group    = group_with('flagmail-insiders', $insider);
   local Bugzilla->params->{insidergroup} = $group->name;
-  my $private_type = flag_type('flagmail-private', 'a', $insider->login,
-    $outsider->login, $raw);
+  my $private_type
+    = flag_type('flagmail-private', 'a', $insider->login, $outsider->login, $raw);
 
   my $bug = new_bug();
   $dbh->do(
@@ -395,11 +419,14 @@ foreach my $later_first (0, 1) {
     $bug->id, $window_start, $window_start, $requester->id
   );
   my $attach_id = $dbh->bz_last_key('attachments', 'attach_id');
-  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
-    undef, type_id => $private_type, attachment_id => $attach_id);
+  add_activity(
+    $bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester, undef,
+    type_id       => $private_type,
+    attachment_id => $attach_id
+  );
 
   my ($accounts, $raw_addresses) = flag_type_cc($bug);
-  ok($accounts->{$insider->id}, 'private attachment flag: insider is mailed');
+  ok($accounts->{$insider->id},   'private attachment flag: insider is mailed');
   ok(!$accounts->{$outsider->id}, 'non-insider is not');
   ok(!$raw_addresses->{$raw},     'address with no account is not');
 }
@@ -410,18 +437,18 @@ foreach my $later_first (0, 1) {
   my $non_member = create_user('flagmail-nonmember@mozilla.example', '*');
   my $raw        = 'flagmail-group-list@mozilla.example';
   my $group      = group_with('flagmail-secure', $member);
-  my $secure_type = flag_type('flagmail-secure', 'b', $member->login,
-    $non_member->login, $raw);
+  my $secure_type
+    = flag_type('flagmail-secure', 'b', $member->login, $non_member->login, $raw);
 
   my $bug = new_bug();
   $dbh->do('INSERT INTO bug_group_map (bug_id, group_id) VALUES (?, ?)',
     undef, $bug->id, $group->id);
   $bug = Bugzilla::Bug->new($bug->id);
-  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
-    undef, type_id => $secure_type);
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10',
+    '?', $requester, undef, type_id => $secure_type);
 
   my ($accounts, $raw_addresses) = flag_type_cc($bug);
-  ok($accounts->{$member->id}, 'bug in a group: member is mailed');
+  ok($accounts->{$member->id},      'bug in a group: member is mailed');
   ok(!$accounts->{$non_member->id}, 'non-member is not');
   ok(!$raw_addresses->{$raw},       'address with no account is not');
 }

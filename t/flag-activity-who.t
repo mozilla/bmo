@@ -76,7 +76,7 @@ is(
 );
 
 my ($operations) = Bugzilla::Bug::GetBugActivity($bug_id);
-my ($redirect) = grep {
+my ($redirect)   = grep {
   grep { $_->{fieldname} eq 'flagtypes.name' && $_->{added} =~ /carol/ }
     @{$_->{changes}}
 } @$operations;

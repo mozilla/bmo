@@ -38,7 +38,7 @@ my $unused = Bugzilla::FlagType->create({
   description => 'A flag type that is never set',
   target_type => 'bug',
 });
-ok(lives { $unused->remove_from_db }, 'an unused flag type can be deleted');
+ok(lives { $unused->remove_from_db },     'an unused flag type can be deleted');
 ok(!Bugzilla::FlagType->new($unused->id), 'it is gone');
 
 my $setter = create_user('setter@bmo.test', '*');
@@ -62,11 +62,13 @@ $dbh->do('DELETE FROM flags WHERE type_id = ?', undef, $needinfo->id);
 
 Bugzilla->set_user(Bugzilla::User->super_user);
 $needinfo = Bugzilla::FlagType->new($needinfo->id);
-like(dies { $needinfo->remove_from_db }, qr/flag_type_has_activity/,
+like(dies { $needinfo->remove_from_db },
+  qr/flag_type_has_activity/,
   'a flag type with flag_activity rows cannot be deleted');
 ok(
   $dbh->selectrow_array(
-    'SELECT COUNT(*) FROM flag_activity WHERE type_id = ?', undef, $needinfo->id
+    'SELECT COUNT(*) FROM flag_activity WHERE type_id = ?',
+    undef, $needinfo->id
   ),
   'its flag_activity rows are kept'
 );

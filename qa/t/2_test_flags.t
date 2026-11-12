@@ -474,13 +474,14 @@ ok(scalar(@flag_states) == 1 && $flag_states[0] eq '+',
 # Powerless users cannot set the flag to +, but setting it to ? is allowed.
 
 @flag_states = $sel->get_select_options("flag_type-$flagtype1_id");
-ok(scalar @flag_states == 2, "Two flag states available");
+ok(scalar @flag_states == 2,      "Two flag states available");
 ok(grep($_ eq '?', @flag_states), "Flag state '?' available");
 
 # A powerless user cannot edit someone else's attachment flags.
 
 $sel->click_ok(
   "//a[contains(\@href,'/attachment.cgi?id=$attachment2_id&action=edit')]");
+
 # Wait a sec before the attachment overlay is loaded.
 sleep(1);
 $sel->is_element_present_ok(
@@ -530,6 +531,7 @@ log_in($sel, $config, 'admin');
 go_to_bug($sel, $bug1_id);
 $sel->click_ok(
   "//a[contains(\@href,'/attachment.cgi?id=${attachment3_id}&action=edit')]");
+
 # Wait a sec before the attachment overlay is loaded.
 sleep(1);
 $sel->is_element_present_ok(
@@ -537,6 +539,7 @@ $sel->is_element_present_ok(
 );
 $sel->select_ok('//select[@title="attachmentflag1"]', "label=+");
 $sel->click_ok('//dialog[@id="att-overlay"]//input[@type="submit"]');
+
 # Wait a sec before the attachment is updated.
 sleep(1);
 $sel->wait_for_page_to_load_ok(WAIT_TIME);

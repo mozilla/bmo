@@ -24,9 +24,9 @@ use Bugzilla::Hook;
 use Bugzilla::Util;
 use Bugzilla::Constants;
 
-use Carp qw(confess);
-use Digest::MD5 qw(md5_hex);
-use Hash::Util qw(lock_value unlock_hash lock_keys unlock_keys);
+use Carp            qw(confess);
+use Digest::MD5     qw(md5_hex);
+use Hash::Util      qw(lock_value unlock_hash lock_keys unlock_keys);
 use List::MoreUtils qw(firstidx natatime);
 use Try::Tiny;
 use Module::Runtime qw(require_module);
@@ -426,21 +426,17 @@ use constant ABSTRACT_SCHEMA => {
         REFERENCES =>
           {TABLE => 'longdescs', COLUMN => 'comment_id', DELETE => 'CASCADE'}
       },
-      user_id    => {
+      user_id => {
         TYPE       => 'INT3',
         NOTNULL    => 1,
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}
       },
-      reaction   => {TYPE => 'varchar(24)', NOTNULL => 1},
+      reaction => {TYPE => 'varchar(24)', NOTNULL => 1},
     ],
     INDEXES => [
-      longdescs_reactions_reaction_idx => {
-        FIELDS => ['comment_id', 'reaction'],
-      },
-      longdescs_reactions_user_idx => {
-        FIELDS => ['comment_id', 'user_id', 'reaction'],
-        TYPE => 'UNIQUE',
-      },
+      longdescs_reactions_reaction_idx => {FIELDS => ['comment_id', 'reaction'],},
+      longdescs_reactions_user_idx     =>
+        {FIELDS => ['comment_id', 'user_id', 'reaction'], TYPE => 'UNIQUE',},
     ],
   },
 
@@ -734,38 +730,38 @@ use constant ABSTRACT_SCHEMA => {
 
   flag_activity => {
     FIELDS => [
-      id           => {TYPE => 'MEDIUMSERIAL', NOTNULL => 1, PRIMARYKEY => 1},
-      flag_when    => {TYPE => 'DATETIME',     NOTNULL => 1},
-      type_id      => {
+      id        => {TYPE => 'MEDIUMSERIAL', NOTNULL => 1, PRIMARYKEY => 1},
+      flag_when => {TYPE => 'DATETIME',     NOTNULL => 1},
+      type_id   => {
         TYPE       => 'INT2',
         NOTNULL    => 1,
         REFERENCES => {TABLE => 'flagtypes', COLUMN => 'id', DELETE => 'CASCADE'},
       },
-      flag_id      => {TYPE => 'INT3', NOTNULL => 1},
-      setter_id    => {
+      flag_id   => {TYPE => 'INT3', NOTNULL => 1},
+      setter_id => {
         TYPE       => 'INT3',
         NOTNULL    => 1,
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
       },
+
       # The user who made the change. Not always the setter: redirecting a
       # request keeps the original setter.
-      who          => {
+      who => {
         TYPE       => 'INT3',
         NOTNULL    => 1,
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
       },
-      requestee_id => {
-        TYPE       => 'INT3',
-        REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
-      },
-      bug_id       => {
+      requestee_id =>
+        {TYPE => 'INT3', REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},},
+      bug_id => {
         TYPE       => 'INT3',
         NOTNULL    => 1,
         REFERENCES => {TABLE => 'bugs', COLUMN => 'bug_id', DELETE => 'CASCADE'},
       },
       attachment_id => {
         TYPE       => 'INT5',
-        REFERENCES => {TABLE => 'attachments', COLUMN => 'attach_id', DELETE => 'CASCADE'},
+        REFERENCES =>
+          {TABLE => 'attachments', COLUMN => 'attach_id', DELETE => 'CASCADE'},
       },
       status => {TYPE => 'CHAR(1)', NOTNULL => 1},
     ],
@@ -774,16 +770,15 @@ use constant ABSTRACT_SCHEMA => {
       flag_activity_type_id_idx     => ['type_id'],
       flag_activity_bug_id_idx      => ['bug_id'],
       flag_activity_status_when_idx => ['status', 'flag_when'],
-      flag_activity_who_idx         => ['who', 'flag_when'],
+      flag_activity_who_idx         => ['who',    'flag_when'],
     ],
   },
 
   # One row: flag changes up to this time are read from bugs_activity, later
   # ones from flag_activity.
   # See Bugzilla::FlagActivity->cutoff.
-  flag_activity_migration => {
-    FIELDS => [cutoff => {TYPE => 'DATETIME', NOTNULL => 1},],
-  },
+  flag_activity_migration =>
+    {FIELDS => [cutoff => {TYPE => 'DATETIME', NOTNULL => 1},],},
 
   # "flagtypes" defines the types of flags that can be set.
   flagtypes => {
@@ -1057,7 +1052,7 @@ use constant ABSTRACT_SCHEMA => {
       mfa                    => {TYPE => 'varchar(8)', DEFAULT => "''"},
       mfa_required_date      => {TYPE => 'DATETIME'},
       forget_after_date      => {TYPE => 'DATETIME'},
-      bounce_count           => {TYPE => 'INT1', NOTNULL => 1, DEFAULT => 0},
+      bounce_count           => {TYPE => 'INT1',     NOTNULL => 1, DEFAULT => 0},
       modification_ts        => {TYPE => 'DATETIME', NOTNULL => 1},
     ],
     INDEXES => [
@@ -1281,16 +1276,16 @@ use constant ABSTRACT_SCHEMA => {
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid', DELETE => 'CASCADE'}
       },
       ipaddr          => {TYPE => 'varchar(40)'},
-      lastused        => {TYPE => 'DATETIME',     NOTNULL => 1},
-      id              => {TYPE => 'INTSERIAL',    NOTNULL => 1, PRIMARYKEY => 1},
-      restrict_ipaddr => {TYPE => 'BOOLEAN',      NOTNULL => 1, DEFAULT    => 0},
+      lastused        => {TYPE => 'DATETIME',  NOTNULL => 1},
+      id              => {TYPE => 'INTSERIAL', NOTNULL => 1, PRIMARYKEY => 1},
+      restrict_ipaddr => {TYPE => 'BOOLEAN',   NOTNULL => 1, DEFAULT    => 0},
       auth_method     => {TYPE => 'varchar(40)'},
     ],
     INDEXES => [
       logincookies_lastused_idx => ['lastused'],
       logincookies_cookie_idx   => {FIELDS => ['cookie'], TYPE => 'UNIQUE'},
     ],
-    },
+  },
 
   login_failure => {
     FIELDS => [
@@ -1524,19 +1519,20 @@ use constant ABSTRACT_SCHEMA => {
 
   products => {
     FIELDS => [
-      id   => {TYPE => 'SMALLSERIAL', NOTNULL => 1, PRIMARYKEY => 1},
-      name => {TYPE => 'varchar(64)', NOTNULL => 1},
+      id                => {TYPE => 'SMALLSERIAL', NOTNULL => 1, PRIMARYKEY => 1},
+      name              => {TYPE => 'varchar(64)', NOTNULL => 1},
       classification_id => {
         TYPE       => 'INT2',
         NOTNULL    => 1,
         DEFAULT    => '1',
         REFERENCES => {TABLE => 'classifications', COLUMN => 'id', DELETE => 'CASCADE'}
       },
-      description        => {TYPE => 'MEDIUMTEXT',  NOTNULL => 1},
-      isactive           => {TYPE => 'BOOLEAN',     NOTNULL => 1, DEFAULT => 1},
-      defaultmilestone   => {TYPE => 'varchar(20)', NOTNULL => 1, DEFAULT => "'---'"},
-      default_version    => {TYPE => 'varchar(20)', NOTNULL => 1, DEFAULT => "'unspecified'"},
-      allows_unconfirmed => {TYPE => 'BOOLEAN',     NOTNULL => 1, DEFAULT => 'TRUE'},
+      description      => {TYPE => 'MEDIUMTEXT',  NOTNULL => 1},
+      isactive         => {TYPE => 'BOOLEAN',     NOTNULL => 1, DEFAULT => 1},
+      defaultmilestone => {TYPE => 'varchar(20)', NOTNULL => 1, DEFAULT => "'---'"},
+      default_version  =>
+        {TYPE => 'varchar(20)', NOTNULL => 1, DEFAULT => "'unspecified'"},
+      allows_unconfirmed => {TYPE => 'BOOLEAN', NOTNULL => 1, DEFAULT => 'TRUE'},
       bug_description_template => {TYPE => 'MEDIUMTEXT'},
       default_bug_type         => {TYPE => 'varchar(20)'},
     ],
@@ -1839,7 +1835,7 @@ use constant ABSTRACT_SCHEMA => {
       jobid      => {TYPE => 'INT4', NOTNULL => 1},
       message    => {TYPE => 'TEXT', NOTNULL => 1},
       funcid     => {TYPE => 'INT4', NOTNULL => 1, DEFAULT => 0},
-      ],
+    ],
     INDEXES => [
       ts_error_funcid_idx     => [qw(funcid error_time)],
       ts_error_error_time_idx => ['error_time'],
@@ -2045,8 +2041,8 @@ use constant ABSTRACT_SCHEMA => {
 
   bloomfilter_values => {
     FIELDS => [
-      id    => {TYPE => 'MEDIUMSERIAL',  NOTNULL => 1, PRIMARYKEY => 1},
-      name  => {TYPE => 'VARCHAR(64)',   NOTNULL => 1},
+      id    => {TYPE => 'MEDIUMSERIAL', NOTNULL => 1, PRIMARYKEY => 1},
+      name  => {TYPE => 'VARCHAR(64)',  NOTNULL => 1},
       value => {TYPE => 'VARCHAR(255)', NOTNULL => 1},
     ],
   },
@@ -2393,8 +2389,7 @@ sub get_add_fks_sql {
   }
   else {
     foreach my $fk_string (@add) {
-      push(@sql,
-        "ALTER TABLE " . $dbh->quote_identifier($table) . " ADD $fk_string");
+      push(@sql, "ALTER TABLE " . $dbh->quote_identifier($table) . " ADD $fk_string");
     }
   }
   return @sql;
@@ -2415,8 +2410,9 @@ sub get_drop_fk_sql {
   my ($self, $table, $column, $references) = @_;
   my $fk_name = $self->_get_fk_name($table, $column, $references);
 
-  return (
-    "ALTER TABLE " . Bugzilla->dbh->quote_identifier($table) . " DROP CONSTRAINT $fk_name");
+  return ("ALTER TABLE "
+      . Bugzilla->dbh->quote_identifier($table)
+      . " DROP CONSTRAINT $fk_name");
 }
 
 sub convert_type {
@@ -2778,9 +2774,7 @@ sub get_alter_column_ddl {
   # If we went from not being a PRIMARY KEY to being a PRIMARY KEY.
   if (!$old_def->{PRIMARYKEY} && $new_def->{PRIMARYKEY}) {
     push(@statements,
-          "ALTER TABLE "
-        . $dbh->quote_identifier($table)
-        . " ADD PRIMARY KEY ($column)");
+      "ALTER TABLE " . $dbh->quote_identifier($table) . " ADD PRIMARY KEY ($column)");
   }
 
   # If we went from being a PK to not being a PK

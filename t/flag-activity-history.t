@@ -69,11 +69,11 @@ sub flag_changes {
   my @history = map {
     my $who = $_->{who};
     map { [$who, $_->{removed}, $_->{added}] }
-      grep { $_->{fieldname} eq 'flagtypes.name' } @{$_->{changes}}
+      grep { $_->{fieldname} eq 'flagtypes.name' }
+      @{$_->{changes}}
   } @$operations;
 
-  $dbh->do('UPDATE bugs SET lastdiffed = NULL WHERE bug_id = ?',
-    undef, $bug_id);
+  $dbh->do('UPDATE bugs SET lastdiffed = NULL WHERE bug_id = ?', undef, $bug_id);
   my ($diffs) = Bugzilla::BugMail::_get_diffs(Bugzilla::Bug->new($bug_id),
     '2026-12-31 00:00:00', {});
   my @mail = map { [$_->{who}->login, $_->{old}, $_->{new}] }
@@ -121,12 +121,12 @@ is($mail,    $expected, 'bugmail: each flag change once, with old value');
 # A flag created and updated in one request has two rows in the same second:
 # history shows the request's net change, like bugs_activity did.
 my $same_second_bug = new_bug('same second');
-add_flag_activity($same_second_bug, '2026-02-01 10:00:00', 43, $alice, $bob->id,
-  '?');
-add_flag_activity($same_second_bug, '2026-02-01 10:00:00', 43, $alice, undef,
-  '+');
-add_flag_activity($same_second_bug, '2026-02-02 10:00:00', 43, $setter, undef,
-  '-');
+add_flag_activity($same_second_bug, '2026-02-01 10:00:00',
+  43, $alice, $bob->id, '?');
+add_flag_activity($same_second_bug, '2026-02-01 10:00:00',
+  43, $alice, undef, '+');
+add_flag_activity($same_second_bug, '2026-02-02 10:00:00',
+  43, $setter, undef, '-');
 
 $expected = [
   ['alice@bmo.test',  '',        'review+'],
@@ -139,8 +139,8 @@ is($mail,    $expected, 'bugmail: one net change per request');
 # A flag created and removed in one request changes nothing: neither history
 # nor bugmail show it.
 my $no_change_bug = new_bug('no change');
-add_flag_activity($no_change_bug, '2026-03-01 10:00:00', 44, $alice, $bob->id,
-  '?');
+add_flag_activity($no_change_bug, '2026-03-01 10:00:00',
+  44, $alice, $bob->id, '?');
 add_flag_activity($no_change_bug, '2026-03-01 10:00:00', 44, $alice, undef,
   'X');
 

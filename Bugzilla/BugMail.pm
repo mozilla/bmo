@@ -26,7 +26,7 @@ use Bugzilla::Hook;
 
 use Date::Parse;
 use Date::Format;
-use Scalar::Util qw(blessed);
+use Scalar::Util    qw(blessed);
 use List::MoreUtils qw(uniq firstidx);
 use Sys::Hostname;
 use Storable qw(dclone);
@@ -66,7 +66,7 @@ sub Send {
   # Bugzilla::User objects of people in various roles. More than one person
   # can 'have' a role, if the person in that role has changed, or people are
   # watching.
-  my @assignees = ($bug->assigned_to);
+  my @assignees   = ($bug->assigned_to);
   my @qa_contacts = $bug->qa_contact || ();
 
   my @ccs = @{$bug->cc_users};
@@ -215,6 +215,7 @@ sub Send {
   # other role on the bug. Flag-type cc_list addresses (admin-configured,
   # bypasses per-user opt-in) are added the same way notify() used to.
   foreach my $event (@flag_events) {
+
     # notify() used to skip addressees who couldn't see a private
     # attachment; _flag_event_visible_to() matches that so a non-insider
     # doesn't get added as a recipient purely to be told about a flag on an
@@ -222,16 +223,16 @@ sub Send {
     # body either).
     if ($event->{action} eq 'requested') {
       my $requestee_id = $event->{requestee_id};
-      my $requestee
-        = $user_cache{$requestee_id} ||= Bugzilla::User->new({id => $requestee_id, cache => 1});
+      my $requestee    = $user_cache{$requestee_id}
+        ||= Bugzilla::User->new({id => $requestee_id, cache => 1});
       $event->{requestee} = $requestee;
       $recipients{$requestee_id}->{+REL_FLAG_REQUESTEE} = BIT_DIRECT
         if _flag_event_visible_to($event, $requestee);
     }
     elsif ($event->{action} eq 'answered') {
       my $requester_id = $event->{requester_id};
-      my $requester
-        = $user_cache{$requester_id} ||= Bugzilla::User->new({id => $requester_id, cache => 1});
+      my $requester    = $user_cache{$requester_id}
+        ||= Bugzilla::User->new({id => $requester_id, cache => 1});
       $event->{requester} = $requester;
 
       # Don't add the requester as a recipient for clearing their own
@@ -368,10 +369,8 @@ sub Send {
           $wants_mail = 1;
         }
         else {
-          $wants_mail = $user->wants_bug_mail(
-            $bug, $relationship, $start ? \@diffs : [],
-            $comments, $params->{dep_only}, $changer
-          );
+          $wants_mail = $user->wants_bug_mail($bug, $relationship, $start ? \@diffs : [],
+            $comments, $params->{dep_only}, $changer);
         }
         if ($wants_mail) {
           $rels_which_want{$relationship} = $recipients{$user_id}->{$relationship};
@@ -395,9 +394,7 @@ sub Send {
       # Make sure the user isn't in the nomail list, and the dep check passed.
       # BMO: never send emails to nobody@mozilla.org, .bugs, or .tld addresses.
       # This check needs to happen after the bugmail_recipients hook.
-      if ( $user->email_enabled
-        && $dep_ok
-        && !is_fake_recipient_address($user->email))
+      if ($user->email_enabled && $dep_ok && !is_fake_recipient_address($user->email))
       {
 
         # Don't show summaries for bugs the user can't access, and
@@ -435,7 +432,7 @@ sub Send {
         # the mail some other way (e.g. they're on the CC list). A cc_list
         # recipient who isn't the requestee/requester gets the event as a
         # generic 'set', so it isn't worded as "from you"/"your request".
-        my $user_cc_events = $flag_type_cc->{$user_id} || [];
+        my $user_cc_events   = $flag_type_cc->{$user_id} || [];
         my @user_flag_events = map {
           my $event = $_;
           my $is_own
@@ -443,10 +440,10 @@ sub Send {
             || ($event->{action} eq 'answered'
             && $event->{requester_id} == $user_id
             && $event->{setter}->id != $user_id);
-          !_flag_event_visible_to($event, $user)      ? ()
-            : $is_own                                 ? $event
+          !_flag_event_visible_to($event, $user)       ? ()
+            : $is_own                                  ? $event
             : (grep { $_ == $event } @$user_cc_events) ? {%$event, action => 'set'}
-            :                                           ();
+            :                                            ();
         } @flag_events;
 
         # Someone mailed only because of a flag (they have no other role on
@@ -454,19 +451,17 @@ sub Send {
         # roles) gets the flag section and the new comments, as the old flag
         # mail did (so a requestee sees the question), but not every diff.
         my $flag_only = !grep {
-               $_ != REL_FLAG_REQUESTEE
-            && $_ != REL_FLAG_REQUESTER
-            && $_ != REL_FLAG_TYPE_CC
+          $_ != REL_FLAG_REQUESTEE && $_ != REL_FLAG_REQUESTER && $_ != REL_FLAG_TYPE_CC
         } keys %rels_which_want;
 
         my $sent_mail = sendMail({
-          to                 => $user,
-          bug                => $bug,
-          comments           => $comments,
-          date               => $date,
-          changer            => $changer,
-          watchers           => exists $watching{$user_id} ? $watching{$user_id} : undef,
-          diffs              => $flag_only ? [] : \@diffs,
+          to       => $user,
+          bug      => $bug,
+          comments => $comments,
+          date     => $date,
+          changer  => $changer,
+          watchers => exists $watching{$user_id} ? $watching{$user_id} : undef,
+          diffs    => $flag_only                 ? []                  : \@diffs,
           rels_which_want    => \%rels_which_want,
           referenced_bugs    => $flag_only ? [] : $referenced_bugs,
           dep_only           => $params->{dep_only},
@@ -497,14 +492,14 @@ sub Send {
 sub sendMail {
   my $params = shift;
 
-  my $user            = $params->{to};
-  my $bug             = $params->{bug};
-  my @send_comments   = @{$params->{comments}};
-  my $date            = $params->{date};
-  my $changer         = $params->{changer};
-  my $watchingRef     = $params->{watchers};
-  my @diffs           = @{$params->{diffs}};
-  my $relRef          = $params->{rels_which_want};
+  my $user               = $params->{to};
+  my $bug                = $params->{bug};
+  my @send_comments      = @{$params->{comments}};
+  my $date               = $params->{date};
+  my $changer            = $params->{changer};
+  my $watchingRef        = $params->{watchers};
+  my @diffs              = @{$params->{diffs}};
+  my $relRef             = $params->{rels_which_want};
   my $referenced_bugs    = $params->{referenced_bugs};
   my $dep_only           = $params->{dep_only};
   my $blocker_short_desc = $params->{blocker_short_desc};
@@ -545,6 +540,7 @@ sub sendMail {
       $add_diff = 1;
     }
     if ($add_diff) {
+
       # Diffs with a blocker object are shared across per-recipient sendMail
       # calls. Clone the diff+blocker so hooks (e.g. SecureMail) can mutate
       # short_desc for one recipient without contaminating others.
@@ -560,7 +556,10 @@ sub sendMail {
     @send_comments = grep { !$_->is_private } @send_comments;
   }
 
-  if (!scalar(@display_diffs) && !scalar(@send_comments) && !scalar(@$flag_events)) {
+  if ( !scalar(@display_diffs)
+    && !scalar(@send_comments)
+    && !scalar(@$flag_events))
+  {
 
     # Whoops, no differences!
     return 0;
@@ -620,8 +619,8 @@ sub sendMail {
     changedfieldnames  => \@changedfieldnames,
     new_comments       => \@send_comments,
     threadingmarker => build_thread_marker($bug->id, $user->id, !$bug->lastdiffed),
-    referenced_bugs    => $referenced_bugs,
-    bugmailtype        => $bugmailtype,
+    referenced_bugs => $referenced_bugs,
+    bugmailtype     => $bugmailtype,
     blocker_short_desc => $blocker_short_desc,
     flag_events        => $flag_events,
   };
@@ -670,19 +669,17 @@ sub enqueue {
   # way, dropping the attachment object (dequeue() re-fetches it by id so
   # it can also re-check visibility at send time).
   $vars->{flag_events} = [
-    map {
-      {
-        action        => $_->{action},
-        attachment_id => $_->{attachment_id},
-        requestee_id  => $_->{requestee_id},
-        requester_id  => $_->{requester_id},
-        status        => $_->{status},
-        type          => _flatten_object($_->{type}),
-        setter        => _flatten_object($_->{setter}),
-        requestee     => _flatten_object($_->{requestee}),
-        requester     => _flatten_object($_->{requester}),
-      }
-    } @{$vars->{flag_events}}
+    map { {
+      action        => $_->{action},
+      attachment_id => $_->{attachment_id},
+      requestee_id  => $_->{requestee_id},
+      requester_id  => $_->{requester_id},
+      status        => $_->{status},
+      type          => _flatten_object($_->{type}),
+      setter        => _flatten_object($_->{setter}),
+      requestee     => _flatten_object($_->{requestee}),
+      requester     => _flatten_object($_->{requester}),
+    } } @{$vars->{flag_events}}
   ];
   Bugzilla->job_queue->insert('bug_mail', {vars => $vars});
 }
@@ -702,24 +699,30 @@ sub dequeue {
   # stale if the bug was restricted or user access revoked between enqueue
   # and dequeue (TOCTOU).
   unless ($vars->{to_user}->can_see_bug($vars->{bug}->id)) {
-    WARN('dequeue: suppressing bugmail for user '
-      . $vars->{to_user}->login . ' on bug ' . $vars->{bug}->id
-      . ' — bug no longer visible at send time');
+    WARN( 'dequeue: suppressing bugmail for user '
+        . $vars->{to_user}->login
+        . ' on bug '
+        . $vars->{bug}->id
+        . ' — bug no longer visible at send time');
     return;
   }
 
   # Drop if user lost insider/timetracker privileges between enqueue and dequeue.
   # Filtering at sendMail-time may have included content these privileges gated.
   if ($vars->{_to_user_was_insider} && !$vars->{to_user}->is_insider) {
-    WARN('dequeue: suppressing bugmail for user '
-      . $vars->{to_user}->login . ' on bug ' . $vars->{bug}->id
-      . ' — insider access revoked between enqueue and dequeue');
+    WARN( 'dequeue: suppressing bugmail for user '
+        . $vars->{to_user}->login
+        . ' on bug '
+        . $vars->{bug}->id
+        . ' — insider access revoked between enqueue and dequeue');
     return;
   }
   if ($vars->{_to_user_was_timetracker} && !$vars->{to_user}->is_timetracker) {
-    WARN('dequeue: suppressing bugmail for user '
-      . $vars->{to_user}->login . ' on bug ' . $vars->{bug}->id
-      . ' — timetracker access revoked between enqueue and dequeue');
+    WARN( 'dequeue: suppressing bugmail for user '
+        . $vars->{to_user}->login
+        . ' on bug '
+        . $vars->{bug}->id
+        . ' — timetracker access revoked between enqueue and dequeue');
     return;
   }
 
@@ -731,18 +734,20 @@ sub dequeue {
     map {
       +{
         %$_,
-        type       => Bugzilla::FlagType->new_from_hash($_->{type}),
-        setter     => Bugzilla::User->new_from_hash($_->{setter}),
-        requestee  => $_->{requestee} ? Bugzilla::User->new_from_hash($_->{requestee}) : undef,
-        requester  => $_->{requester} ? Bugzilla::User->new_from_hash($_->{requester}) : undef,
+        type      => Bugzilla::FlagType->new_from_hash($_->{type}),
+        setter    => Bugzilla::User->new_from_hash($_->{setter}),
+        requestee => $_->{requestee} ? Bugzilla::User->new_from_hash($_->{requestee})
+        : undef,
+        requester => $_->{requester} ? Bugzilla::User->new_from_hash($_->{requester})
+        : undef,
         attachment => $_->{attachment_id}
-          ? Bugzilla::Attachment->new({id => $_->{attachment_id}, cache => 1})
-          : undef,
+        ? Bugzilla::Attachment->new({id => $_->{attachment_id}, cache => 1})
+        : undef,
       }
     } @{$vars->{flag_events} || []}
   ];
-  $vars->{flag_events}
-    = [grep { _flag_event_visible_to($_, $vars->{to_user}) } @{$vars->{flag_events}}];
+  $vars->{flag_events} = [grep { _flag_event_visible_to($_, $vars->{to_user}) }
+      @{$vars->{flag_events}}];
 
   $vars->{changer} = Bugzilla::User->new_from_hash($vars->{changer});
   $vars->{new_comments}
@@ -756,10 +761,13 @@ sub dequeue {
       # check may be stale if the blocker was restricted between enqueue
       # and dequeue (TOCTOU). Suppress the email to match enqueue behavior.
       unless ($vars->{to_user}->can_see_bug($diff->{blocker}->id)) {
-        WARN('dequeue: suppressing bugmail for user '
-          . $vars->{to_user}->login . ' on bug ' . $vars->{bug}->id
-          . ' — blocker bug ' . $diff->{blocker}->id
-          . ' no longer visible at send time (TOCTOU)');
+        WARN( 'dequeue: suppressing bugmail for user '
+            . $vars->{to_user}->login
+            . ' on bug '
+            . $vars->{bug}->id
+            . ' — blocker bug '
+            . $diff->{blocker}->id
+            . ' no longer visible at send time (TOCTOU)');
         return;
       }
     }
@@ -789,11 +797,14 @@ sub dequeue {
     }
   }
 
-  # Drop dep/see_also diffs that re-stripping emptied (matches sendMail behaviour).
-  $vars->{diffs} = [grep {
-    !($_->{field_name} =~ /^(?:dependson|blocked|regress(?:ed_by|es)|see_also)$/)
-    || $_->{old} || $_->{new}
-  } @{$vars->{diffs}}];
+ # Drop dep/see_also diffs that re-stripping emptied (matches sendMail behaviour).
+  $vars->{diffs} = [
+    grep {
+         !($_->{field_name} =~ /^(?:dependson|blocked|regress(?:ed_by|es)|see_also)$/)
+      || $_->{old}
+        || $_->{new}
+    } @{$vars->{diffs}}
+  ];
 
   # Recompute changed-field headers after dequeue-time diff stripping.
   $vars->{changedfields}     = [uniq map { $_->{field_desc} } @{$vars->{diffs}}];
@@ -816,10 +827,15 @@ sub dequeue {
   }
 
   # If nothing remains to send, bail.
-  unless (@{$vars->{diffs}} || @{$vars->{new_comments}} || @{$vars->{flag_events}}) {
-    WARN('dequeue: suppressing bugmail for user '
-      . $vars->{to_user}->login . ' on bug ' . $vars->{bug}->id
-      . ' — all diffs and comments stripped by dequeue-time visibility re-check');
+  unless (@{$vars->{diffs}}
+    || @{$vars->{new_comments}}
+    || @{$vars->{flag_events}})
+  {
+    WARN( 'dequeue: suppressing bugmail for user '
+        . $vars->{to_user}->login
+        . ' on bug '
+        . $vars->{bug}->id
+        . ' — all diffs and comments stripped by dequeue-time visibility re-check');
     return;
   }
 
@@ -835,7 +851,7 @@ sub _flatten_object {
 
   # the same objects are used for each recipient, so cache the flattened hash
   my $cache = Bugzilla->request_cache->{bugmail_flat_objects} ||= {};
-  my $key = blessed($object) . '-' . $object->id;
+  my $key   = blessed($object) . '-' . $object->id;
   return $cache->{$key} ||= $object->flatten_to_hash;
 }
 
@@ -892,7 +908,10 @@ sub _generate_bugmail {
 # flag_events, and the dequeue-time TOCTOU re-check (bug 1883428).
 sub _flag_event_visible_to {
   my ($event, $user) = @_;
-  return !$event->{attachment} || !$event->{attachment}->isprivate || ($user && $user->is_insider);
+  return
+       !$event->{attachment}
+    || !$event->{attachment}->isprivate
+    || ($user && $user->is_insider);
 }
 
 # Find flag changes during this window, so sendMail() can add a note at the
@@ -902,7 +921,7 @@ sub _get_flag_mail_events {
   my ($bug, $start, $end, $user_cache) = @_;
   my $dbh = Bugzilla->dbh;
 
-  my @args = ($bug->id);
+  my @args             = ($bug->id);
   my $when_restriction = '';
   if ($start) {
     $when_restriction = ' AND flag_when > ? AND flag_when <= ?';
@@ -937,7 +956,8 @@ sub _get_flag_mail_events {
       $event->{action}       = 'requested';
       $event->{requestee_id} = $row->{requestee_id};
     }
-    elsif ($row->{status} eq '+' || $row->{status} eq '-' || $row->{status} eq 'X') {
+    elsif ($row->{status} eq '+' || $row->{status} eq '-' || $row->{status} eq 'X')
+    {
 
       # 'X' is a flag cleared without +/- (e.g. needinfo auto-cleared when
       # the requestee replies) -- notify.() treated that the same as an
@@ -996,7 +1016,7 @@ sub _get_flag_type_cc {
 
     foreach my $cc (split(/[, ]+/, $cc_list)) {
       my $ccuser = Bugzilla::User->new({name => $cc, cache => 1});
-      next if @bug_in_groups && (!$ccuser || !$ccuser->can_see_bug($bug->id));
+      next if @bug_in_groups         && (!$ccuser || !$ccuser->can_see_bug($bug->id));
       next if $attachment_is_private && (!$ccuser || !$ccuser->is_insider);
 
       if ($ccuser) {
@@ -1046,7 +1066,7 @@ sub _get_diffs {
   my $dbh = Bugzilla->dbh;
 
   my @args       = ($bug->id);
-  my $flag_newer   = Bugzilla::FlagActivity->after_cutoff_sql('fsa');
+  my $flag_newer = Bugzilla::FlagActivity->after_cutoff_sql('fsa');
   my $ba_before_cutoff
     = Bugzilla::FlagActivity->bugs_activity_before_cutoff_sql('bugs_activity');
   my $flag_last    = Bugzilla::FlagActivity->last_of_request_sql('fsa');
@@ -1107,8 +1127,8 @@ sub _get_diffs {
                AND $flag_newer
                AND $flag_last
                $flag_when_restriction
-          ORDER BY bug_when, field_desc, activity_id", {Slice => {}},
-    @args, $bug->id, ($bug->lastdiffed ? ($bug->lastdiffed, $end) : ())
+          ORDER BY bug_when, field_desc, activity_id", {Slice => {}}, @args,
+    $bug->id, ($bug->lastdiffed ? ($bug->lastdiffed, $end) : ())
   );
 
   # As in history, skip a request that left a flag as it was, such as a flag
@@ -1148,7 +1168,7 @@ sub _get_diffs {
 }
 
 sub _get_new_bugmail_fields {
-  my $bug = shift;
+  my $bug    = shift;
   my @fields = @{Bugzilla->fields({obsolete => 0, in_new_bugmail => 1})};
   my @diffs;
 
@@ -1216,7 +1236,7 @@ sub _bug_link_re {
 sub _parse_see_also {
   my (@links) = @_;
   my $bug_link_re = _bug_link_re();
-  return grep { /^\d+$/ } map { /$bug_link_re/ ? int($1) : () } @links;
+  return grep {/^\d+$/} map { /$bug_link_re/ ? int($1) : () } @links;
 }
 
 1;

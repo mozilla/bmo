@@ -64,14 +64,23 @@ $bug->update('2099-01-01 11:00:00');
 # flag changes are only in flag_activity.
 $dbh->do('DELETE FROM bugs_activity WHERE bug_id = ?', undef, $bug_id);
 
-is(Bugzilla::Bug->new($bug_id)->delta_ts_non_bot,
-  '2099-01-01 10:00:00', 'the non-bot last change time counts flag changes');
+is(
+  Bugzilla::Bug->new($bug_id)->delta_ts_non_bot,
+  '2099-01-01 10:00:00',
+  'the non-bot last change time counts flag changes'
+);
 
-is(last_user_activity($human->id),
-  '2099-01-01 10:00:00', 'the last user activity counts flag changes');
+is(
+  last_user_activity($human->id),
+  '2099-01-01 10:00:00',
+  'the last user activity counts flag changes'
+);
 
-$dbh->do('UPDATE profiles SET last_statistics_ts = ? WHERE userid = ?',
-  undef, '2099-01-01 12:00:00', $human->id);
+$dbh->do(
+  'UPDATE profiles SET last_statistics_ts = ? WHERE userid = ?',
+  undef, '2099-01-01 12:00:00',
+  $human->id
+);
 tag_for_recount_from_bug($bug_id);
 my ($last_statistics_ts)
   = $dbh->selectrow_array(
@@ -82,11 +91,13 @@ is($last_statistics_ts, undef, 'a flag change tags the user for a recount');
 update_statistics_by_user($human->id);
 my ($touched) = $dbh->selectrow_array(
   "SELECT count FROM profiles_statistics WHERE user_id = ? AND name = 'touched'",
-  undef, $human->id);
+  undef, $human->id
+);
 is($touched, 1, 'a flag change counts as touching the bug');
 
 sub product_count {
-  return scalar $dbh->selectrow_array(
+  return
+    scalar $dbh->selectrow_array(
     'SELECT SUM(count) FROM profiles_statistics_products WHERE user_id = ?',
     undef, $human->id);
 }
@@ -99,8 +110,8 @@ my ($fieldid)
   "SELECT id FROM fielddefs WHERE name = 'flagtypes.name'");
 $dbh->do(
   'INSERT INTO bugs_activity (bug_id, who, bug_when, fieldid, removed, added)
-   VALUES (?, ?, ?, ?, ?, ?)', undef, $bug_id, $human->id,
-  '2099-01-01 10:00:00', $fieldid, '', 'needinfo?(bob@bmo.test)'
+   VALUES (?, ?, ?, ?, ?, ?)', undef, $bug_id, $human->id, '2099-01-01 10:00:00',
+  $fieldid, '', 'needinfo?(bob@bmo.test)'
 );
 update_statistics_by_user($human->id);
 is(product_count(), 1, 'a change in both tables is counted once');
@@ -110,17 +121,24 @@ is(product_count(), 1, 'a change in both tables is counted once');
 set_flag_activity_cutoff('2099-01-01 13:30:00');
 $dbh->do(
   'INSERT INTO bugs_activity (bug_id, who, bug_when, fieldid, removed, added)
-   VALUES (?, ?, ?, ?, ?, ?)', undef, $bug_id, $bot->id,
-  '2099-01-01 13:00:00', $fieldid, 'needinfo?(bob@bmo.test)', ''
+   VALUES (?, ?, ?, ?, ?, ?)', undef, $bug_id, $bot->id, '2099-01-01 13:00:00',
+  $fieldid, 'needinfo?(bob@bmo.test)', ''
 );
 $dbh->do(
   'UPDATE flag_activity SET flag_when = ?, who = ? WHERE flag_when = ?',
-  undef, '2099-01-01 13:00:00', $human->id, '2099-01-01 11:00:00'
+  undef,      '2099-01-01 13:00:00',
+  $human->id, '2099-01-01 11:00:00'
 );
-is(Bugzilla::Bug->new($bug_id)->delta_ts_non_bot,
-  '2099-01-01 10:00:00', 'the non-bot last change time skips a guessed who');
-is(last_user_activity($human->id),
-  '2099-01-01 10:00:00', 'the last user activity skips a guessed who');
+is(
+  Bugzilla::Bug->new($bug_id)->delta_ts_non_bot,
+  '2099-01-01 10:00:00',
+  'the non-bot last change time skips a guessed who'
+);
+is(
+  last_user_activity($human->id),
+  '2099-01-01 10:00:00',
+  'the last user activity skips a guessed who'
+);
 
 # One request: a flag requested and granted, another requested and removed.
 sub add_request_rows {
@@ -136,7 +154,10 @@ my $before = product_count();
 add_request_rows(900, '?', '+');
 add_request_rows(901, '?', 'X');
 update_statistics_by_user($human->id);
-is(product_count(), $before + 1,
-  'the activity by product counts one net change per request');
+is(
+  product_count(),
+  $before + 1,
+  'the activity by product counts one net change per request'
+);
 
 done_testing;

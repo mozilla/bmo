@@ -66,8 +66,8 @@ for my $row (['2026-01-01 10:00:00', '?', $bob->id],
     'INSERT INTO flag_activity
        (flag_when, type_id, flag_id, setter_id, who, requestee_id, bug_id,
         status)
-     VALUES (?, ?, 42, ?, ?, ?, ?, ?)', undef, $row->[0], $review_id,
-    $alice->id, $alice->id, $row->[2], $current_bug, $row->[1]
+     VALUES (?, ?, 42, ?, ?, ?, ?, ?)', undef, $row->[0], $review_id, $alice->id,
+    $alice->id, $row->[2], $current_bug, $row->[1]
   );
 }
 
@@ -81,17 +81,17 @@ sub search {
 }
 
 is(search(changedto => 'review+'), [$legacy_bug, $current_bug], 'changedto');
-is(search(changedto => 'review?(bob@bmo.test)'), [$current_bug],
-  'changedto with requestee');
-is(search(changedfrom => 'review?(bob@bmo.test)'), [$current_bug],
-  'changedfrom uses the previous flag_activity row');
-is(search(changedfrom => 'review+'), [], 'changedfrom no match');
+is(search(changedto => 'review?(bob@bmo.test)'),
+  [$current_bug], 'changedto with requestee');
+is(search(changedfrom => 'review?(bob@bmo.test)'),
+  [$current_bug], 'changedfrom uses the previous flag_activity row');
+is(search(changedfrom   => 'review+'),    [], 'changedfrom no match');
 is(search(changedbefore => '2021-01-01'), [$legacy_bug],  'changedbefore');
 is(search(changedafter  => '2025-01-01'), [$current_bug], 'changedafter');
-is(search(changedby => 'alice@bmo.test'), [$current_bug],
-  'changedby flag_activity');
-is(search(changedby => 'bob@bmo.test'), [$legacy_bug],
-  'changedby bugs_activity');
+is(search(changedby     => 'alice@bmo.test'),
+  [$current_bug], 'changedby flag_activity');
+is(search(changedby => 'bob@bmo.test'),
+  [$legacy_bug], 'changedby bugs_activity');
 is(search(everchanged => ''), [$legacy_bug, $current_bug], 'everchanged');
 
 # Changes to any field include flag changes.
@@ -103,16 +103,19 @@ sub search_anything {
   );
   return [sort { $a <=> $b } map { $_->[0] } @{$search->data}];
 }
-is(search_anything(changedby => 'alice@bmo.test'), [$current_bug],
-  'anything changedby flag_activity');
-is(search_anything(changedby => 'bob@bmo.test'), [$legacy_bug],
-  'anything changedby bugs_activity');
-is(search_anything(changedafter => '2025-01-01'), [$current_bug],
-  'anything changedafter');
-is(search_anything(changedto => 'review+'), [$legacy_bug, $current_bug],
-  'anything changedto');
-is(search_anything(changedfrom => 'review?(bob@bmo.test)'), [$current_bug],
-  'anything changedfrom');
+is(search_anything(changedby => 'alice@bmo.test'),
+  [$current_bug], 'anything changedby flag_activity');
+is(search_anything(changedby => 'bob@bmo.test'),
+  [$legacy_bug], 'anything changedby bugs_activity');
+is(search_anything(changedafter => '2025-01-01'),
+  [$current_bug], 'anything changedafter');
+is(
+  search_anything(changedto => 'review+'),
+  [$legacy_bug, $current_bug],
+  'anything changedto'
+);
+is(search_anything(changedfrom => 'review?(bob@bmo.test)'),
+  [$current_bug], 'anything changedfrom');
 
 # A flag requested and granted in one request is one net change, as in history.
 my $same_second_bug = new_bug('same second');
@@ -125,14 +128,17 @@ for my $row (['?', $alice->id], ['+', undef]) {
     $bob->id, $bob->id, $row->[1], $same_second_bug, $row->[0]
   );
 }
-is(search(changedto => 'review?(alice@bmo.test)'), [],
-  'changedto skips a state within a request');
-is(search(changedfrom => 'review?(alice@bmo.test)'), [],
-  'changedfrom skips a state within a request');
-is(search_anything(changedfrom => 'review?(alice@bmo.test)'), [],
-  'anything changedfrom skips a state within a request');
-is(search(changedto => 'review+'),
-  [$legacy_bug, $current_bug, $same_second_bug], 'changedto the net change');
+is(search(changedto => 'review?(alice@bmo.test)'),
+  [], 'changedto skips a state within a request');
+is(search(changedfrom => 'review?(alice@bmo.test)'),
+  [], 'changedfrom skips a state within a request');
+is(search_anything(changedfrom => 'review?(alice@bmo.test)'),
+  [], 'anything changedfrom skips a state within a request');
+is(
+  search(changedto => 'review+'),
+  [$legacy_bug, $current_bug, $same_second_bug],
+  'changedto the net change'
+);
 
 # A legacy change also in flag_activity: bugs_activity knows who made it, the
 # flag_activity row only has the setter as a guess.
@@ -145,13 +151,13 @@ $dbh->do(
 $dbh->do(
   'INSERT INTO flag_activity
      (flag_when, type_id, flag_id, setter_id, who, requestee_id, bug_id, status)
-   VALUES (?, ?, 44, ?, ?, NULL, ?, ?)', undef, '2020-02-01 10:00:00', $review_id,
-  $carol->id, $carol->id, $guessed_bug, '+'
+   VALUES (?, ?, 44, ?, ?, NULL, ?, ?)', undef, '2020-02-01 10:00:00',
+  $review_id, $carol->id, $carol->id, $guessed_bug, '+'
 );
-is(search(changedby => 'carol@bmo.test'), [],
-  'changedby skips a flag_activity row up to the cutoff');
-is(search_anything(changedby => 'carol@bmo.test'), [],
-  'anything changedby skips it too');
+is(search(changedby => 'carol@bmo.test'),
+  [], 'changedby skips a flag_activity row up to the cutoff');
+is(search_anything(changedby => 'carol@bmo.test'),
+  [], 'anything changedby skips it too');
 
 # An assignee whose only recent changes are flag changes isn't idle.
 my $owned_bug = create_bug(
@@ -160,13 +166,18 @@ my $owned_bug = create_bug(
   bug_type    => 'defect',
   assigned_to => 'alice@bmo.test',
 )->id;
+
 sub idle {
   my ($operator) = @_;
   my $search = Bugzilla::Search->new(
     fields => ['bug_id'],
     params => {
-      f1 => 'owner_idle_time', o1 => $operator,  v1 => '2025-12-01',
-      f2 => 'assigned_to',     o2 => 'equals',   v2 => 'alice@bmo.test',
+      f1 => 'owner_idle_time',
+      o1 => $operator,
+      v1 => '2025-12-01',
+      f2 => 'assigned_to',
+      o2 => 'equals',
+      v2 => 'alice@bmo.test',
     },
   );
   return [map { $_->[0] } @{$search->data}];

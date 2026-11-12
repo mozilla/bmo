@@ -13,7 +13,7 @@ use warnings;
 
 use Bugzilla::Error;
 use Bugzilla::Field qw(get_field_id);
-use Bugzilla::Util qw(trim datetime_from);
+use Bugzilla::Util  qw(trim datetime_from);
 use List::MoreUtils qw(none);
 
 use base qw( Bugzilla::Object );
@@ -94,9 +94,8 @@ sub status        { return $_[0]->{status} }
 # bugs_activity rows must not be listed twice.
 sub cutoff {
   my $cache = Bugzilla->request_cache;
-  $cache->{flag_activity_cutoff}
-    //= Bugzilla->dbh->selectrow_array('SELECT cutoff FROM flag_activity_migration')
-    // '1970-01-01 00:00:00';
+  $cache->{flag_activity_cutoff} //= Bugzilla->dbh->selectrow_array(
+    'SELECT cutoff FROM flag_activity_migration') // '1970-01-01 00:00:00';
   return $cache->{flag_activity_cutoff};
 }
 
@@ -111,7 +110,8 @@ sub after_cutoff_sql {
 sub bugs_activity_before_cutoff_sql {
   my ($class, $alias) = @_;
   my $field_id = get_field_id('flagtypes.name');
-  return "($alias.fieldid <> $field_id OR $alias.bug_when <= "
+  return
+    "($alias.fieldid <> $field_id OR $alias.bug_when <= "
     . Bugzilla->dbh->quote($class->cutoff) . ')';
 }
 

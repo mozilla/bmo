@@ -333,16 +333,15 @@ elsif ($action eq 'update') {
   }
 
   if (@groups_added_to || @groups_removed_from) {
-    $otherUser->set_groups({add => \@groups_added_to, remove => \@groups_removed_from});
+    $otherUser->set_groups(
+      {add => \@groups_added_to, remove => \@groups_removed_from});
   }
 
   if (@groups_granted_rights_to_bless || @groups_denied_rights_to_bless) {
-    $otherUser->set_bless_groups(
-      {
-        add    => \@groups_granted_rights_to_bless,
-        remove => \@groups_denied_rights_to_bless
-      }
-    );
+    $otherUser->set_bless_groups({
+      add    => \@groups_granted_rights_to_bless,
+      remove => \@groups_denied_rights_to_bless
+    });
   }
 
   my $changes = $otherUser->update();
@@ -391,14 +390,17 @@ elsif ($action eq 'del') {
     undef, $otherUserID);
   $vars->{'cc'} = $dbh->selectrow_array('SELECT COUNT(*) FROM cc WHERE who = ?',
     undef, $otherUserID);
+
   # Flag changes are in flag_activity, not bugs_activity.
   $vars->{'bugs_activity'} = $dbh->selectrow_array(
     'SELECT (SELECT COUNT(*) FROM bugs_activity WHERE who = ?)
           + (SELECT COUNT(*) FROM flag_activity WHERE who = ? OR setter_id = ?)',
     undef, ($otherUserID) x 3
   );
+
   # The foreign key forbids deleting a requestee kept in the flag history.
-  $vars->{'flag_activity_requestee'} = $dbh->selectrow_array(
+  $vars->{'flag_activity_requestee'}
+    = $dbh->selectrow_array(
     'SELECT COUNT(*) FROM flag_activity WHERE requestee_id = ?',
     undef, $otherUserID);
   $vars->{'component_cc'}

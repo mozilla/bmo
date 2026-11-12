@@ -15,8 +15,8 @@ use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Field;
 use Bugzilla::FlagType;
-use Bugzilla::Util qw(validate_date);
-use JSON qw(-convert_blessed_universally);
+use Bugzilla::Util  qw(validate_date);
+use JSON            qw(-convert_blessed_universally);
 use List::MoreUtils qw(uniq);
 
 sub report {
@@ -216,8 +216,8 @@ sub report {
                  AND fa.type_id = ? AND fa.status = ?
                  AND CONVERT_TZ(fa.flag_when, 'UTC', 'America/Los_Angeles') BETWEEN ? AND ?))";
       push @params, $q->{field_id}, @range,
-        '%' . $q->{flag_name} . $q->{flag_status} . '%',
-        $type_id, $q->{flag_status}, @range;
+        '%' . $q->{flag_name} . $q->{flag_status} . '%', $type_id, $q->{flag_status},
+        @range;
     }
 
     push @where,  "(f.type_id = ?)";
@@ -282,7 +282,7 @@ sub report {
 }
 
 sub _parse_query {
-  my $q = shift;
+  my $q     = shift;
   my @query = split(/:/, $q);
   my $query;
 

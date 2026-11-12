@@ -546,7 +546,8 @@ sub request_group {
 sub has_activity {
   my $self = shift;
   my $dbh  = Bugzilla->dbh;
-  $self->{'has_activity'} //= $dbh->selectrow_array(
+  $self->{'has_activity'}
+    //= $dbh->selectrow_array(
     'SELECT 1 FROM flag_activity WHERE type_id = ? ' . $dbh->sql_limit(1),
     undef, $self->id) ? 1 : 0;
   return $self->{'has_activity'};
@@ -672,7 +673,7 @@ sub match {
   my $dbh = Bugzilla->dbh;
 
   # Depending on the criteria, we may have to append additional tables.
-  my $tables = [DB_TABLE];
+  my $tables   = [DB_TABLE];
   my @criteria = sqlify_criteria($criteria, $tables);
   $tables   = join(' ',     @$tables);
   $criteria = join(' AND ', @criteria);
@@ -700,7 +701,7 @@ sub count {
   my $dbh = Bugzilla->dbh;
 
   # Depending on the criteria, we may have to append additional tables.
-  my $tables = [DB_TABLE];
+  my $tables   = [DB_TABLE];
   my @criteria = sqlify_criteria($criteria, $tables);
   $tables   = join(' ',     @$tables);
   $criteria = join(' AND ', @criteria);
