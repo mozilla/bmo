@@ -35,6 +35,25 @@ use Module::Runtime qw(require_module);
 has 'connector' => (is => 'lazy');
 has 'model'     => (is => 'lazy');
 
+has [qw(dsn user pass attrs)] => (is => 'ro', required => 1);
+
+around 'attrs' => sub {
+  my ($method, $self) = @_;
+  my $attrs = dclone($self->$method);
+  my $class = ref $self;
+
+  # This is only used by the DBIx::Class code DBIx::Connector does something
+  # different because the old Bugzilla code has its own ideas about
+  # transactions.
+  $attrs->{Callbacks}{connected} = sub {
+    my ($dbh, $dsn) = @_;
+    $class->on_dbi_connected(@_) if $class->can('on_dbi_connected');
+    return;
+  };
+
+  return $attrs;
+};
+
 # Longest time (seconds) a checked handle is reused without asking
 # DBIx::Connector again. Only matters for long-running processes; web
 # requests re-check at the start of every request.
@@ -63,24 +82,6 @@ sub dbh {
   $cache->{refaddr $self} = {dbh => $dbh, pid => $PID, checked => $now};
   return $dbh;
 }
-has [qw(dsn user pass attrs)] => (is => 'ro', required => 1);
-
-around 'attrs' => sub {
-  my ($method, $self) = @_;
-  my $attrs = dclone($self->$method);
-  my $class = ref $self;
-
-  # This is only used by the DBIx::Class code DBIx::Connector does something
-  # different because the old Bugzilla code has its own ideas about
-  # transactions.
-  $attrs->{Callbacks}{connected} = sub {
-    my ($dbh, $dsn) = @_;
-    $class->on_dbi_connected(@_) if $class->can('on_dbi_connected');
-    return;
-  };
-
-  return $attrs;
-};
 
 # Install proxy methods to the DBI object.
 # We can't use handles() as DBIx::Connector->dbh has to be called each
