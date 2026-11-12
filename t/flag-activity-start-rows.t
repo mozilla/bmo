@@ -84,14 +84,13 @@ is(
 
 sub flag_history {
   my ($activity) = Bugzilla::Bug::GetBugActivity($bug_id);
-  return [
-    map {
-      my $when = $_->{when};
-      map {"$when: $_->{removed} -> $_->{added}"}
-        grep { $_->{fieldname} eq 'flagtypes.name' }
-        @{$_->{changes}}
-    } @$activity
-  ];
+  my @history;
+  foreach my $operation (@$activity) {
+    push @history,
+      map {"$operation->{when}: $_->{removed} -> $_->{added}"}
+      grep { $_->{fieldname} eq 'flagtypes.name' } @{$operation->{changes}};
+  }
+  return \@history;
 }
 
 is(

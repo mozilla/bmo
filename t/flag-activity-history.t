@@ -66,12 +66,12 @@ sub flag_changes {
   my ($bug_id) = @_;
 
   my ($operations) = Bugzilla::Bug::GetBugActivity($bug_id);
-  my @history = map {
-    my $who = $_->{who};
-    map { [$who, $_->{removed}, $_->{added}] }
-      grep { $_->{fieldname} eq 'flagtypes.name' }
-      @{$_->{changes}}
-  } @$operations;
+  my @history;
+  foreach my $operation (@$operations) {
+    push @history,
+      map { [$operation->{who}, $_->{removed}, $_->{added}] }
+      grep { $_->{fieldname} eq 'flagtypes.name' } @{$operation->{changes}};
+  }
 
   $dbh->do('UPDATE bugs SET lastdiffed = NULL WHERE bug_id = ?', undef, $bug_id);
   my ($diffs) = Bugzilla::BugMail::_get_diffs(Bugzilla::Bug->new($bug_id),

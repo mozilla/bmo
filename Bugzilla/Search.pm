@@ -3182,19 +3182,19 @@ sub _owner_idle_time_greater_less {
 
   # The assignee commented, changed a bug or changed a flag since $value. One
   # EXISTS each, as joins would multiply their rows.
-  my $active = join(
-    ' OR ',
-    map {
-      my ($activity_table, $when) = @$_;
-      my $alias = "${activity_table}_$table";
-      "EXISTS (SELECT 1 FROM $activity_table $alias
-                WHERE $alias.who = $owner AND $alias.$when > $quoted)"
-    } (
-      ['longdescs',     'bug_when'],
-      ['bugs_activity', 'bug_when'],
-      ['flag_activity', 'flag_when']
+  my @exists;
+  foreach my $activity (
+    ['longdescs',     'bug_when'],
+    ['bugs_activity', 'bug_when'],
+    ['flag_activity', 'flag_when']
     )
-  );
+  {
+    my ($activity_table, $when) = @$activity;
+    my $alias = "${activity_table}_$table";
+    push @exists, "EXISTS (SELECT 1 FROM $activity_table $alias
+                WHERE $alias.who = $owner AND $alias.$when > $quoted)";
+  }
+  my $active = join(' OR ', @exists);
 
   $args->{term} = $operator =~ /greater/ ? "NOT ($active)" : "($active)";
 }
