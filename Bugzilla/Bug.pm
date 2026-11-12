@@ -4936,6 +4936,12 @@ sub GetBugActivity {
   my $flag_newer    = Bugzilla::FlagActivity->after_cutoff_sql('fsa');
   my $flag_last     = Bugzilla::FlagActivity->last_of_request_sql('fsa');
   my $flag_prev_id  = Bugzilla::FlagActivity->previous_id_sql('fsa');
+  my $flag_removed_req
+    = $dbh->sql_string_concat('ft.name', q{'?('}, 'preq.login_name', q{')'});
+  my $flag_removed = $dbh->sql_string_concat('ft.name', 'prev.status');
+  my $flag_added_req
+    = $dbh->sql_string_concat('ft.name', q{'?('}, 'req.login_name', q{')'});
+  my $flag_added = $dbh->sql_string_concat('ft.name', 'fsa.status');
   $query .= "
         UNION ALL
         SELECT 'flagtypes.name' AS field_name,
@@ -4944,13 +4950,13 @@ sub GetBugActivity {
                $flag_bug_when AS bug_when,
                CASE WHEN prev.id IS NULL THEN ''
                     WHEN prev.status = '?' AND preq.login_name IS NOT NULL
-                         THEN CONCAT(ft.name, '?(', preq.login_name, ')')
-                    ELSE CONCAT(ft.name, prev.status)
+                         THEN $flag_removed_req
+                    ELSE $flag_removed
                END AS removed,
                CASE WHEN fsa.status = 'X' THEN ''
                     WHEN fsa.status = '?' AND req.login_name IS NOT NULL
-                         THEN CONCAT(ft.name, '?(', req.login_name, ')')
-                    ELSE CONCAT(ft.name, fsa.status)
+                         THEN $flag_added_req
+                    ELSE $flag_added
                END AS added,
                changer.login_name AS who,
                NULL AS comment_id
