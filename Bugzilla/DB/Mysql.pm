@@ -141,6 +141,8 @@ sub sql_limit {
   }
 }
 
+sub sql_update_ignore { return 'UPDATE IGNORE'; }
+
 sub sql_string_concat {
   my ($self, @params) = @_;
 

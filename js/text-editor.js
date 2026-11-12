@@ -684,24 +684,11 @@ Bugzilla.TextEditor = class TextEditor {
     this.$preview.innerHTML = `<p role="status">${this.str.loading.htmlEncode()}</p>`;
 
     try {
-      const { html, mentions } = await Bugzilla.API.post('bug/comment/render', params);
+      const { html } = await Bugzilla.API.post('bug/comment/render', params);
 
       // Use the HTML without `htmlEncode()` because the API-provided rendered text should be safe
       // to be injected as is; using `htmlEncode()` rather breaks the text
       this.$preview.innerHTML = html;
-
-      // List who saving the comment will CC and needinfo, so a stray `@word` is noticed before
-      // the comment is submitted
-      if (mentions?.length) {
-        const users = mentions
-          .map(({ nick, name }) => (name ? `${name} (@${nick})` : `@${nick}`).htmlEncode())
-          .join(', ');
-
-        this.$preview.insertAdjacentHTML(
-          'afterbegin',
-          `<p class="mention-notice">${this.str.mention_notice.htmlEncode()} ${users}</p>`,
-        );
-      }
 
       // Highlight code if possible
       if (Prism) {
@@ -761,6 +748,8 @@ Bugzilla.CommentEditor = class CommentEditor extends Bugzilla.TextEditor {
         'Accel+Enter': { handler: () => this.submitForm() },
       });
     }
+
+    this.initMentionWarning();
   }
 
   /**
@@ -772,26 +761,186 @@ Bugzilla.CommentEditor = class CommentEditor extends Bugzilla.TextEditor {
   }
 
   /**
+   * The ID of the bug a new comment is being added to, if any.
+   * @type {string | undefined}
+   */
+  get bugId() {
+    if (this.$textarea.name !== 'comment') {
+      return undefined;
+    }
+
+    return BUGZILLA.bug_id ?? this.$textarea.form?.elements.namedItem('bugid')?.value;
+  }
+
+  /**
    * Get the params sent to the comment render API when previewing. A new comment on an existing
-   * bug is rendered against that bug, and also asks for the users its `@nickname` mentions will
-   * CC and needinfo.
+   * bug is rendered against that bug.
    * @returns {Record<string, any>} Params.
    */
   getPreviewParams() {
     const params = super.getPreviewParams();
-    const form = this.$textarea.form;
-    const bugId = BUGZILLA.bug_id ?? form?.elements.namedItem('bugid')?.value;
+    const { bugId } = this;
 
-    if (bugId && this.$textarea.name === 'comment') {
+    if (bugId) {
       params.id = bugId;
-      params.include_mentions = true;
-      params.mention_is_private = !!(
-        form?.elements.namedItem('comment_is_private')?.checked ||
-        form?.elements.namedItem('isprivate')?.checked
-      );
     }
 
     return params;
+  }
+
+  /**
+   * Add a live region below the editor that warns who the comment's `@nickname` mentions will
+   * needinfo and CC once it's saved, so nobody is needinfo'd by accident, e.g. by pasted text.
+   * It stays visible on both the Edit and Preview tabs, and updates as the user types or pastes.
+   */
+  initMentionWarning() {
+    if (!BUGZILLA.param.needinfo_mentions_enabled || this.$textarea.name !== 'comment') {
+      return;
+    }
+
+    // The live region stays in the document, even when empty, so screen readers announce updates
+    /** @type {HTMLElement} */
+    this.$mentionWarning = document.createElement('div');
+    this.$mentionWarning.className = 'mention-warning';
+    this.$mentionWarning.setAttribute('aria-live', 'polite');
+    this.$previewTabPanel.insertAdjacentElement('afterend', this.$mentionWarning);
+
+    /** @type {number | undefined} */
+    this.mentionTimer = undefined;
+    /** @type {string | undefined} */
+    this.lastMentionParams = undefined;
+    /** @type {number} */
+    this.mentionRequestCount = 0;
+    /** @type {string} */
+    this.mentionWarningHTML = '';
+
+    const schedule = () => this.scheduleMentionCheck();
+
+    this.$textarea.addEventListener('input', schedule);
+    // The comment privacy and, on bug entry, the product, component and groups affect the result
+    this.$textarea.form?.addEventListener('change', schedule);
+    this.$textarea.form?.addEventListener('reset', () => window.setTimeout(schedule));
+    // The textarea may already have text, e.g. a cloned bug's description
+    schedule();
+  }
+
+  /**
+   * Get the params sent to the mentions API, or `undefined` if mentions can't trigger a needinfo
+   * here, e.g. on a mass edit, or the text doesn't contain any mention.
+   * @returns {Record<string, any> | undefined} Params.
+   */
+  getMentionParams() {
+    const text = this.$textarea.value;
+
+    // Same as the check in `Bugzilla.BugModal.InstantUpdater`; the server does the real parsing
+    if (!/(?<![\w@./-])@[\p{L}\p{N}|._-]/u.test(text)) {
+      return undefined;
+    }
+
+    const form = this.$textarea.form;
+    const is_private = !!(
+      form?.elements.namedItem('comment_is_private')?.checked ||
+      form?.elements.namedItem('isprivate')?.checked
+    );
+    const { bugId } = this;
+
+    if (bugId) {
+      return { text, id: bugId, is_private };
+    }
+
+    // The initial comment of a new bug
+    if (form && /post_bug\.cgi$/.test(form.getAttribute('action') ?? '')) {
+      /** @param {string} name */
+      const valueOf = (name) =>
+        /** @type {HTMLInputElement | null} */ (form.elements.namedItem(name))?.value;
+      const product = valueOf('product');
+      const component = valueOf('component');
+      // Group checkboxes, or hidden fields on custom bug forms
+      const groups = [
+        .../** @type {NodeListOf<HTMLInputElement>} */ (form.querySelectorAll('[name="groups"]')),
+      ]
+        .filter(($input) => $input.type !== 'checkbox' || $input.checked)
+        .map(($input) => $input.value);
+
+      if (product) {
+        return { text, product, component, groups, is_private };
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Check the mentions shortly after the user stops typing.
+   */
+  scheduleMentionCheck() {
+    window.clearTimeout(this.mentionTimer);
+    this.mentionTimer = window.setTimeout(() => this.checkMentions(), 500);
+  }
+
+  /**
+   * Ask the server who the comment's mentions will needinfo and CC, and update the warning.
+   */
+  async checkMentions() {
+    const params = this.getMentionParams();
+    const paramsKey = JSON.stringify(params ?? null);
+
+    if (paramsKey === this.lastMentionParams) {
+      return;
+    }
+
+    this.lastMentionParams = paramsKey;
+
+    // Ignore responses to requests that have been superseded while waiting
+    const requestCount = ++this.mentionRequestCount;
+
+    if (!params) {
+      this.showMentionWarning([]);
+      return;
+    }
+
+    try {
+      const { mentions } = await Bugzilla.API.post('needinfo/mentions', params);
+
+      if (requestCount === this.mentionRequestCount) {
+        this.showMentionWarning(mentions ?? []);
+      }
+    } catch {
+      if (requestCount === this.mentionRequestCount) {
+        // Try again on the next change rather than showing a stale warning
+        this.lastMentionParams = undefined;
+        this.showMentionWarning([]);
+      }
+    }
+  }
+
+  /**
+   * Show who saving the comment will needinfo and CC, or hide the warning if nobody.
+   * @param {{ nick: string, name: string, needinfo: number | boolean }[]} mentions Users the
+   * comment mentions, as returned by the API.
+   */
+  showMentionWarning(mentions) {
+    /** @param {{ nick: string, name: string }} user */
+    const label = ({ nick, name }) => (name ? `${name} (@${nick})` : `@${nick}`).htmlEncode();
+    const needinfo = mentions.filter((user) => user.needinfo).map(label);
+    const ccOnly = mentions.filter((user) => !user.needinfo).map(label);
+    const lines = [];
+
+    if (needinfo.length) {
+      lines.push(`${this.str.mention_needinfo.htmlEncode()} ${needinfo.join(', ')}`);
+    }
+
+    if (ccOnly.length) {
+      lines.push(`${this.str.mention_cc_only.htmlEncode()} ${ccOnly.join(', ')}`);
+    }
+
+    const html = lines.map((line) => `<p>${line}</p>`).join('');
+
+    // Avoid announcing the same warning again
+    if (html !== this.mentionWarningHTML) {
+      this.mentionWarningHTML = html;
+      this.$mentionWarning.innerHTML = html;
+    }
   }
 
   /**

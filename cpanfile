@@ -71,7 +71,6 @@ requires 'LWP::UserAgent', '6.44';
 requires 'LWP::UserAgent::Determined';
 requires 'Linux::Pdeathsig';
 requires 'Linux::Pid';
-requires 'Linux::Smaps::Tiny';
 requires 'List::MoreUtils', '0.418';
 requires 'Log::Dispatch', '2.67';
 requires 'Log::Log4perl', '1.49';

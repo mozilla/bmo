@@ -26,13 +26,15 @@ use Bugzilla::DB::Schema;
 use Bugzilla::Version;
 
 use List::Util qw(max);
-use Scalar::Util qw(weaken);
+use Scalar::Util qw(refaddr weaken);
+use Time::HiRes ();
 use Storable qw(dclone);
 use English qw(-no_match_vars);
 use Module::Runtime qw(require_module);
 
-has 'connector' => (is => 'lazy', handles => [qw( dbh )]);
+has 'connector' => (is => 'lazy');
 has 'model'     => (is => 'lazy');
+
 has [qw(dsn user pass attrs)] => (is => 'ro', required => 1);
 
 around 'attrs' => sub {
@@ -51,6 +53,35 @@ around 'attrs' => sub {
 
   return $attrs;
 };
+
+# Longest time (seconds) a checked handle is reused without asking
+# DBIx::Connector again. Only matters for long-running processes; web
+# requests re-check at the start of every request.
+use constant DBH_CHECK_INTERVAL => 5;
+
+# DBIx::Connector->dbh pings the server on every call, and every proxied DBI
+# method below calls dbh(), so a single page used to send hundreds of pings.
+# Reuse the handle the connector last returned, re-checking it once per
+# request (the request cache is cleared before each one), after a fork, when
+# the handle is no longer active, or after DBH_CHECK_INTERVAL seconds.
+sub dbh {
+  my ($self) = @_;
+  my $cache = Bugzilla->request_cache->{bz_db_checked_dbh} //= {};
+  my $entry = $cache->{refaddr $self};
+  my $now   = Time::HiRes::time();
+
+  if ( $entry
+    && $entry->{pid} == $PID
+    && $entry->{dbh}{Active}
+    && $now - $entry->{checked} < DBH_CHECK_INTERVAL)
+  {
+    return $entry->{dbh};
+  }
+
+  my $dbh = $self->connector->dbh;
+  $cache->{refaddr $self} = {dbh => $dbh, pid => $PID, checked => $now};
+  return $dbh;
+}
 
 # Install proxy methods to the DBI object.
 # We can't use handles() as DBIx::Connector->dbh has to be called each
@@ -2014,6 +2045,26 @@ Abstract method, should be overridden by database specific code.
 
 Formatted SQL for limiting number of rows returned from query
 with optional offset (e.g. LIMIT 1, 1) (scalar)
+
+=back
+
+=item C<sql_update_ignore>
+
+=over
+
+=item B<Description>
+
+Returns the leading keywords of an UPDATE that skips rows whose new
+values would violate a unique key, instead of raising an error.
+
+Abstract method, should be overridden by database specific code.
+
+=item B<Params> (none)
+
+=item B<Returns>
+
+SQL to start such an UPDATE, followed by the table name
+(e.g. UPDATE IGNORE) (scalar)
 
 =back
 
