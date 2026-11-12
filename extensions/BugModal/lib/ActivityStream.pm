@@ -103,9 +103,10 @@ sub find_activity_id_for_flag {
 
     # flag_activity records each change against the flag's object id, so we
     # can look up the exact timestamp without relying on flag-type name matching.
-    my ($flag_when, $who) = Bugzilla->dbh->selectrow_array(
+    my $dbh = Bugzilla->dbh;
+    my ($flag_when, $who) = $dbh->selectrow_array(
       "SELECT flag_when, who FROM flag_activity WHERE flag_id = ?
-       ORDER BY id DESC LIMIT 1", undef, $flag_id
+       ORDER BY id DESC " . $dbh->sql_limit(1), undef, $flag_id
     );
 
     # flag_activity only logged review, feedback and needinfo before, so other
