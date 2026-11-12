@@ -4636,8 +4636,9 @@ sub _add_flag_activity_start_rows {
     'INSERT INTO flag_activity_migration (cutoff) VALUES (LOCALTIMESTAMP(0))');
 }
 
-# Nullable for now: during the rolling deploy, pods still on the previous code
-# insert rows without it. Bug 2085398 makes it NOT NULL once all pods write it.
+# Added nullable: during the rolling deploy, pods still on the previous code
+# inserted rows without it. _set_flag_activity_who_not_null makes it NOT NULL
+# once all pods write it.
 sub _add_flag_activity_who {
   my $dbh = Bugzilla->dbh;
 

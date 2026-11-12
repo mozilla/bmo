@@ -40,7 +40,7 @@ whose names start with _ or a re specifically noted as being private.
 =cut
 
 use Scalar::Util qw(blessed);
-use Storable qw(dclone);
+use Storable     qw(dclone);
 
 use Bugzilla::FlagActivity;
 use Bugzilla::FlagType;
@@ -61,7 +61,7 @@ use base qw(Bugzilla::Object Exporter);
 use constant DB_TABLE   => 'flags';
 use constant LIST_ORDER => 'id';
 
-# Flags are tracked in bugs_activity.
+# Flag changes are tracked in flag_activity (see Bugzilla::FlagActivity).
 use constant AUDIT_CREATES => 0;
 use constant AUDIT_UPDATES => 0;
 use constant AUDIT_REMOVES => 0;
@@ -327,6 +327,7 @@ sub set_flag {
       reason => $can_change->{reason}
     }
   );
+
   # Update (or delete) an existing flag.
   if ($params->{id}) {
     my $flag = $class->check({id => $params->{id}});
@@ -476,7 +477,7 @@ sub create {
   my ($class, $flag, $timestamp) = @_;
   $timestamp ||= Bugzilla->dbh->selectrow_array('SELECT LOCALTIMESTAMP(0)');
 
-  my $params = {};
+  my $params  = {};
   my @columns = grep { $_ ne 'id' } $class->_get_db_columns;
 
   # Some columns use date formatting so use alias instead
@@ -569,7 +570,7 @@ sub update_flags {
   my ($class, $self, $old_self, $timestamp) = @_;
 
   my @old_summaries = $class->snapshot($old_self->flags);
-  my %old_flags = map { $_->id => $_ } @{$old_self->flags};
+  my %old_flags     = map { $_->id => $_ } @{$old_self->flags};
 
   foreach my $new_flag (@{$self->flags}) {
     if (!$new_flag->id) {
@@ -620,7 +621,7 @@ sub update_flags {
   }
 
   my @new_summaries = $class->snapshot($self->flags);
-  my @changes = $class->update_activity(\@old_summaries, \@new_summaries);
+  my @changes       = $class->update_activity(\@old_summaries, \@new_summaries);
 
   Bugzilla::Hook::process(
     'flag_end_of_update',
@@ -699,7 +700,7 @@ sub force_retarget {
   foreach my $flag (@$flags) {
 
     # $bug is undefined when e.g. editing inclusion and exclusion lists.
-    my $obj = $flag->attachment || $bug || $flag->bug;
+    my $obj           = $flag->attachment || $bug || $flag->bug;
     my $is_retargeted = $flag->retarget($obj);
     if ($is_retargeted) {
       $dbh->do('UPDATE flags SET type_id = ? WHERE id = ?',
@@ -1049,6 +1050,7 @@ sub extract_flags_from_cgi {
       }
     }
     elsif (!$flag_type->is_multiplicable && scalar @$current_flags) {
+
       # Update or delete the current flag if the type is not multiplicable.
       push(@new_flags, {id => @$current_flags[0]->id, status => $status});
     }
