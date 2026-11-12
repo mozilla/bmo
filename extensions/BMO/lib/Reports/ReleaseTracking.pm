@@ -14,6 +14,7 @@ use warnings;
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Field;
+use Bugzilla::FlagActivity;
 use Bugzilla::FlagType;
 use Bugzilla::Util  qw(validate_date);
 use JSON            qw(-convert_blessed_universally);
@@ -205,6 +206,8 @@ sub report {
       my @range = ($q->{start_date} . ' 00:00:00', $q->{end_date} . ' 23:59:59');
 
       # Flag changes are in flag_activity; older ones only in bugs_activity.
+      # As in history, only the net change of a request counts.
+      my $fa_last = Bugzilla::FlagActivity->last_of_request_sql('fa');
       push @where, "(EXISTS (
           SELECT 1 FROM bugs_activity a
            WHERE a.bug_id = b.bug_id AND a.fieldid = ?
@@ -213,7 +216,7 @@ sub report {
         OR EXISTS (
           SELECT 1 FROM flag_activity fa
            WHERE fa.bug_id = b.bug_id
-                 AND fa.type_id = ? AND fa.status = ?
+                 AND fa.type_id = ? AND fa.status = ? AND $fa_last
                  AND CONVERT_TZ(fa.flag_when, 'UTC', 'America/Los_Angeles') BETWEEN ? AND ?))";
       push @params, $q->{field_id}, @range,
         '%' . $q->{flag_name} . $q->{flag_status} . '%', $type_id, $q->{flag_status},
