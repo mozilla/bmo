@@ -11,14 +11,11 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::JSON qw(decode_json);
 use Bugzilla::Logging;
 
-use constant MIN_SIZE_LIMIT        => 750_000;
-use constant HAVE_LINUX_SMAPS_TINY => eval { require Linux::Smaps::Tiny };
-use constant HAVE_BSD_RESOURCE     => eval { require BSD::Resource };
+use constant MIN_SIZE_LIMIT    => 750_000;
+use constant PROC_STATUS       => '/proc/self/status';
+use constant HAVE_BSD_RESOURCE => eval { require BSD::Resource };
 
 BEGIN {
-  if (HAVE_LINUX_SMAPS_TINY) {
-    Linux::Smaps::Tiny->import('get_smaps_summary');
-  }
   if (HAVE_BSD_RESOURCE) {
     BSD::Resource->import;
   }
@@ -54,7 +51,7 @@ sub register {
     });
   }
 
-  if (HAVE_LINUX_SMAPS_TINY) {
+  if (defined vm_size_kb()) {
     my $size_limit = Bugzilla->localconfig->size_limit;
     return unless $size_limit;
 
@@ -65,17 +62,31 @@ sub register {
 
     $app->hook(
       after_dispatch => sub {
-        my $c       = shift;
-        my $summary = get_smaps_summary();
-        if ($summary->{Size} >= $size_limit) {
-          my $diff = $summary->{Size} - $size_limit;
-          INFO("memory size exceeded $size_limit by $diff ($summary->{Size})");
+        my $c    = shift;
+        my $size = vm_size_kb() // return;
+        if ($size >= $size_limit) {
+          my $diff = $size - $size_limit;
+          INFO("memory size exceeded $size_limit by $diff ($size)");
           $c->res->headers->connection('close');
           Mojo::IOLoop->singleton->stop_gracefully;
         }
       }
     );
   }
+}
+
+# Virtual memory size in kB from VmSize, or undef if unavailable (non-Linux).
+sub vm_size_kb {
+  open my $fh, '<', PROC_STATUS or return undef;
+  my $size;
+  while (my $line = <$fh>) {
+    if ($line =~ /^VmSize:\s+(\d+)\s+kB/) {
+      $size = $1;
+      last;
+    }
+  }
+  close $fh;
+  return $size;
 }
 
 1;
