@@ -3191,8 +3191,13 @@ sub _owner_idle_time_greater_less {
   {
     my ($activity_table, $when) = @$activity;
     my $alias = "${activity_table}_$table";
-    push @exists, "EXISTS (SELECT 1 FROM $activity_table $alias
-                WHERE $alias.who = $owner AND $alias.$when > $quoted)";
+    my $where = "$alias.who = $owner AND $alias.$when > $quoted";
+
+    # flag_activity rows up to the cutoff only have a guessed who: those
+    # changes are read from bugs_activity.
+    $where .= ' AND ' . Bugzilla::FlagActivity->after_cutoff_sql($alias)
+      if $activity_table eq 'flag_activity';
+    push @exists, "EXISTS (SELECT 1 FROM $activity_table $alias WHERE $where)";
   }
   my $active = join(' OR ', @exists);
 

@@ -168,21 +168,33 @@ my $owned_bug = create_bug(
 )->id;
 
 sub idle {
-  my ($operator) = @_;
+  my ($operator, $owner, $since) = @_;
+  $owner //= 'alice@bmo.test';
   my $search = Bugzilla::Search->new(
     fields => ['bug_id'],
     params => {
       f1 => 'owner_idle_time',
       o1 => $operator,
-      v1 => '2025-12-01',
+      v1 => $since // '2025-12-01',
       f2 => 'assigned_to',
       o2 => 'equals',
-      v2 => 'alice@bmo.test',
+      v2 => $owner,
     },
   );
   return [map { $_->[0] } @{$search->data}];
 }
 is(idle('lessthan'),    [$owned_bug], 'owner_idle_time lessthan');
 is(idle('greaterthan'), [],           'owner_idle_time greaterthan');
+
+# carol's only change since 2019 is the flag_activity row up to the cutoff
+# above, whose who is a guess: she is idle.
+my $carol_bug = create_bug(
+  short_desc  => 'owned by carol',
+  comment     => 'Flag search test bug',
+  bug_type    => 'defect',
+  assigned_to => 'carol@bmo.test',
+)->id;
+is(idle('greaterthan', 'carol@bmo.test', '2019-01-01'),
+  [$carol_bug], 'owner_idle_time skips a flag_activity row up to the cutoff');
 
 done_testing;
