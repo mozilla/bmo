@@ -122,6 +122,12 @@ sub report {
       = Bugzilla::FlagActivity->bugs_activity_before_cutoff_sql('bugs_activity');
     my $flag_last    = Bugzilla::FlagActivity->last_of_request_sql('fsa');
     my $flag_prev_id = Bugzilla::FlagActivity->previous_id_sql('fsa');
+    my $flag_removed_req = $dbh->sql_string_concat('ft.name', 'prev.status',
+      q{'('}, 'preq.login_name', q{')'});
+    my $flag_removed = $dbh->sql_string_concat('ft.name', 'prev.status');
+    my $flag_added_req = $dbh->sql_string_concat('ft.name', 'fsa.status',
+      q{'('}, 'req.login_name', q{')'});
+    my $flag_added = $dbh->sql_string_concat('ft.name', 'fsa.status');
     my $query = "
         SELECT
                    fielddefs.name,
@@ -158,13 +164,13 @@ sub report {
       . " AS ts,
                    CASE WHEN prev.id IS NULL THEN ''
                         WHEN prev.status = CHAR(63) AND preq.login_name IS NOT NULL
-                             THEN CONCAT(ft.name, prev.status, '(', preq.login_name, ')')
-                        ELSE CONCAT(ft.name, prev.status)
+                             THEN $flag_removed_req
+                        ELSE $flag_removed
                    END AS removed,
                    CASE WHEN fsa.status = 'X' THEN ''
                         WHEN fsa.status = CHAR(63) AND req.login_name IS NOT NULL
-                             THEN CONCAT(ft.name, fsa.status, '(', req.login_name, ')')
-                        ELSE CONCAT(ft.name, fsa.status)
+                             THEN $flag_added_req
+                        ELSE $flag_added
                    END AS added,
                    profiles.login_name,
                    NULL AS comment_id,
