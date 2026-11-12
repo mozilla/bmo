@@ -3848,9 +3848,6 @@ sub _flag_activity_exists {
     . join(' AND ', @where) . ')';
 }
 
-# SQL matching a flag_activity row against a history value like
-# "review+" or "review?(user@example.com)". Returns nothing if the value
-# isn't a flag state.
 # SQL condition on flag_activity row $fa for changedto or changedfrom $value
 # (the state before this change), or undef if $value isn't a flag state.
 sub _flag_state_changed_sql {
@@ -3871,6 +3868,9 @@ sub _flag_state_changed_sql {
        WHERE $prev.id = $prev_id AND $match)";
 }
 
+# SQL matching a flag_activity row against a history value like
+# "review+" or "review?(user@example.com)". Returns nothing if the value
+# isn't a flag state.
 sub _flag_state_match {
   my ($table, $value) = @_;
   my $dbh = Bugzilla->dbh;
