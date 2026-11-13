@@ -51,7 +51,9 @@ sub create_group {
   my ($group, %extra) = @_;
   require Bugzilla;
   return Bugzilla::Group->create({
-    name => $group, description => "$group Group Description", %extra,
+    name        => $group,
+    description => "$group Group Description",
+    %extra,
   });
 }
 
@@ -62,10 +64,8 @@ sub create_oauth_client {
   my $id     = generate_random_password(20);
   my $secret = generate_random_password(40);
 
-  $dbh->do(
-    'INSERT INTO oauth2_client (client_id, description, secret, hostname) VALUES (?, ?, ?, ?)',
-    undef, $id, $description, $secret, hostname()
-  );
+  $dbh->do('INSERT INTO oauth2_client (client_id, description, secret, hostname) VALUES (?, ?, ?, ?)',
+    undef, $id, $description, $secret, hostname());
 
   my $client_data
     = $dbh->selectrow_hashref('SELECT * FROM oauth2_client WHERE client_id = ?',
@@ -78,8 +78,10 @@ sub create_oauth_client {
     if (!$scope_id) {
       die "Scope $scope not found";
     }
-    $dbh->do('INSERT INTO oauth2_client_scope (client_id, scope_id) VALUES (?, ?)',
-      undef, $client_data->{id}, $scope_id);
+    $dbh->do(
+      'INSERT INTO oauth2_client_scope (client_id, scope_id) VALUES (?, ?)',
+      undef, $client_data->{id}, $scope_id
+    );
   }
 
   $client_data->{scopes} = $scopes;

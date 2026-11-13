@@ -25,12 +25,12 @@ sub report {
 
   my @who    = ();
   my $from   = trim($input->{'from'} || '');
-  my $to     = trim($input->{'to'}   || '');
+  my $to     = trim($input->{'to'} || '');
   my $action = $input->{'action'} || '';
 
   # fix non-breaking hyphens
   $from =~ s/\N{U+2011}/-/g;
-  $to   =~ s/\N{U+2011}/-/g;
+  $to =~ s/\N{U+2011}/-/g;
 
   if ($from eq '') {
     my $dt = DateTime->now()->subtract('weeks' => 1);

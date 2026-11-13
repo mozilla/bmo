@@ -215,7 +215,8 @@ sub _add_activities_to_stream {
     : Bugzilla::Bug::GetBugActivity($bug->id);
 
   # allow other extensions to alter history
-  Bugzilla::Hook::process('inline_history_activity', {activity => $raw_activity});
+  Bugzilla::Hook::process('inline_history_activity',
+    {activity => $raw_activity});
 
   my %attachment_cache;
   foreach my $attachment (@{$bug->attachments}) {
@@ -259,7 +260,7 @@ sub _add_activities_to_stream {
       my $column = $dbh->bz_column_info($table, $field);
       if ($column && $column->{TYPE} eq 'BOOLEAN') {
         $change->{removed} = '';
-        $change->{added}   = $change->{added} ? 'true' : 'false';
+        $change->{added} = $change->{added} ? 'true' : 'false';
       }
 
       # load field object (only required for custom fields), and set the
@@ -271,8 +272,7 @@ sub _add_activities_to_stream {
       }
 
       # identify buglist changes
-      if ($change->{fieldname}
-        =~ /^(?:dependson|blocked|regress(?:ed_by|es)|dup_id|duplicates)$/
+      if ($change->{fieldname} =~ /^(?:dependson|blocked|regress(?:ed_by|es)|dup_id|duplicates)$/
         || ($field_obj && $field_obj->type == FIELD_TYPE_BUG_ID))
       {
         $change->{buglist} = 1;

@@ -35,8 +35,8 @@ use Bugzilla::BugUserLastVisit;
 use Date::Parse;
 use DateTime;
 use List::MoreUtils qw(firstidx uniq part any);
-use List::Util      qw(min max first);
-use Storable        qw(dclone);
+use List::Util qw(min max first);
+use Storable qw(dclone);
 use URI;
 use URI::QueryParam;
 use Scalar::Util qw(blessed weaken);
@@ -74,7 +74,7 @@ use constant USE_MEMCACHED => 0;
 
 # This is a sub because it needs to call other subroutines.
 sub DB_COLUMNS {
-  my $dbh    = Bugzilla->dbh;
+  my $dbh = Bugzilla->dbh;
   my @custom = grep { $_->type != FIELD_TYPE_MULTI_SELECT }
     Bugzilla->active_custom_fields({skip_extensions => 1});
   my @custom_names = map { $_->name } @custom;
@@ -108,7 +108,7 @@ sub DB_COLUMNS {
       status_whiteboard
       target_milestone
       version
-    ), 'reporter    AS reporter_id',
+      ), 'reporter    AS reporter_id',
     $dbh->sql_date_format('deadline', '%Y-%m-%d') . ' AS deadline', @custom_names
   );
 
@@ -219,7 +219,7 @@ sub UPDATE_COLUMNS {
   my @custom = grep { $_->type != FIELD_TYPE_MULTI_SELECT }
     Bugzilla->active_custom_fields({skip_extensions => 1});
   my @custom_names = map { $_->name } @custom;
-  my @columns      = qw(
+  my @columns = qw(
     alias
     assigned_to
     bug_file_loc
@@ -391,7 +391,7 @@ sub initialize {
 
 sub object_cache_key {
   my $class = shift;
-  my $key   = $class->SUPER::object_cache_key(@_) || return;
+  my $key = $class->SUPER::object_cache_key(@_) || return;
   return $key . ',' . Bugzilla->user->id;
 }
 
@@ -498,7 +498,7 @@ sub match {
     # so include them in the list if they have been specified.
     if (exists $params->{"${field}_id"}) {
       my $current_ids = $params->{"${field}_id"};
-      my @id_array    = ref $current_ids ? @$current_ids : ($current_ids);
+      my @id_array = ref $current_ids ? @$current_ids : ($current_ids);
       push(@ids, @id_array);
     }
 
@@ -606,9 +606,9 @@ sub possible_duplicates {
   my ($class, $params) = @_;
   my $short_desc = $params->{summary};
   my $products   = $params->{products} || [];
-  my $limit      = $params->{limit}    || MAX_POSSIBLE_DUPLICATES;
+  my $limit      = $params->{limit} || MAX_POSSIBLE_DUPLICATES;
   $limit    = MAX_POSSIBLE_DUPLICATES if $limit > MAX_POSSIBLE_DUPLICATES;
-  $products = [$products] if !ref($products) || ref($products) ne 'ARRAY';
+  $products = [$products]             if !ref($products) || ref($products) ne 'ARRAY';
 
   my $orig_limit = $limit;
   detaint_natural($limit)
@@ -641,7 +641,7 @@ sub possible_duplicates {
     foreach my $word (@words) {
       my ($term, $rel_term)
         = $dbh->sql_fulltext_search('bugs_fulltext.short_desc', $word);
-      push(@where,     $term);
+      push(@where, $term);
       push(@relevance, $rel_term || $term);
     }
 
@@ -841,7 +841,7 @@ sub create {
   if ($see_also) {
     my $see_also_array = $see_also;
     if (!ref $see_also_array) {
-      $see_also       = trim($see_also);
+      $see_also = trim($see_also);
       $see_also_array = [split(/[\s,]+/, $see_also)];
     }
     foreach my $value (@$see_also_array) {
@@ -986,8 +986,8 @@ sub update {
   foreach my $field (qw(qa_contact assigned_to)) {
     if ($changes->{$field}) {
       my ($from, $to) = @{$changes->{$field}};
-      $from              = $old_bug->$field->login if $from;
-      $to                = $self->$field->login    if $to;
+      $from = $old_bug->$field->login if $from;
+      $to   = $self->$field->login    if $to;
       $changes->{$field} = [$from, $to];
     }
   }
@@ -1048,8 +1048,8 @@ sub update {
     my ($table, $field1, $field2) = @$rel;
 
     foreach my $pair ([$field1, $field2], [$field2, $field1]) {
-      my ($field,   $other_field) = @$pair;
-      my ($removed, $added)       = diff_arrays($old_bug->$field, $self->$field);
+      my ($field, $other_field) = @$pair;
+      my ($removed, $added) = diff_arrays($old_bug->$field, $self->$field);
 
       foreach my $id (@$removed) {
         $dbh->do("DELETE FROM $table WHERE $field = ? AND $other_field = ?",
@@ -1105,8 +1105,10 @@ sub update {
 
     # we only audit when bugs protected with a secure-mail enabled group
     # are made public
-    if (!scalar @{$self->groups_in} && any { $old_groups{$_}->secure_mail }
-      @$removed_gr)
+    if (
+      !scalar @{$self->groups_in} && any { $old_groups{$_}->secure_mail }
+      @$removed_gr
+      )
     {
       Bugzilla->audit(sprintf(
         '%s made Bug %s public (%s)',
@@ -1735,7 +1737,6 @@ sub _check_bug_type {
   my $type_required = Bugzilla->params->{'require_bug_type'};
 
   if (defined $type && trim($type)) {
-
     # Treat '--' type value same as empty
     if ($type_required && $type eq '--') {
       ThrowUserError('bug_type_required');
@@ -1755,8 +1756,7 @@ sub _check_bug_type {
     : undef;
   my $component
     = ($product && defined $params->{component})
-    ? Bugzilla::Component->new(
-    {name => $params->{component}, product => $product, cache => 1})
+    ? Bugzilla::Component->new({name => $params->{component}, product => $product, cache => 1})
     : undef;
 
   return $component
@@ -1826,7 +1826,7 @@ sub _check_component {
   $name || ThrowUserError("require_component");
   my $product  = blessed($invocant) ? $invocant->product_obj : $params->{product};
   my $old_comp = blessed($invocant) ? $invocant->component   : '';
-  my $object   = Bugzilla::Component->check({product => $product, name => $name});
+  my $object = Bugzilla::Component->check({product => $product, name => $name});
   if ($object->name ne $old_comp && !$object->is_active) {
     ThrowUserError('value_inactive', {class => ref($object), value => $name});
   }
@@ -1941,7 +1941,7 @@ sub _check_relationship {
 
   # And finally, check for dependency loops.
   my $bug_id = ref($invocant) ? $invocant->id : 0;
-  my %deps   = validate_relationship($bug_id, $table, %deps_in);
+  my %deps = validate_relationship($bug_id, $table, %deps_in);
 
   return %deps;
 }
@@ -2069,7 +2069,7 @@ sub _check_keywords {
 
   my $keyword_array = $keywords_in;
   if (!ref $keyword_array) {
-    $keywords_in   = trim($keywords_in);
+    $keywords_in = trim($keywords_in);
     $keyword_array = [split(/[\s,]+/, $keywords_in)];
   }
 
@@ -2143,7 +2143,7 @@ sub _check_qa_contact {
   # the QA Contact for validity.
   if (!defined $id && $qa_contact) {
     $qa_contact = Bugzilla::User->check($qa_contact) if !ref $qa_contact;
-    $id         = $qa_contact->id;
+    $id = $qa_contact->id;
 
     # create() checks this another way, so we don't have to run this
     # check during create().
@@ -2195,7 +2195,7 @@ sub _check_resolution {
     && (!$self->resolution || $resolution ne $self->resolution)
     && scalar @{$self->dependson})
   {
-    my $dep_bugs   = Bugzilla::Bug->new_from_list($self->dependson);
+    my $dep_bugs = Bugzilla::Bug->new_from_list($self->dependson);
     my $count_open = grep { $_->isopened } @$dep_bugs;
     if ($count_open) {
       ThrowUserError("still_unresolved_bugs",
@@ -2619,7 +2619,7 @@ sub set_all {
   # (because currently there is no way to check for duplicate loops in that
   # situation). You also cannot set the alias of several bugs at once.
   if ($params->{other_bugs} and scalar @{$params->{other_bugs}} > 1) {
-    ThrowUserError('dupe_not_allowed')           if exists $params->{dup_id};
+    ThrowUserError('dupe_not_allowed') if exists $params->{dup_id};
     ThrowUserError('multiple_alias_not_allowed') if defined $params->{alias};
   }
 
@@ -2723,9 +2723,9 @@ sub set_all {
   # glitch where e.g. cf_crash_signature could be stored on a product that
   # doesn't expose it.
   my @custom_fields
-    = grep { $_->type != FIELD_TYPE_EXTENSION }
-    Bugzilla->active_custom_fields(
-    {product => $self->product_obj, component => $self->component_obj});
+    = grep { $_->type != FIELD_TYPE_EXTENSION } Bugzilla->active_custom_fields(
+        {product => $self->product_obj, component => $self->component_obj}
+    );
   foreach my $field (@custom_fields) {
     my $fname = $field->name;
     if (exists $params->{$fname}) {
@@ -2953,7 +2953,6 @@ sub _set_product {
   #    themselves changed.
 
   if ($product_changed) {
-
     # Try to set each value with the new product.
     # Have to set error_mode because Throw*Error calls exit() otherwise.
     # We will do this for both browser and non-browser clients.
@@ -2986,7 +2985,7 @@ sub _set_product {
 
       my $verified = $params->{product_change_confirmed};
 
-# BMO - if everything is ok then we can skip the verfication page when using bug_modal
+      # BMO - if everything is ok then we can skip the verfication page when using bug_modal
       if ( (($params->{format} && $params->{format} eq 'modal') || !$verified)
         && $component_ok
         && $version_ok
@@ -3056,9 +3055,8 @@ sub _set_product {
     }
     else {
       # If we are not in the browser, we just die if certain values are invalid.
-      $self->set_component($comp_name)      if !$component_ok;
+      $self->set_component($comp_name) if !$component_ok;
       $self->set_target_milestone($tm_name) if !$milestone_ok;
-
       # If version is not valid, then set to default version instead of dying.
       $self->set_version($product->default_version) if !$version_ok;
     }
@@ -3089,9 +3087,8 @@ sub _set_product {
     # verify-new-product UI via _check_default_product_security_group() in the
     # BMO extension.
     my @pre_move_names = map { $_->name } @current_groups;
-    for my $sec_group (_target_security_group_when_dropping(
-      $product, \@pre_move_names, $dropped_group
-    ))
+    for my $sec_group (
+      _target_security_group_when_dropping($product, \@pre_move_names, $dropped_group))
     {
       $self->add_group($sec_group);
     }
@@ -3128,7 +3125,7 @@ sub reset_qa_contact {
 sub set_remaining_time { $_[0]->set('remaining_time', $_[1]); }
 
 # Used only when closing a bug or moving between closed states.
-sub _zero_remaining_time    { $_[0]->{'remaining_time'} = 0; }
+sub _zero_remaining_time { $_[0]->{'remaining_time'} = 0; }
 sub set_reporter_accessible { $_[0]->set('reporter_accessible', $_[1]); }
 
 sub set_resolution {
@@ -3221,7 +3218,6 @@ sub set_bug_status {
 }
 
 sub set_type {
-
   # The bug_type table column is nullable, but make sure to use the default type
   # in case it's not set
   $_[0]->set('bug_type', $_[1] || Bugzilla->params->{'default_bug_type'});
@@ -3273,7 +3269,7 @@ sub add_comment {
   $params ||= {};
 
   # Fill out info that doesn't change and callers may not pass in
-  $params->{'bug_id'}  = $self;
+  $params->{'bug_id'} = $self;
   $params->{'thetext'} = defined($comment) ? $comment : '';
 
   # Validate all the entered data
@@ -3340,7 +3336,7 @@ sub modify_keywords {
   @result = sort { lc($a->name) cmp lc($b->name) } @result;
 
   if ($any_changes) {
-    my $new        = join(', ', (map { $_->name } @result));
+    my $new = join(', ', (map { $_->name } @result));
     my $can_change = $self->check_can_change_field('keywords', 0, 1);
     $can_change->{allowed} || ThrowUserError(
       'illegal_change',
@@ -3365,7 +3361,7 @@ sub add_group {
   # So we have to store and pass the name as entered by the user to
   # the error message, if we have it.
   my $group_name = blessed($group) ? $group->name : $group;
-  my $args       = {
+  my $args = {
     name    => $group_name,
     product => $self->product,
     bug_id  => $self->id,
@@ -3407,7 +3403,7 @@ sub remove_group {
 
   # See add_group() for the reason why we store the user input.
   my $group_name = blessed($group) ? $group->name : $group;
-  my $args       = {
+  my $args = {
     name    => $group_name,
     product => $self->product,
     bug_id  => $self->id,
@@ -3494,8 +3490,7 @@ sub add_see_also {
     # If this is a link to a local bug then save the
     # ref bug id for sending changes email.
     if (my $ref_bug = delete $field_values->{ref_bug}) {
-      my $ref_can_change
-        = $ref_bug->check_can_change_field('see_also', '', $self->id);
+      my $ref_can_change = $ref_bug->check_can_change_field('see_also', '', $self->id);
       if (  $class->isa('Bugzilla::BugUrl::Local')
         and !$skip_recursion
         and Bugzilla->user->can_see_bug($ref_bug->id)
@@ -3731,8 +3726,8 @@ sub _resolve_ultimate_dup_id {
     # prevent them from marking this bug as a duplicate.
     return $last_dup if exists $dupes{$this_dup};
     $dupes{$this_dup} = 1;
-    $last_dup         = $this_dup;
-    $this_dup         = $dbh->selectrow_array($sth, undef, $this_dup);
+    $last_dup = $this_dup;
+    $this_dup = $dbh->selectrow_array($sth, undef, $this_dup);
   }
 
   return $last_dup;
@@ -3777,7 +3772,7 @@ sub any_flags_requesteeble {
 sub attachments {
   my ($self) = @_;
   return $self->{'attachments'} if exists $self->{'attachments'};
-  return []                     if $self->{'error'};
+  return [] if $self->{'error'};
 
   $self->{'attachments'}
     = Bugzilla::Attachment->get_attachments_by_bug($self, {preload => 1});
@@ -3787,7 +3782,7 @@ sub attachments {
 sub assigned_to {
   my ($self) = @_;
   return $self->{'assigned_to_obj'} if exists $self->{'assigned_to_obj'};
-  $self->{'assigned_to'} = 0        if $self->{'error'};
+  $self->{'assigned_to'} = 0 if $self->{'error'};
   return $self->{'assigned_to_obj'}
     = new Bugzilla::User({id => $self->{'assigned_to'}, cache => 1});
 }
@@ -3795,7 +3790,7 @@ sub assigned_to {
 sub blocked {
   my ($self) = @_;
   return $self->{'blocked'} if exists $self->{'blocked'};
-  return []                 if $self->{'error'};
+  return [] if $self->{'error'};
   $self->{'blocked'}
     = list_relationship('dependencies', 'dependson', 'blocked', $self->bug_id);
   return $self->{'blocked'};
@@ -3825,7 +3820,7 @@ sub related_bugs {
 sub cc {
   my ($self) = @_;
   return $self->{'cc'} if exists $self->{'cc'};
-  return []            if $self->{'error'};
+  return [] if $self->{'error'};
 
   my $dbh = Bugzilla->dbh;
   $self->{'cc'} = $dbh->selectcol_arrayref(
@@ -3844,7 +3839,7 @@ sub cc {
 sub cc_users {
   my $self = shift;
   return $self->{'cc_users'} if exists $self->{'cc_users'};
-  return []                  if $self->{'error'};
+  return [] if $self->{'error'};
 
   my $dbh    = Bugzilla->dbh;
   my $cc_ids = $dbh->selectcol_arrayref('SELECT who FROM cc WHERE bug_id = ?',
@@ -3864,7 +3859,7 @@ sub component {
 sub component_obj {
   my ($self) = @_;
   return $self->{component_obj} if defined $self->{component_obj};
-  return {}                     if $self->{error};
+  return {} if $self->{error};
   $self->{component_obj}
     = new Bugzilla::Component({id => $self->{component_id}, cache => 1});
   return $self->{component_obj};
@@ -3873,7 +3868,7 @@ sub component_obj {
 sub classification_id {
   my ($self) = @_;
   return $self->{classification_id} if exists $self->{classification_id};
-  return 0                          if $self->{error};
+  return 0 if $self->{error};
   ($self->{classification_id})
     = Bugzilla->dbh->selectrow_array(
     'SELECT classification_id FROM products WHERE id = ?',
@@ -3884,7 +3879,7 @@ sub classification_id {
 sub classification {
   my ($self) = @_;
   return $self->{classification} if exists $self->{classification};
-  return ''                      if $self->{error};
+  return '' if $self->{error};
   ($self->{classification})
     = Bugzilla->dbh->selectrow_array(
     'SELECT name FROM classifications WHERE id = ?',
@@ -3895,7 +3890,7 @@ sub classification {
 sub dependson {
   my ($self) = @_;
   return $self->{'dependson'} if exists $self->{'dependson'};
-  return []                   if $self->{'error'};
+  return [] if $self->{'error'};
   $self->{'dependson'}
     = list_relationship('dependencies', 'blocked', 'dependson', $self->bug_id);
   return $self->{'dependson'};
@@ -3910,7 +3905,7 @@ sub depends_on_obj {
 sub duplicates {
   my $self = shift;
   return $self->{duplicates} if exists $self->{duplicates};
-  return []                  if $self->{error};
+  return [] if $self->{error};
   $self->{duplicates} = Bugzilla::Bug->new_from_list($self->duplicate_ids);
   return $self->{duplicates};
 }
@@ -3918,7 +3913,7 @@ sub duplicates {
 sub duplicate_ids {
   my $self = shift;
   return $self->{duplicate_ids} if exists $self->{duplicate_ids};
-  return []                     if $self->{error};
+  return [] if $self->{error};
 
   my $dbh = Bugzilla->dbh;
   $self->{duplicate_ids}
@@ -3930,7 +3925,7 @@ sub duplicate_ids {
 sub flag_types {
   my ($self) = @_;
   return $self->{'flag_types'} if exists $self->{'flag_types'};
-  return []                    if $self->{'error'};
+  return [] if $self->{'error'};
 
   my $vars = {
     target_type         => 'bug',
@@ -3967,7 +3962,7 @@ sub is_closed_for {
     return 0;
   }
 
-  my $past_time   = DateTime->now()->subtract(%$duration)->epoch();
+  my $past_time = DateTime->now()->subtract(%$duration)->epoch();
   my $closed_time = str2time($self->cf_last_resolved);
 
   return $past_time > $closed_time;
@@ -3982,7 +3977,7 @@ sub keywords {
 sub keyword_objects {
   my $self = shift;
   return $self->{'keyword_objects'} if defined $self->{'keyword_objects'};
-  return []                         if $self->{'error'};
+  return [] if $self->{'error'};
 
   my $dbh = Bugzilla->dbh;
   my $ids
@@ -4001,15 +3996,14 @@ sub has_keyword {
 sub add_keyword {
   my ($self, $keyword) = @_;
   return if $self->has_keyword($keyword);
-  push @{$self->{'keyword_objects'}},
-    Bugzilla::Keyword->check({name => $keyword});
+  push @{$self->{'keyword_objects'}}, Bugzilla::Keyword->check({name => $keyword});
 }
 
 sub del_keyword {
   my ($self, $keyword) = @_;
   $keyword = lc($keyword);
   my $index = -1;
-  my $i     = 0;
+  my $i = 0;
   foreach my $keyword_obj (@{$self->keyword_objects}) {
     if (lc($keyword_obj->name) eq $keyword) {
       $index = $i;
@@ -4079,12 +4073,11 @@ sub comment_count {
 
 sub counts {
   my ($self) = @_;
-  my $dbh    = Bugzilla->dbh;
-  my $extra  = !Bugzilla->user->is_insider ? 'AND isprivate = 0' : '';
-  my $id     = $self->id;
+  my $dbh = Bugzilla->dbh;
+  my $extra = !Bugzilla->user->is_insider ? 'AND isprivate = 0' : '';
+  my $id = $self->id;
 
-  $self->{counts} ||= $dbh->selectrow_hashref(
-    "SELECT
+  $self->{counts} ||= $dbh->selectrow_hashref("SELECT
     (SELECT COUNT(*) FROM attachments WHERE bug_id = ? $extra) AS attachments,
     (SELECT COUNT(*) FROM cc WHERE bug_id = ?) AS cc,
     (SELECT COUNT(*) FROM longdescs WHERE bug_id = ? $extra) AS comments,
@@ -4094,8 +4087,7 @@ sub counts {
     (SELECT COUNT(*) FROM regressions WHERE regressed_by = ?) AS regressed_by,
     (SELECT COUNT(*) FROM regressions WHERE regresses = ?) AS regressions,
     (SELECT COUNT(*) FROM duplicates WHERE dupe_of = ?) AS duplicates
-  ", undef, $id, $id, $id, $id, $id, $id, $id, $id, $id
-  );
+  ", undef, $id, $id, $id, $id, $id, $id, $id, $id, $id);
 
   return $self->{counts};
 }
@@ -4134,7 +4126,7 @@ sub product_obj {
 sub qa_contact {
   my ($self) = @_;
   return $self->{'qa_contact_obj'} if exists $self->{'qa_contact_obj'};
-  return undef                     if $self->{'error'};
+  return undef if $self->{'error'};
 
   if (Bugzilla->params->{'useqacontact'} && $self->{'qa_contact'}) {
     $self->{'qa_contact_obj'}
@@ -4152,7 +4144,7 @@ sub qa_contact {
 sub regressed_by {
   my ($self) = @_;
   return $self->{'regressed_by'} if exists $self->{'regressed_by'};
-  return []                      if $self->{'error'};
+  return [] if $self->{'error'};
   $self->{'regressed_by'}
     = list_relationship('regressions', 'regresses', 'regressed_by',
     $self->bug_id);
@@ -4168,7 +4160,7 @@ sub regressed_by_obj {
 sub regresses {
   my ($self) = @_;
   return $self->{'regresses'} if exists $self->{'regresses'};
-  return []                   if $self->{'error'};
+  return [] if $self->{'error'};
   $self->{'regresses'}
     = list_relationship('regressions', 'regressed_by', 'regresses',
     $self->bug_id);
@@ -4224,7 +4216,7 @@ sub status {
 
 sub statuses_available {
   my $self = shift;
-  return []                            if $self->{'error'};
+  return [] if $self->{'error'};
   return $self->{'statuses_available'} if defined $self->{'statuses_available'};
 
   my @statuses = @{$self->status->can_change_to};
@@ -4283,7 +4275,7 @@ sub show_attachment_flags {
 sub groups {
   my $self = shift;
   return $self->{'groups'} if exists $self->{'groups'};
-  return []                if $self->{'error'};
+  return [] if $self->{'error'};
 
   my $dbh = Bugzilla->dbh;
   my @groups;
@@ -4302,8 +4294,7 @@ sub groups {
       . " THEN 1 ELSE 0 END,"
       . " CASE WHEN groups.id IN($grouplist) THEN 1 ELSE 0 END,"
       . " isactive, membercontrol, othercontrol"
-      . " FROM "
-      . $dbh->quote_identifier('groups')
+      . " FROM " . $dbh->quote_identifier('groups')
       . " LEFT JOIN bug_group_map"
       . " ON bug_group_map.group_id = groups.id"
       . " AND bug_id = ?"
@@ -4328,12 +4319,10 @@ sub groups {
     #     the user is a member of the group.
     if (
       $ison
-      || (
-           $isactive
+      || ( $isactive
         && $ingroup
         && ( ($membercontrol == CONTROLMAPDEFAULT)
-          || ($membercontrol == CONTROLMAPSHOWN))
-      )
+          || ($membercontrol == CONTROLMAPSHOWN)))
       )
     {
       my $ismandatory = $isactive && ($membercontrol == CONTROLMAPMANDATORY);
@@ -4404,7 +4393,7 @@ sub groups {
 sub groups_in {
   my $self = shift;
   return $self->{'groups_in'} if exists $self->{'groups_in'};
-  return []                   if $self->{'error'};
+  return [] if $self->{'error'};
   my $group_ids
     = Bugzilla->dbh->selectcol_arrayref(
     'SELECT group_id FROM bug_group_map WHERE bug_id = ?',
@@ -4465,7 +4454,7 @@ sub _target_security_group_when_dropping {
 sub user {
   my $self = shift;
   return $self->{'user'} if exists $self->{'user'};
-  return {}              if $self->{'error'};
+  return {} if $self->{'error'};
 
   my $user = Bugzilla->user;
 
@@ -4491,7 +4480,7 @@ sub user {
 sub choices {
   my $self = shift;
   return $self->{'choices'} if exists $self->{'choices'};
-  return {}                 if $self->{'error'};
+  return {} if $self->{'error'};
   my $user = Bugzilla->user;
 
   my @products = @{$user->get_enterable_products};
@@ -4619,14 +4608,14 @@ sub to_hash {
     $hash->{assignee} = $self->assigned_to->to_hash;
   }
   if ($params->{blocks}) {
-    $hash->{blocks} = $self->blocked;
+    $hash->{blocks} =$self->blocked;
   }
   if ($params->{classification}) {
-    $hash->{classification} = $self->classification;
+    $hash->{classification} =$self->classification;
   }
   if ($params->{comments}) {
     my @result;
-    my $comments = $self->comments(
+    my $comments =$self->comments(
       {order => 'oldest_to_newest', after => $params->{new_since}});
     foreach my $comment (@$comments) {
       next if $comment->is_private && !$user->is_insider;
@@ -4635,32 +4624,32 @@ sub to_hash {
     $hash->{comments} = \@result;
   }
   if ($params->{component}) {
-    $hash->{component} = $self->component;
+    $hash->{component} =$self->component;
   }
   if ($params->{cc}) {
     $hash->{cc} = [map { $_->to_hash } @{$self->cc_users}];
   }
   if ($params->{creation_time}) {
-    $hash->{creation_time} = $self->creation_ts;
+    $hash->{creation_time} =$self->creation_ts;
   }
   if ($params->{creator}) {
     $hash->{creator} = $self->reporter->to_hash;
   }
   if ($params->{depends_on}) {
-    $hash->{depends_on} = $self->dependson;
+    $hash->{depends_on} =$self->dependson;
   }
   if ($params->{description}) {
-    my $comment = Bugzilla::Comment->match({bug_id => $self->id, LIMIT => 1})->[0];
+    my $comment = Bugzilla::Comment->match({bug_id =>$self->id, LIMIT => 1})->[0];
     $hash->{description}
       = ($comment && (!$comment->is_private || Bugzilla->user->is_insider))
       ? $comment->body
       : '';
   }
   if ($params->{dupe_of}) {
-    $hash->{dupe_of} = $self->dup_id;
+    $hash->{dupe_of} =$self->dup_id;
   }
   if ($params->{duplicates}) {
-    $hash->{duplicates} = $self->duplicates;
+    $hash->{duplicates} =$self->duplicates;
   }
   if ($params->{groups}) {
     my @groups;
@@ -4671,19 +4660,19 @@ sub to_hash {
     $hash->{groups} = \@groups;
   }
   if ($params->{is_open}) {
-    $hash->{is_open} = $self->status->is_open ? 1 : 0;
+    $hash->{is_open} =$self->status->is_open ? 1 : 0;
   }
   if ($params->{keywords}) {
     $hash->{keywords} = [map { $_->name } @{$self->keyword_objects}];
   }
   if ($params->{last_change_time}) {
-    $hash->{last_change_time} = $self->delta_ts;
+    $hash->{last_change_time} =$self->delta_ts;
   }
   if ($params->{last_change_time_non_bot}) {
-    $hash->{last_change_time_non_bot} = $self->delta_ts_non_bot;
+    $hash->{last_change_time_non_bot} =$self->delta_ts_non_bot;
   }
   if ($params->{product}) {
-    $hash->{product} = $self->product;
+    $hash->{product} =$self->product;
   }
   if ($params->{qa_contact}) {
     if ($self->qa_contact) {
@@ -4691,7 +4680,7 @@ sub to_hash {
     }
   }
   if ($params->{triage_owner}) {
-    my $triage_owner = $self->component_obj->triage_owner;
+    my $triage_owner =$self->component_obj->triage_owner;
     if ($triage_owner->login) {
       $hash->{triage_owner} = $triage_owner->to_hash;
     }
@@ -4706,49 +4695,49 @@ sub to_hash {
   # Regressions
   if (Bugzilla->params->{use_regression_fields}) {
     if ($params->{regressed_by}) {
-      $hash->{regressed_by} = $self->regressed_by;
+      $hash->{regressed_by} =$self->regressed_by;
     }
     if ($params->{regressions}) {
-      $hash->{regressions} = $self->regresses;
+      $hash->{regressions} =$self->regresses;
     }
   }
 
   # Custom fields
   my @custom_fields = Bugzilla->active_custom_fields(
     {
-      product   => $self->product_obj,
-      component => $self->component_obj,
-      bug_id    => $self->id
+      product   =>$self->product_obj,
+      component =>$self->component_obj,
+      bug_id    =>$self->id
     },
   );
   foreach my $field (@custom_fields) {
     my $name = $field->name;
     next if !$params->{$name};
-    $hash->{$name} = $self->$name;
+    $hash->{$name} =$self->$name;
   }
 
   # Timetracking fields
   if ($user->is_timetracker) {
     if ($params->{estimated_time}) {
-      $hash->{estimated_time} = $self->estimated_time;
+      $hash->{estimated_time} =$self->estimated_time;
     }
     if ($params->{remaining_time}) {
-      $hash->{remaining_time} = $self->remaining_time;
+      $hash->{remaining_time} =$self->remaining_time;
     }
     if ($params->{deadline}) {
-      $hash->{deadline} = $self->deadline;
+      $hash->{deadline} =$self->deadline;
     }
     if ($params->{actual_time}) {
-      $hash->{actual_time} = $self->actual_time;
+      $hash->{actual_time} =$self->actual_time;
     }
   }
 
   # Bug accessibility
   if ($params->{is_cc_accessible}) {
-    $hash->{is_cc_accessible} = $self->cclist_accessible ? 1 : 0;
+    $hash->{is_cc_accessible} =$self->cclist_accessible ? 1 : 0;
   }
   if ($params->{is_creator_accessible}) {
-    $hash->{is_creator_accessible} = $self->reporter_accessible ? 1 : 0;
+    $hash->{is_creator_accessible} =$self->reporter_accessible ? 1 : 0;
   }
 
   # Bug mentors
@@ -4759,7 +4748,7 @@ sub to_hash {
   return $hash;
 }
 
-# True if the current user is being reminded of
+# True if the current user is being reminded of 
 # this bug on a specific date.
 sub is_reminded {
   my ($self, $user) = @_;
@@ -4801,8 +4790,8 @@ sub list_relationship {
             ORDER BY is_open DESC, $target_field"
   );
 
-  my $bug_ids
-    = $dbh->selectcol_arrayref($cache->{"${target_field}_sth_$exclude_resolved"},
+  my $bug_ids = $dbh->selectcol_arrayref(
+    $cache->{"${target_field}_sth_$exclude_resolved"},
     undef, $bug_id);
 
   # If user has 'editbugs', show all bug ids.
@@ -4921,8 +4910,8 @@ sub GetBugActivity {
       $suppwhere = "AND longdescs.isprivate = 0";
     }
 
-    $bug_when = $dbh->sql_date_format('longdescs_tags_activity.bug_when',
-      '%Y-%m-%d %H:%i:%s');
+    $bug_when
+      = $dbh->sql_date_format('longdescs_tags_activity.bug_when', '%Y-%m-%d %H:%i:%s');
     $query .= "
             UNION ALL
             SELECT 'comment_tag' AS field_name,
@@ -5001,11 +4990,11 @@ sub GetBugActivity {
   Bugzilla::Hook::process(
     'get_bug_activity',
     {
-      bug_id                   => $bug_id,
-      attach_id                => $attach_id,
-      start_time               => $starttime,
+      bug_id => $bug_id,
+      attach_id => $attach_id,
+      start_time => $starttime,
       include_comment_activity => $include_comment_activity,
-      list                     => \@$list
+      list => \@$list
     }
   );
 
@@ -5018,24 +5007,19 @@ sub GetBugActivity {
   my $incomplete_data = 0;
 
   foreach my $entry (@$list) {
-    my ($fieldname, $activity_id, $attachid, $when, $removed, $added, $who,
-      $comment_id)
+    my ($fieldname, $activity_id, $attachid, $when, $removed, $added, $who, $comment_id)
       = @$entry;
     my %change;
     my $activity_visible = 1;
-    my $last_change      = @$changes[-1] || {};
+    my $last_change = @$changes[-1] || {};
 
     # Suppress any mid-air collision or duplicated change
-    if (
-      (
-           (exists $operation->{'when'} && $when eq $operation->{'when'})
-        && $fieldname eq $last_change->{'fieldname'}
-        && $removed eq $last_change->{'removed'}
-        && $added eq $last_change->{'added'}
-        && (defined $attachid && $attachid eq $last_change->{'attachid'})
-      )
-      || $removed eq $added
-      )
+    if (( (exists $operation->{'when'} && $when eq $operation->{'when'})
+      && $fieldname eq $last_change->{'fieldname'}
+      && $removed eq $last_change->{'removed'}
+      && $added eq $last_change->{'added'}
+      && (defined $attachid && $attachid eq $last_change->{'attachid'}))
+      || $removed eq $added )
     {
       next;
     }
@@ -5048,7 +5032,10 @@ sub GetBugActivity {
     {
       $activity_visible = $user->is_timetracker;
     }
-    elsif ($fieldname eq 'longdescs.isprivate' && !$user->is_insider && $added) {
+    elsif ($fieldname eq 'longdescs.isprivate'
+      && !$user->is_insider
+      && $added)
+    {
       $activity_visible = 0;
     }
     else {
@@ -5125,13 +5112,13 @@ sub GetBugActivity {
         }
         next if !@filtered_removed && !@filtered_added;
         $removed = join ', ', @filtered_removed;
-        $added   = join ', ', @filtered_added;
+        $added   = join', ', @filtered_added;
       }
 
       $operation->{'who'}       = $who;
       $operation->{'when'}      = $when;
       $operation->{'fieldname'} = $change{'fieldname'} = $fieldname;
-      $operation->{'attachid'}  = $change{'attachid'}  = $attachid;
+      $operation->{'attachid'}  = $change{'attachid'} = $attachid;
 
       $change{'removed'} = $removed;
       $change{'added'}   = $added;
@@ -5185,10 +5172,7 @@ sub _join_activity_entries {
     return $current_change . $new_change;
   }
   else {
-    return
-        $current_change
-      . ($current_change && $new_change ? ' ' : '')
-      . $new_change;
+    return $current_change . ($current_change && $new_change ? ' ' : '') . $new_change;
   }
 }
 
@@ -5207,7 +5191,7 @@ sub LogActivityEntry {
     if (length($removestr) > MAX_LINE_LENGTH) {
       my $commaposition = find_wrap_point($removed, MAX_LINE_LENGTH);
       $removestr = substr($removed, 0, $commaposition);
-      $removed   = substr($removed, $commaposition);
+      $removed = substr($removed, $commaposition);
     }
     else {
       $removed = "";    # no more entries
@@ -5215,7 +5199,7 @@ sub LogActivityEntry {
     if (length($addstr) > MAX_LINE_LENGTH) {
       my $commaposition = find_wrap_point($added, MAX_LINE_LENGTH);
       $addstr = substr($added, 0, $commaposition);
-      $added  = substr($added, $commaposition);
+      $added = substr($added, $commaposition);
     }
     else {
       $added = "";      # no more entries
@@ -5365,13 +5349,14 @@ sub check_can_change_field {
   # Allow anyone to enter/select the summary, component, bug type and platform
   # when filing a new bug, because some are required fields
   if (!$self->id) {
-    if ( $field eq 'short_desc'
+    if (
+         $field eq 'short_desc'
       || $field eq 'component'
       || $field eq 'version'
       || $field eq 'rep_platform'
       || $field eq 'op_sys'
-      || ($field eq 'bug_type' && Bugzilla->params->{'require_bug_type'}))
-    {
+      || ($field eq 'bug_type' && Bugzilla->params->{'require_bug_type'})
+    ) {
       return {allowed => 1};
     }
   }

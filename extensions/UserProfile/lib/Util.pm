@@ -402,7 +402,7 @@ sub _set_stats {
     if ($statistics->{$name}->{id}) {
       $dbh->do(
         "UPDATE $table SET count = ? WHERE user_id = ? AND $name_field = ?",
-        undef,    $statistics->{$name}->{count},
+        undef, $statistics->{$name}->{count},
         $user_id, $name,
       );
     }

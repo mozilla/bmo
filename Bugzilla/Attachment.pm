@@ -115,7 +115,7 @@ use constant UPDATE_VALIDATORS =>
 # and this one answer roughly the same question but fail in opposite
 # directions, so their memberships differ on purpose -- the reasoning is
 # written out at CSP_DOCUMENT_TYPES.
-my %_SAFE_INLINE_TYPES = map { $_ => 1 } qw(
+  my %_SAFE_INLINE_TYPES = map { $_ => 1 } qw(
   image/png
   image/jpeg
   image/gif

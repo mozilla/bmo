@@ -333,15 +333,16 @@ elsif ($action eq 'update') {
   }
 
   if (@groups_added_to || @groups_removed_from) {
-    $otherUser->set_groups(
-      {add => \@groups_added_to, remove => \@groups_removed_from});
+    $otherUser->set_groups({add => \@groups_added_to, remove => \@groups_removed_from});
   }
 
   if (@groups_granted_rights_to_bless || @groups_denied_rights_to_bless) {
-    $otherUser->set_bless_groups({
-      add    => \@groups_granted_rights_to_bless,
-      remove => \@groups_denied_rights_to_bless
-    });
+    $otherUser->set_bless_groups(
+      {
+        add    => \@groups_granted_rights_to_bless,
+        remove => \@groups_denied_rights_to_bless
+      }
+    );
   }
 
   my $changes = $otherUser->update();

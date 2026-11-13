@@ -16,8 +16,8 @@ use Bugzilla::Error;
 use Bugzilla::Field;
 use Bugzilla::FlagActivity;
 use Bugzilla::FlagType;
-use Bugzilla::Util  qw(validate_date);
-use JSON            qw(-convert_blessed_universally);
+use Bugzilla::Util qw(validate_date);
+use JSON qw(-convert_blessed_universally);
 use List::MoreUtils qw(uniq);
 
 sub report {
@@ -285,7 +285,7 @@ sub report {
 }
 
 sub _parse_query {
-  my $q     = shift;
+  my $q = shift;
   my @query = split(/:/, $q);
   my $query;
 
