@@ -32,11 +32,10 @@ use Bugzilla::Extension::Hackbot::Constants;
 
 use constant CACHE_KEY_PREFIX => 'hackbot_runs.v1.';
 
-# Whether the runs table is switched on: both the Hackbot master switch and
-# the runs feature itself. Checked by the bug page hook and the API alike.
+# Whether the runs table is switched on. Checked by the bug page hook and the
+# API alike, so both honour the same kill switch.
 sub enabled {
-  my $params = Bugzilla->params;
-  return $params->{hackbot_enabled} && $params->{hackbot_runs_enabled};
+  return Bugzilla->params->{hackbot_runs_enabled};
 }
 
 # Returns {ok => 1, runs => [rows]} or {ok => 0} when the API is unreachable.

@@ -17,7 +17,6 @@ our $sortkey = 1310;
 
 sub get_param_list {
   return (
-    {name => 'hackbot_enabled',      type => 'b', default => 0},
     {name => 'hackbot_runs_enabled', type => 'b', default => 0},
     {
       name    => 'hackbot_api_url',

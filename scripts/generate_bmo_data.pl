@@ -627,7 +627,6 @@ my %set_params = (
   github_pr_linking_enabled   => 1,
   github_push_comment_enabled => 1,
   github_pr_status_enabled    => 1,
-  hackbot_enabled             => 1,
   hackbot_runs_enabled        => 1,
   insidergroup         => 'core-security-release',
   last_change_time_non_bot_skip_list => 'automation@bmo.tld',
