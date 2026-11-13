@@ -103,11 +103,15 @@ sub find_activity_id_for_flag {
 
     # flag_activity records each change against the flag's object id, so we
     # can look up the exact timestamp without relying on flag-type name matching.
-    my $dbh = Bugzilla->dbh;
-    my ($flag_when, $who) = $dbh->selectrow_array(
-      "SELECT flag_when, who FROM flag_activity WHERE flag_id = ?
-       ORDER BY id DESC " . $dbh->sql_limit(1), undef, $flag_id
-    );
+    # The last row of every flag of the bug is loaded in one query.
+    if (!$self->{flag_activity_last}) {
+      my $rows = Bugzilla->dbh->selectall_arrayref(
+        'SELECT flag_id, flag_when, who FROM flag_activity
+          WHERE bug_id = ? ORDER BY id', undef, $self->id
+      );
+      $self->{flag_activity_last} = {map { $_->[0] => [$_->[1], $_->[2]] } @$rows};
+    }
+    my ($flag_when, $who) = @{$self->{flag_activity_last}->{$flag_id} // []};
 
     # flag_activity only logged review, feedback and needinfo before, so other
     # flags may have no row: match them as before, on the setter, the

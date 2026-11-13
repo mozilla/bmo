@@ -77,4 +77,34 @@ like(flag_activity_id(0), qr/^a\d+_\d+$/,
 like(flag_activity_id(1), qr/^a\d+_\d+$/,
   'a flag without flag_activity rows is linked to its bugs_activity change');
 
+# Two flags of the same bug, set at different times, are each linked to their
+# own change. The cutoff set by the case above is moved back, so that both
+# changes are read from flag_activity.
+{
+  set_flag_activity_cutoff('2000-01-01 00:00:00');
+  Bugzilla->set_user(Bugzilla::User->super_user);
+  my $bug_id = create_bug(
+    short_desc  => 'Flag activity stream test bug, two flags',
+    comment     => 'Bug for the flag activity stream tests',
+    bug_type    => 'defect',
+    assigned_to => 'nobody@mozilla.org',
+  )->id;
+
+  Bugzilla->set_user($setter);
+  foreach my $when ('2099-01-01 10:00:00', '2099-01-02 10:00:00') {
+    my $bug = Bugzilla::Bug->new($bug_id);
+    $bug->set_flags([],
+      [{type_id => $needinfo_id, status => '?', requestee => 'bob@bmo.test'}]);
+    $bug->update($when);
+  }
+
+  my $bug = Bugzilla::Bug->new($bug_id);
+  my @ids = map { $bug->find_activity_id_for_flag($_) }
+    sort { $a->id <=> $b->id } @{$bug->flags};
+  is(scalar @ids, 2, 'the bug has two flags');
+  like($ids[0], qr/^a\d+_\d+$/, 'the first flag is linked to a change');
+  like($ids[1], qr/^a\d+_\d+$/, 'the second flag is linked to a change');
+  isnt($ids[0], $ids[1], 'each flag is linked to its own change');
+}
+
 done_testing;
