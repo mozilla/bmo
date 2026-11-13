@@ -38,6 +38,8 @@ in this Bugzilla.
 GET /rest/extensions
 ```
 
+This method requires an authenticated user.
+
 **Response**
 
 ``` js
@@ -107,6 +109,8 @@ timezone it's running in.
 ``` text
 GET /rest/time
 ```
+
+This method requires an authenticated user.
 
 **Response**
 
