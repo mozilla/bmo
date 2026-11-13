@@ -15,6 +15,7 @@ use Bugzilla::Attachment;
 use Bugzilla::Constants;
 use Bugzilla::Field;
 use Bugzilla::Flag;
+use Bugzilla::FlagActivity;
 use Bugzilla::FlagType;
 use Bugzilla::Hook;
 use Bugzilla::Keyword;
@@ -1221,6 +1222,7 @@ sub update {
   # XXX Eventually, when bugs_activity is able to track the dupe_id,
   # this code should go below the duplicates-table-updating code below.
   foreach my $field (keys %$changes) {
+    next if $field eq 'flagtypes.name';    # now tracked in flag_activity
     my $change = $changes->{$field};
     my $from   = defined $change->[0] ? $change->[0] : '';
     my $to     = defined $change->[1] ? $change->[1] : '';
@@ -4556,29 +4558,25 @@ sub delta_ts_non_bot {
     }
   }
 
-  # Grab the latest timestamp for comments and bug changes that was not made by
-  # one of the accounts in the bot skip list. Return the greatest of the two values.
+  # Grab the latest timestamp for comments, bug changes and flag changes that
+  # was not made by one of the accounts in the bot skip list.
   if (my $bot_ids_string = $cache->{bot_ids_string}) {
-    my %time_map;
-    my @result = $dbh->selectrow_array(
-      "SELECT bug_when, UNIX_TIMESTAMP(bug_when)
-         FROM bugs_activity
-        WHERE bug_id = ? AND who NOT IN ($bot_ids_string)
-        ORDER BY bug_when DESC LIMIT 1",
-      undef, $self->id
+    my $flag_newer = Bugzilla::FlagActivity->after_cutoff_sql('flag_activity');
+    ($self->{delta_ts_non_bot}) = $dbh->selectrow_array(
+      "SELECT MAX(bug_when)
+         FROM (SELECT MAX(bug_when) AS bug_when
+                 FROM bugs_activity
+                WHERE bug_id = ? AND who NOT IN ($bot_ids_string)
+               UNION ALL
+               SELECT MAX(bug_when) AS bug_when
+                 FROM longdescs
+                WHERE bug_id = ? AND who NOT IN ($bot_ids_string)
+               UNION ALL
+               SELECT MAX(flag_when) AS bug_when
+                 FROM flag_activity
+                WHERE bug_id = ? AND who NOT IN ($bot_ids_string)
+                      AND $flag_newer) tmp", undef, ($self->id) x 3
     );
-    $time_map{$result[1]} = $result[0] if @result;
-    @result = $dbh->selectrow_array(
-      "SELECT bug_when, UNIX_TIMESTAMP(bug_when)
-         FROM longdescs
-        WHERE bug_id = ? AND who NOT IN ($bot_ids_string)
-        ORDER BY bug_when DESC LIMIT 1",
-      undef, $self->id
-    );
-    $time_map{$result[1]} = $result[0] if @result;
-
-    my $max_epoch = max keys %time_map;
-    $self->{delta_ts_non_bot} = $time_map{$max_epoch};
   }
 
   return $self->{delta_ts_non_bot};
@@ -4854,8 +4852,24 @@ sub GetBugActivity {
     $suppwhere = "AND COALESCE(attachments.isprivate, 0) = 0";
   }
 
+  my $flag_suppjoins = "";
+  my $flag_suppwhere = "";
+  if (!$user->is_insider) {
+    $flag_suppjoins
+      = "LEFT JOIN attachments fa_att ON fa_att.attach_id = fsa.attachment_id";
+    $flag_suppwhere = "AND COALESCE(fa_att.isprivate, 0) = 0";
+  }
+
+  my $flag_attachpart = "";
+  if ($attach_id) {
+    $flag_attachpart = "AND fsa.attachment_id = ?";
+  }
+
   my $bug_when
     = $dbh->sql_date_format('bugs_activity.bug_when', '%Y-%m-%d %H:%i:%s');
+
+  my $ba_before_cutoff
+    = Bugzilla::FlagActivity->bugs_activity_before_cutoff_sql('bugs_activity');
 
   # Use an outer table so alias column `bug_when` will work within the `where`
   # clause. Also use `DISTINCT` to suppress duplicated changes weirdly made at
@@ -4879,6 +4893,7 @@ sub GetBugActivity {
     INNER JOIN profiles
             ON profiles.userid = bugs_activity.who
          WHERE bugs_activity.bug_id = ?
+               AND $ba_before_cutoff
                $attachpart
                $suppwhere ";
 
@@ -4915,6 +4930,50 @@ sub GetBugActivity {
         ";
     push @args, $bug_id;
   }
+
+  my $flag_bug_when = $dbh->sql_date_format('fsa.flag_when', '%Y-%m-%d %H:%i:%s');
+  my $flag_newer    = Bugzilla::FlagActivity->after_cutoff_sql('fsa');
+  my $flag_last     = Bugzilla::FlagActivity->last_of_request_sql('fsa');
+  my $flag_prev_id  = Bugzilla::FlagActivity->previous_id_sql('fsa');
+  my $flag_removed_req
+    = $dbh->sql_string_concat('ft.name', q{'?('}, 'preq.login_name', q{')'});
+  my $flag_removed = $dbh->sql_string_concat('ft.name', 'prev.status');
+  my $flag_added_req
+    = $dbh->sql_string_concat('ft.name', q{'?('}, 'req.login_name', q{')'});
+  my $flag_added = $dbh->sql_string_concat('ft.name', 'fsa.status');
+  $query .= "
+        UNION ALL
+        SELECT 'flagtypes.name' AS field_name,
+               fsa.id AS activity_id,
+               fsa.attachment_id AS attach_id,
+               $flag_bug_when AS bug_when,
+               CASE WHEN prev.id IS NULL THEN ''
+                    WHEN prev.status = '?' AND preq.login_name IS NOT NULL
+                         THEN $flag_removed_req
+                    ELSE $flag_removed
+               END AS removed,
+               CASE WHEN fsa.status = 'X' THEN ''
+                    WHEN fsa.status = '?' AND req.login_name IS NOT NULL
+                         THEN $flag_added_req
+                    ELSE $flag_added
+               END AS added,
+               changer.login_name AS who,
+               NULL AS comment_id
+          FROM flag_activity fsa
+          JOIN flagtypes ft ON ft.id = fsa.type_id
+          JOIN profiles changer ON changer.userid = fsa.who
+          LEFT JOIN profiles req ON req.userid = fsa.requestee_id
+          LEFT JOIN flag_activity prev ON prev.id = $flag_prev_id
+          LEFT JOIN profiles preq ON preq.userid = prev.requestee_id
+          $flag_suppjoins
+         WHERE fsa.bug_id = ?
+               AND $flag_newer
+               AND $flag_last
+               $flag_attachpart
+               $flag_suppwhere
+      ";
+  push @args, $bug_id;
+  push @args, $attach_id if $attach_id;
 
   $query .= ") AS OUTER_TABLE";
 

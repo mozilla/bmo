@@ -12,6 +12,7 @@ use strict;
 use warnings;
 
 use Bugzilla::Error;
+use Bugzilla::FlagActivity;
 use Bugzilla::User;
 use Bugzilla::Util qw(trim);
 use Bugzilla::Util::DateTime;
@@ -55,6 +56,7 @@ sub report {
     my ($activity_joins,      $activity_where)      = ('', '');
     my ($attachments_joins,   $attachments_where)   = ('', '');
     my ($tags_activity_joins, $tags_activity_where) = ('', '');
+    my ($flag_activity_joins, $flag_activity_where) = ('', '');
     if (Bugzilla->params->{"insidergroup"}
       && !Bugzilla->user->in_group(Bugzilla->params->{'insidergroup'}))
     {
@@ -62,6 +64,10 @@ sub report {
                        ON attachments.attach_id = bugs_activity.attach_id";
       $activity_where    = "AND COALESCE(attachments.isprivate, 0) = 0";
       $attachments_where = $activity_where;
+
+      $flag_activity_joins = "LEFT JOIN attachments
+                       ON attachments.attach_id = fsa.attachment_id";
+      $flag_activity_where = $activity_where;
 
       $tags_activity_joins = 'LEFT JOIN longdescs
                 ON longdescs_tags_activity.comment_id = longdescs.comment_id';
@@ -93,7 +99,7 @@ sub report {
     $from_dt = $from_dt->ymd() . ' 00:00:00';
     $to_dt   = $to_dt->ymd() . ' 23:59:59';
     my @params;
-    for (1 .. 5) {
+    for (1 .. 6) {
       push @params, @who;
       push @params, ($from_dt, $to_dt);
     }
@@ -108,7 +114,22 @@ sub report {
       $comment_filter = 'AND longdescs.isprivate = 0';
     }
 
-    my $query = "
+    # Flag changes are in flag_activity, older ones in bugs_activity. CHAR(63)
+    # is a question mark: a literal one would be taken for a placeholder by
+    # the debug output below.
+    my $flag_newer = Bugzilla::FlagActivity->after_cutoff_sql('fsa');
+    my $ba_before_cutoff
+      = Bugzilla::FlagActivity->bugs_activity_before_cutoff_sql('bugs_activity');
+    my $flag_last        = Bugzilla::FlagActivity->last_of_request_sql('fsa');
+    my $flag_prev_id     = Bugzilla::FlagActivity->previous_id_sql('fsa');
+    my $flag_removed_req = $dbh->sql_string_concat('ft.name', 'prev.status', q{'('},
+      'preq.login_name', q{')'});
+    my $flag_removed = $dbh->sql_string_concat('ft.name', 'prev.status');
+    my $flag_added_req
+      = $dbh->sql_string_concat('ft.name', 'fsa.status', q{'('}, 'req.login_name',
+      q{')'});
+    my $flag_added = $dbh->sql_string_concat('ft.name', 'fsa.status');
+    my $query      = "
         SELECT
                    fielddefs.name,
                    bugs_activity.bug_id,
@@ -130,7 +151,48 @@ sub report {
              WHERE profiles.login_name IN ($who_bits)
                    AND CONVERT_TZ(bugs_activity.bug_when, 'UTC', 'America/Los_Angeles') >= ?
                    AND CONVERT_TZ(bugs_activity.bug_when, 'UTC', 'America/Los_Angeles') <= ?
+                   AND $ba_before_cutoff
                    $activity_where
+
+        UNION ALL
+
+        SELECT
+                   'flagtypes.name' AS name,
+                   fsa.bug_id,
+                   fsa.attachment_id AS attach_id,
+                   "
+      . $dbh->sql_date_format('fsa.flag_when', '%Y-%m-%d %H:%i:%s') . " AS ts,
+                   CASE WHEN prev.id IS NULL THEN ''
+                        WHEN prev.status = CHAR(63) AND preq.login_name IS NOT NULL
+                             THEN $flag_removed_req
+                        ELSE $flag_removed
+                   END AS removed,
+                   CASE WHEN fsa.status = 'X' THEN ''
+                        WHEN fsa.status = CHAR(63) AND req.login_name IS NOT NULL
+                             THEN $flag_added_req
+                        ELSE $flag_added
+                   END AS added,
+                   profiles.login_name,
+                   NULL AS comment_id,
+                   fsa.flag_when AS bug_when
+              FROM flag_activity fsa
+                   $flag_activity_joins
+        INNER JOIN flagtypes ft
+                ON ft.id = fsa.type_id
+        INNER JOIN profiles
+                ON profiles.userid = fsa.who
+         LEFT JOIN profiles req
+                ON req.userid = fsa.requestee_id
+         LEFT JOIN flag_activity prev
+                ON prev.id = $flag_prev_id
+         LEFT JOIN profiles preq
+                ON preq.userid = prev.requestee_id
+             WHERE profiles.login_name IN ($who_bits)
+                   AND CONVERT_TZ(fsa.flag_when, 'UTC', 'America/Los_Angeles') >= ?
+                   AND CONVERT_TZ(fsa.flag_when, 'UTC', 'America/Los_Angeles') <= ?
+                   AND $flag_newer
+                   AND $flag_last
+                   $flag_activity_where
 
         UNION ALL
 
@@ -242,6 +304,9 @@ sub report {
       my $activity_visible = 1;
 
       next unless Bugzilla->user->can_see_bug($bugid);
+
+      # A flag created and cleared in one request changed nothing.
+      next if $fieldname eq 'flagtypes.name' && $removed eq $added;
 
       # check if the user should see this field's activity
       if ( $fieldname eq 'remaining_time'

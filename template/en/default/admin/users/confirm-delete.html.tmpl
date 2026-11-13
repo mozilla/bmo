@@ -26,6 +26,8 @@
   #                           entries on
   # cc                        number of bugs the viewed user is cc list member
   #                           of
+  # flag_activity_requestee:  number of flag history rows naming the viewed user
+  #                           as requestee
   # flags.requestee:          number of flags the viewed user is being asked for
   # flags.setter:             number of flags the viewed user has set
   # longdescs:                number of bug comments the viewed user has written
@@ -102,7 +104,8 @@
 [% ELSE %]
   [% accept_deletion = 1 %]
 
-  [% IF attachments || reporter || bugs_activity || flags.setter || longdescs || profiles_activity %]
+  [% IF attachments || reporter || bugs_activity || flag_activity_requestee ||
+        flags.setter || longdescs || profiles_activity %]
     <div class="criticalmessages">
       <p>The following deletions are <b>unsafe</b> and would generate referential
       integrity inconsistencies!</p>
@@ -164,6 +167,12 @@
               these changes
             [% END %]
             not showing up in [% terms.bug %] activity logs any more.
+          </li>
+        [% END %]
+        [% IF flag_activity_requestee %]
+          <li>
+            [% otheruser.login FILTER html %] has been asked to set flags.
+            The database refuses to delete a user named in the flag history.
           </li>
         [% END %]
         [% IF flags.setter %]
