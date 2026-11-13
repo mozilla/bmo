@@ -72,9 +72,9 @@ L<REST|Bugzilla::WebService::Server::REST>.
 
 =head1 CALLING METHODS
 
-Methods are grouped into "packages", like C<Bugzilla> for
-L<Bugzilla::WebService::Bugzilla>. So, for example,
-L<Bugzilla::WebService::Bugzilla/version>, is called as C<Bugzilla.version>.
+Methods are grouped into "packages", like C<bug_modal> for
+C<Bugzilla::Extension::BugModal::WebService>. So, for example,
+its C<edit> method is called as C<bug_modal.edit>.
 
 For REST, the "package" is more determined by the path
 used to access the resource. See each relevant method
@@ -385,8 +385,5 @@ objects.
 
 =head2 WebService Methods
 
-=over
-
-=item L<Bugzilla::WebService::Bugzilla>
-
-=back
+Only extensions still register methods here, through the C<webservice> hook.
+The core resources are served by the native API (C<Bugzilla::API::V1::*>).
