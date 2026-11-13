@@ -1,0 +1,46 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+.hackbot-runs {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.hackbot-runs th,
+.hackbot-runs td {
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--grid-border-color);
+}
+
+.hackbot-runs thead th {
+  background-color: var(--grid-header-background-color);
+  color: var(--primary-text-color);
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+/* Status badge */
+.hb-status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.hb-status-pending   { background-color: #eaeef2; color: #57606a; }
+.hb-status-running   { background-color: #fff8c5; color: #7d4e00; }
+.hb-status-succeeded { background-color: #dafbe1; color: #1a7f37; }
+.hb-status-failed    { background-color: #ffebe9; color: #cf222e; }
+
+/* Column sizing hints */
+.hb-col-agent   { white-space: nowrap; font-family: monospace; }
+.hb-col-status  { white-space: nowrap; width: 7em; }
+.hb-col-origin  { width: 40%; }
+.hb-col-started { white-space: nowrap; }
+.hb-col-link    { white-space: nowrap; text-align: right; }

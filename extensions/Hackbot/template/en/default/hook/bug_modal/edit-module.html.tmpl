@@ -1,0 +1,20 @@
+[%# This Source Code Form is subject to the terms of the Mozilla Public
+  # License, v. 2.0. If a copy of the MPL was not distributed with this
+  # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+  #
+  # This Source Code Form is "Incompatible With Secondary Licenses", as
+  # defined by the Mozilla Public License, v. 2.0.
+  #%]
+
+[% RETURN UNLESS hackbot_runs %]
+
+[%# Hidden until hackbot_runs.js finds at least one run for the bug. %]
+<div id="hackbot-runs-module" class="bz_default_hidden">
+  [% WRAPPER bug_modal/module.html.tmpl
+      title = "Hackbot"
+      subtitle = [{ unfiltered => '<span class="hackbot-run-count"></span>' }]
+      collapsed = 0
+  %]
+    [% INCLUDE hackbot/table.html.tmpl %]
+  [% END %]
+</div>
