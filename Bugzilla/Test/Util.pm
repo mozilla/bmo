@@ -12,8 +12,8 @@ use strict;
 use warnings;
 
 use base qw(Exporter);
-our @EXPORT
-  = qw(create_user create_bug create_group create_oauth_client issue_api_key mock_useragent_tx);
+our @EXPORT = qw(create_user create_bug create_group create_oauth_client
+  issue_api_key mock_useragent_tx set_flag_activity_cutoff);
 
 use Bugzilla::Group;
 use Bugzilla::User;
@@ -105,6 +105,18 @@ sub issue_api_key {
   else {
     return Bugzilla::User::APIKey->create($params);
   }
+}
+
+# Flag changes up to $when are read from bugs_activity, later ones from
+# flag_activity: see Bugzilla::FlagActivity->cutoff. checksetup sets it to the
+# time it ran, after the fixed dates of most tests.
+sub set_flag_activity_cutoff {
+  my ($when) = @_;
+  my $dbh = Bugzilla->dbh;
+  $dbh->do('DELETE FROM flag_activity_migration');
+  $dbh->do('INSERT INTO flag_activity_migration (cutoff) VALUES (?)',
+    undef, $when);
+  delete Bugzilla->request_cache->{flag_activity_cutoff};
 }
 
 sub create_bug {

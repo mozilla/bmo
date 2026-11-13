@@ -852,8 +852,17 @@ sub update_table_definitions {
   # Before _migrate_flag_state_activity, which copies into this column.
   _add_flag_activity_who();
 
+  # Bug 2085398 - xavier.lhour@gmail.com
+  # After _add_flag_activity_who, which fills the rows without it.
+  _set_flag_activity_who_not_null();
+
   # Bug 1806896 - xavier.lhour@gmail.com
   _migrate_flag_state_activity();
+
+  # Bug 2085398 - xavier.lhour@gmail.com
+  # After _migrate_flag_state_activity, so that flags with copied rows are
+  # skipped.
+  _add_flag_activity_start_rows();
 
   # Bug 2060356 - dkl@mozilla.com
   _remove_duo_recovery_codes();
@@ -4579,8 +4588,46 @@ sub _migrate_flag_state_activity {
   $dbh->bz_drop_table('flag_state_activity');
 }
 
-# Nullable for now: during the rolling deploy, pods still on the previous code
-# insert rows without it. Bug 2085398 makes it NOT NULL once all pods write it.
+# Until 2026-07-29, flag_activity only logged review, feedback and needinfo
+# flags. Other flags last changed before then have no row there, so their next
+# change would show no previous value in history and bugmail. Give each of them
+# a row with its current state, dated at its last change: history and bugmail
+# don't show it, as it is older than the cutoff.
+sub _add_flag_activity_start_rows {
+  my $dbh = Bugzilla->dbh;
+
+  # The cutoff is set at the end, so this runs once, or again if it died.
+  return if $dbh->selectrow_array('SELECT 1 FROM flag_activity_migration');
+
+  my ($max_id) = $dbh->selectrow_array('SELECT MAX(id) FROM flags');
+  $max_id //= 0;
+
+  my $batch_size = 10_000;
+  my $added      = 0;
+  for (my $from = 0; $from < $max_id; $from += $batch_size) {
+    $added += $dbh->do(
+      'INSERT INTO flag_activity
+         (flag_when, type_id, flag_id, setter_id, who, requestee_id, bug_id,
+          attachment_id, status)
+       SELECT COALESCE(modification_date, creation_date), type_id, id,
+              setter_id, setter_id, requestee_id, bug_id, attach_id, status
+         FROM flags
+        WHERE id > ? AND id <= ?
+              AND NOT EXISTS (SELECT 1 FROM flag_activity
+                               WHERE flag_activity.flag_id = flags.id)', undef,
+      $from, $from + $batch_size
+    );
+  }
+  print "Added a flag_activity row for $added flags.\n" if $added > 0;
+
+  # See Bugzilla::FlagActivity->cutoff.
+  $dbh->do(
+    'INSERT INTO flag_activity_migration (cutoff) VALUES (LOCALTIMESTAMP(0))');
+}
+
+# Added nullable: during the rolling deploy, pods still on the previous code
+# inserted rows without it. _set_flag_activity_who_not_null makes it NOT NULL
+# once all pods write it.
 sub _add_flag_activity_who {
   my $dbh = Bugzilla->dbh;
 
@@ -4595,6 +4642,25 @@ sub _add_flag_activity_who {
   # record who made the change: the setter is the best value available. Runs
   # every time, on the index above.
   $dbh->do('UPDATE flag_activity SET who = setter_id WHERE who IS NULL');
+}
+
+# Every pod writes who since bug 2088705 was deployed.
+sub _set_flag_activity_who_not_null {
+  my $dbh = Bugzilla->dbh;
+  return if $dbh->bz_column_info('flag_activity', 'who')->{NOTNULL};
+
+  # MySQL can't make a column of a foreign key NOT NULL. Drop the key:
+  # bz_setup_foreign_keys adds it back at the end of checksetup.
+  $dbh->bz_drop_fk('flag_activity', 'who');
+  $dbh->bz_alter_column(
+    'flag_activity',
+    'who',
+    {
+      TYPE       => 'INT3',
+      NOTNULL    => 1,
+      REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}
+    }
+  );
 }
 
 sub _remove_duo_recovery_codes {
