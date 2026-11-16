@@ -23,6 +23,9 @@ our @EXPORT = qw(
   HACKBOT_RUN_STATUSES
   HACKBOT_RUN_ID_REGEX
   HACKBOT_UI_ACCOUNT_REGEX
+  HACKBOT_CI_ACCOUNT_REGEX
+  HACKBOT_PHABRICATOR_DEDUPE_REGEX
+  HACKBOT_FOLLOWUP_DEDUPE_REGEX
 );
 
 # Only members of this group see Hackbot runs, on the bug page or via the API.
@@ -59,8 +62,17 @@ use constant HACKBOT_RUN_ID_REGEX => qr{
     - [[:xdigit:]]{4} - [[:xdigit:]]{12} $
 }x;
 
-# `requested_via` holds the service account that created the run. Runs
-# started from the Hackbot UI come from its Cloud Run service account.
+# How a run's origin is recognised. Hackbot has no explicit origin field, so
+# these follow its conventions (see BugRuns::_origin for the order applied):
+#   - `requested_via` holds the service account that created the run, so
+#     Hackbot UI and pulse listener (CI) runs are told apart by their Cloud
+#     Run service accounts.
+#   - `dedupe_key` is set by each trigger: "phab-txn:<phid>" for an @hackbot
+#     mention on a Phabricator revision, "parent-<run id>" for a run started
+#     by another run.
 use constant HACKBOT_UI_ACCOUNT_REGEX => qr/^hackbot-ui-run@/;
+use constant HACKBOT_CI_ACCOUNT_REGEX => qr/^hackbot-pulse-listener-run@/;
+use constant HACKBOT_PHABRICATOR_DEDUPE_REGEX => qr/^phab-txn:/;
+use constant HACKBOT_FOLLOWUP_DEDUPE_REGEX    => qr/^parent-/;
 
 1;

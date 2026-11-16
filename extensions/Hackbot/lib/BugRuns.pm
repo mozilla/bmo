@@ -30,6 +30,9 @@ use Bugzilla::User;
 use Bugzilla::Extension::Hackbot::Client;
 use Bugzilla::Extension::Hackbot::Constants;
 
+# Bump the version when _trim's output gains or loses fields: a 304 reuses
+# the cached runs as they are, so old entries would otherwise lack the new
+# fields until they expire.
 use constant CACHE_KEY_PREFIX => 'hackbot_runs.v1.';
 
 # Whether the runs table is switched on. Checked by the bug page hook and the
@@ -126,18 +129,36 @@ sub _trim {
     created_at    => $created_at,
     requested_by  => _string($run->{requested_by}),
     requested_via => _string($run->{requested_via}),
+    dedupe_key    => _string($run->{dedupe_key}),
     needinfo      => $inputs->{bugzilla_needinfo_flag_id} ? 1 : 0,
+    revision_id   => ($inputs->{revision_id} // '') =~ /^\d+$/
+    ? int($inputs->{revision_id})
+    : undef,
   };
+}
+
+# Where a run came from, as a code the JS turns into a label. First match
+# wins: the needinfo flag and dedupe keys identify the trigger precisely,
+# while the service account only says which Hackbot component made the call.
+sub _origin {
+  my ($run)         = @_;
+  my $dedupe_key    = $run->{dedupe_key}    // '';
+  my $requested_via = $run->{requested_via} // '';
+
+  return 'needinfo' if $run->{needinfo};
+  return 'phabricator'
+    if $dedupe_key =~ HACKBOT_PHABRICATOR_DEDUPE_REGEX && $run->{revision_id};
+  return 'followup' if $dedupe_key    =~ HACKBOT_FOLLOWUP_DEDUPE_REGEX;
+  return 'ui'       if $requested_via =~ HACKBOT_UI_ACCOUNT_REGEX;
+  return 'ci'       if $requested_via =~ HACKBOT_CI_ACCOUNT_REGEX;
+  return 'other';
 }
 
 # Build the display row for one trimmed run.
 sub _summarize {
   my ($run, $nicks) = @_;
 
-  my $origin
-    = $run->{needinfo}                                          ? 'needinfo'
-    : ($run->{requested_via} // '') =~ HACKBOT_UI_ACCOUNT_REGEX ? 'ui'
-    :                                                             'other';
+  my $origin = _origin($run);
 
   return {
     run_id => $run->{run_id},
@@ -148,6 +169,7 @@ sub _summarize {
     : 'unknown',
     created_at => $run->{created_at},
     origin     => $origin,
+    revision   => $origin eq 'phabricator' ? $run->{revision_id} : undef,
     requester  => _requester_nick($run->{requested_by}, $nicks),
   };
 }

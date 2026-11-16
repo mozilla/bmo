@@ -92,15 +92,20 @@ sub _get {
     return {ok => 0, status => $response->code, errmsg => $response->status_line};
   }
 
-  my $data = eval { decode_json($response->decoded_content) };
+  # decode_json expects UTF-8 bytes, so undo only the transfer encoding (gzip)
+  # here. Letting LWP also decode the charset would hand decode_json
+  # characters, and any non-ASCII text (e.g. a run's comment) would fail.
+  my $data = eval { decode_json($response->decoded_content(charset => 'none')) };
   if ($@) {
     return {ok => 0, status => $response->code, errmsg => "JSON parse error: $@"};
   }
 
+  # scalar: with no ETag header, header() in list context returns an empty
+  # list, which would shift every later pair in this hash.
   return {
     ok     => 1,
     status => $response->code,
-    etag   => $response->header('ETag'),
+    etag   => scalar $response->header('ETag'),
     data   => $data,
   };
 }

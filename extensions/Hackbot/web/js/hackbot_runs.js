@@ -14,10 +14,14 @@ const HackbotRuns = {
     unknown:   { label: "unknown",   cls: "hb-status-pending"   },
   },
 
+  // Labels for the origin codes set by BugRuns::_origin on the server.
   ORIGIN_LABELS: {
-    needinfo: "needinfo",
-    ui:       "Hackbot UI",
-    other:    "Hackbot",
+    needinfo:    () => "needinfo",
+    phabricator: (run) => `@hackbot on D${run.revision}`,
+    ui:          () => "Hackbot UI",
+    ci:          () => "CI failure",
+    followup:    () => "follow-up run",
+    other:       () => "Hackbot",
   },
 
   cell(className, content) {
@@ -40,7 +44,7 @@ const HackbotRuns = {
   },
 
   originText(run) {
-    const label = this.ORIGIN_LABELS[run.origin] || this.ORIGIN_LABELS.other;
+    const label = (this.ORIGIN_LABELS[run.origin] || this.ORIGIN_LABELS.other)(run);
     return run.requester ? `${label} by :${run.requester}` : label;
   },
 
