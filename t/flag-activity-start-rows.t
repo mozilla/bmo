@@ -19,6 +19,7 @@ use Bugzilla::Test::MockLocalconfig (urlbase => 'http://bmo.test');
 use Bugzilla::Test::MockDB;
 use Bugzilla::Test::MockParams (mail_delivery_method => 'None');
 use Bugzilla::Test::Util qw(create_bug create_user);
+use Bugzilla::Attachment;
 use Bugzilla::Bug;
 use Bugzilla::Install::DB;
 use Bugzilla::User;
@@ -106,6 +107,46 @@ is(
   ),
   0,
   'the start rows are only added once'
+);
+
+# An attachment flag: the starting row copies each column from the flag.
+my $attach_id = Bugzilla::Attachment->create({
+  bug         => Bugzilla::Bug->new($bug_id),
+  creation_ts => '2099-01-01 13:00:00',
+  data        => 'patch',
+  description => 'Attachment with a flag',
+  filename    => 'patch.txt',
+  ispatch     => 0,
+  isprivate   => 0,
+  mimetype    => 'text/plain',
+})->id;
+my $requestee = Bugzilla::User->new({name => 'bob@bmo.test'});
+$dbh->do(
+  "INSERT INTO flags (type_id, status, bug_id, attach_id, creation_date,
+                      modification_date, setter_id, requestee_id)
+   VALUES (?, '?', ?, ?, '2099-01-01 13:00:00', '2099-01-01 14:00:00', ?, ?)",
+  undef, $needinfo_id, $bug_id, $attach_id, $setter->id, $requestee->id
+);
+my $attach_flag_id = $dbh->bz_last_key('flags', 'id');
+
+add_start_rows();
+is(
+  $dbh->selectrow_hashref(
+    'SELECT flag_when, type_id, setter_id, who, requestee_id, bug_id,
+            attachment_id, status
+       FROM flag_activity WHERE flag_id = ?', undef, $attach_flag_id
+  ),
+  {
+    flag_when     => '2099-01-01 14:00:00',
+    type_id       => $needinfo_id,
+    setter_id     => $setter->id,
+    who           => $setter->id,
+    requestee_id  => $requestee->id,
+    bug_id        => $bug_id,
+    attachment_id => $attach_id,
+    status        => '?',
+  },
+  'the starting row of an attachment flag has its columns'
 );
 
 done_testing;
