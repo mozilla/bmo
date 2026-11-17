@@ -589,6 +589,12 @@ sub bug_check_can_change_field {
     = @$args{qw(bug field old_value new_value priv_results)};
 
   return if $field !~ /^cf_/ or $old_value eq $new_value;
+
+  # Most cf_ fields are not tracking flags. Skip those without a query each.
+  my $tracking_names = Bugzilla->request_cache->{tracking_flag_name_set}
+    //= {map { $_ => 1 } Bugzilla->tracking_flag_names};
+  return unless $tracking_names->{$field};
+
   return
     unless my $flag
     = Bugzilla::Extension::TrackingFlags::Flag->new({name => $field});
