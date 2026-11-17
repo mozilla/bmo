@@ -1,0 +1,27 @@
+[%# This Source Code Form is subject to the terms of the Mozilla Public
+  # License, v. 2.0. If a copy of the MPL was not distributed with this
+  # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+  #
+  # This Source Code Form is "Incompatible With Secondary Licenses", as
+  # defined by the Mozilla Public License, v. 2.0.
+  #%]
+
+[%
+   title = "Hackbot"
+   desc = "Configure Hackbot Integration"
+%]
+
+[%
+   param_descs = {
+     hackbot_runs_enabled =>
+       'Show the Hackbot runs for a bug on the bug page (editbugs members only).',
+     hackbot_api_url =>
+       'Base URL of the Hackbot API, ending with a slash'
+       _ ' (for example https://hackbot-api.example.com/).',
+     hackbot_api_key =>
+       'API key BMO sends to the Hackbot API in the X-API-Key header.',
+     hackbot_ui_url =>
+       'Base URL of the Hackbot UI, ending with a slash. Run links are'
+       _ ' built from this URL followed by runs/ and the run id.',
+   }
+%]
