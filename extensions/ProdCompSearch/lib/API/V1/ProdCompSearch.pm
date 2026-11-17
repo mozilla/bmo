@@ -5,60 +5,43 @@
 # This Source Code Form is "Incompatible With Secondary Licenses", as
 # defined by the Mozilla Public License, v. 2.0.
 
-package Bugzilla::Extension::ProdCompSearch::WebService;
+package Bugzilla::Extension::ProdCompSearch::API::V1::ProdCompSearch;
 
 use 5.10.1;
-use strict;
-use warnings;
+use Mojo::Base qw( Mojolicious::Controller );
 
-use base qw(Bugzilla::WebService);
-
+use Bugzilla;
+use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Util qw(detaint_natural trim);
 use Time::localtime;
 
-#############
-# Constants #
-#############
-
-use constant PUBLIC_METHODS => qw(
-  prod_comp_search
-);
-
-sub rest_resources {
-  return [
-    qr{^/prod_comp_search/find/(.*)$},
-    {
-      GET => {
-        method => 'prod_comp_search',
-        params => sub {
-          return {search => $_[0]};
-        }
-      }
-    },
-    qr{^/prod_comp_search/frequent},
-    {GET => {method => 'list_frequent_components',}}
-  ];
+sub setup_routes {
+  my ($class, $r) = @_;
+  $r->get('/prod_comp_search/find/*search')
+    ->to('ProdCompSearch::API::V1::ProdCompSearch#prod_comp_search');
+  $r->get('/prod_comp_search/frequent')
+    ->to('ProdCompSearch::API::V1::ProdCompSearch#list_frequent_components');
 }
 
-##################
-# Public Methods #
-##################
-
+# GET /prod_comp_search/find/<search>?limit=<n>
+#
+# Products and components the user can file bugs in matching the words of
+# <search> ("product::component" searches each part separately). Returns
+# {products => [{product}, {product, component}, ...]}.
 sub prod_comp_search {
-  my ($self, $params) = @_;
-  my $user = Bugzilla->user;
+  my ($self) = @_;
+  Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
+  my $user = $self->bugzilla->login;
   my $dbh  = Bugzilla->switch_to_shadow_db();
 
-  my $search = trim($params->{'search'} || '');
+  my $search = trim($self->param('search') // '');
   $search
     || ThrowCodeError('param_required',
     {function => 'PCS.prod_comp_search', param => 'search'});
 
-  my $limit
-    = detaint_natural($params->{'limit'})
-    ? $dbh->sql_limit($params->{'limit'})
-    : '';
+  my $limit = $self->param('limit');
+  $limit = detaint_natural($limit) ? $dbh->sql_limit($limit) : '';
 
   # We do this in the DB directly as we want it to be fast and
   # not have the overhead of loading full product objects
@@ -91,7 +74,7 @@ sub prod_comp_search {
     );
   }
 
-  return {products => []} if !scalar @$enterable_ids;
+  return $self->render(json => {products => []}) if !scalar @$enterable_ids;
 
   my @terms;
   my @order;
@@ -115,7 +98,7 @@ sub prod_comp_search {
     push @order, "products.name";
     push @order, "components.name";
   }
-  return {products => []} if !scalar @terms;
+  return $self->render(json => {products => []}) if !scalar @terms;
 
   # To help Mozilla staff file BMO administration bugs into the right
   # component, sort BMO first when searching for 'bugzilla'
@@ -148,16 +131,20 @@ sub prod_comp_search {
     }
     push @$products, $component;
   }
-  return {products => $products};
+  return $self->render(json => {products => $products});
 }
 
-# Get a list of components the user has frequently reported in the past 2 years
+# GET /prod_comp_search/frequent
+#
+# The components the user has reported the most bugs in over the past 2 years,
+# at most 10. Returns {results => [{product, component}, ...]}.
 sub list_frequent_components {
   my ($self) = @_;
-  my $user = Bugzilla->user;
+  Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
+  my $user = $self->bugzilla->login;
 
   # Nothing to show if the user is signed out
-  return {results => []} unless $user->id;
+  return $self->render(json => {results => []}) unless $user->id;
 
   # Select the date of 2 years ago today
   my $now = localtime;
@@ -174,7 +161,7 @@ sub list_frequent_components {
   };
   my $results = $dbh->selectall_arrayref($sql, {Slice => {}}, $user->id, $date);
 
-  return {results => $results};
+  return $self->render(json => {results => $results});
 }
 
 ###################
