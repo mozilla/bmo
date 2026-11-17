@@ -42,6 +42,11 @@ sub update_target {
 # Setting the same password still stores a new hash, so it shows as a change.
 my $changes = update_target({password => $target_password});
 ok(exists $changes->{cryptpassword}, 'password alone is a user field');
+is_deeply(
+  $changes->{cryptpassword},
+  {removed => '', added => '******'},
+  'the password hash is not returned'
+);
 
 $changes
   = update_target({email => $target_login, password => $target_password});
