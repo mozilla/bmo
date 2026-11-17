@@ -99,4 +99,18 @@ is(
 ok($dbh->bz_column_info('flag_activity', 'who')->{NOTNULL},
   'and the column is NOT NULL');
 
+# The foreign key dropped for the change is back at the end of checksetup.
+ok($dbh->bz_fk_info('flag_activity', 'who')->{created},
+  'and the who foreign key is added back');
+
+# And right after the change, not by bz_setup_foreign_keys: on MySQL it would
+# copy the whole table to add it.
+$dbh->bz_alter_column('flag_activity', 'who',
+  {TYPE => 'INT3', REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}});
+Bugzilla::Install::DB::_set_flag_activity_who_not_null();
+ok(
+  $dbh->bz_fk_info('flag_activity', 'who')->{created},
+  'the who foreign key is added back with the NOT NULL change'
+);
+
 done_testing;
