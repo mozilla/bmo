@@ -111,8 +111,8 @@ sub fetch {
 
 subtest 'client: request shape and conditional requests' => sub {
   my ($client, $ua) = client_with(
-    response(200, encode_json([run_doc()]), ETag => '"v1"'),
-    response(304, '',                       ETag => '"v1"'),
+    response(200, encode_json({runs => [run_doc()]}), ETag => '"v1"'),
+    response(304, '',                                 ETag => '"v1"'),
   );
 
   my $result = $client->bug_runs($BUG_ID);
@@ -123,8 +123,8 @@ subtest 'client: request shape and conditional requests' => sub {
   my $request = $ua->{requests}[0];
   is(
     $request->{url},
-    "https://hackbot-api.example.test/runs?bug_id=$BUG_ID&limit=50",
-    'lists runs filtered by bug id'
+    "https://hackbot-api.example.test/bugs/$BUG_ID/runs",
+    'lists the runs for the bug'
   );
   is($request->{headers}{'X-API-Key'}, 'secret-key', 'sends the API key');
   ok(!exists $request->{headers}{'If-None-Match'},
@@ -136,7 +136,7 @@ subtest 'client: request shape and conditional requests' => sub {
 };
 
 subtest 'client: response without an ETag' => sub {
-  my ($client) = client_with(response(200, encode_json([run_doc()])));
+  my ($client) = client_with(response(200, encode_json({runs => [run_doc()]})));
   my $result = $client->bug_runs($BUG_ID);
   ok($result->{ok}, 'ok without an ETag');
   is(scalar @{$result->{runs} // []}, 1,     'runs are returned');
@@ -145,8 +145,8 @@ subtest 'client: response without an ETag' => sub {
 
 subtest 'client: UTF-8 response with a charset' => sub {
   my $comment = "Caf\x{e9} \x{2014} \x{2713}";
-  my $body
-    = encode_json([run_doc(inputs => {bug_id => $BUG_ID, comment => $comment})]);
+  my $body = encode_json(
+    {runs => [run_doc(inputs => {bug_id => $BUG_ID, comment => $comment})]});
   my ($client) = client_with(HTTP::Response->new(
     200, undef, ['Content-Type' => 'application/json; charset=utf-8'], $body
   ));
@@ -159,11 +159,13 @@ subtest 'client: UTF-8 response with a charset' => sub {
 subtest 'client: failures' => sub {
   my ($client) = client_with(
     response(500, 'oops'),
-    response(200, '{"not":"a list"}'),
+    response(200, '{"not":"runs"}'),
+    response(200, encode_json([run_doc()])),
     response(200, 'not json'),
   );
   ok(!$client->bug_runs($BUG_ID)->{ok}, 'HTTP error is not ok');
-  ok(!$client->bug_runs($BUG_ID)->{ok}, 'non-list body is not ok');
+  ok(!$client->bug_runs($BUG_ID)->{ok}, 'body without runs is not ok');
+  ok(!$client->bug_runs($BUG_ID)->{ok}, 'bare list body is not ok');
   ok(!$client->bug_runs($BUG_ID)->{ok}, 'invalid JSON is not ok');
 
   my $unconfigured = Bugzilla::Extension::Hackbot::Client->new(
@@ -200,6 +202,23 @@ subtest 'runs are trimmed to valid runs for this bug' => sub {
   is($run->{agent},      'bug-fix',                     'agent');
   is($run->{status},     'running',                     'status');
   is($run->{created_at}, '2026-11-12T16:24:39.123456Z', 'created_at');
+};
+
+subtest 'runs are capped at the newest HACKBOT_MAX_RUNS' => sub {
+  reset_cache();
+  my $max  = Bugzilla::Extension::Hackbot::Constants::HACKBOT_MAX_RUNS;
+  my @docs = map {
+    run_doc(run_id => sprintf('00000000-0000-0000-0000-%012d', $_))
+  } 1 .. $max + 5;
+
+  # Another bug's run is dropped and does not count towards the cap.
+  unshift @docs, run_doc(inputs => {bug_id => $BUG_ID + 1});
+  my $client = FakeClient->new({ok => 1, runs => \@docs});
+
+  my $runs = fetch($client)->{runs};
+  is(scalar @$runs, $max, 'list is capped');
+  like($runs->[0]{url},  qr/-000000000001$/,  'newest run is kept');
+  like($runs->[-1]{url}, qr/-0*\Q$max\E$/, 'cut after the cap');
 };
 
 subtest 'origin and requester' => sub {

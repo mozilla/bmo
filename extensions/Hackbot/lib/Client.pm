@@ -47,21 +47,19 @@ sub bug_runs {
     unless $self->{base_url};
 
   # $bug_id is a validated integer; the base URL ends in a slash (check_urlbase).
-  my $url
-    = $self->{base_url}
-    . 'runs?bug_id='
-    . int($bug_id)
-    . '&limit='
-    . HACKBOT_MAX_RUNS;
+  # The endpoint returns every run for the bug as {runs => [...]}; it takes no
+  # limit, so BugRuns caps the list.
+  my $url = $self->{base_url} . 'bugs/' . int($bug_id) . '/runs';
 
   my $result = $self->_get($url, $etag);
   return $result if !$result->{ok} || $result->{not_modified};
 
-  unless (ref $result->{data} eq 'ARRAY') {
+  my $data = $result->{data};
+  unless (ref $data eq 'HASH' && ref $data->{runs} eq 'ARRAY') {
     return {
       ok     => 0,
       status => $result->{status},
-      errmsg => 'response is not a list'
+      errmsg => 'response has no runs list'
     };
   }
 
@@ -69,7 +67,7 @@ sub bug_runs {
     ok           => 1,
     not_modified => 0,
     etag         => $result->{etag},
-    runs         => $result->{data},
+    runs         => $data->{runs},
   };
 }
 

@@ -86,7 +86,7 @@ sub _refresh {
   my $runs
     = $response->{not_modified}
     ? $stale->{runs}
-    : [grep {defined} map { _trim($_, $bug_id) } @{$response->{runs}}];
+    : _trim_all($response->{runs}, $bug_id);
 
   my $entry = {
     runs        => $runs,
@@ -103,6 +103,15 @@ sub _store {
   });
 }
 
+# The valid runs for this bug, newest first (the API's order), capped at
+# HACKBOT_MAX_RUNS. The API has no limit, so a busy bug is cut here.
+sub _trim_all {
+  my ($runs, $bug_id) = @_;
+  my @kept = grep {defined} map { _trim($_, $bug_id) } @$runs;
+  splice @kept, HACKBOT_MAX_RUNS if @kept > HACKBOT_MAX_RUNS;
+  return \@kept;
+}
+
 # Reduce an API RunDoc to the fields the table needs, or undef to drop it.
 sub _trim {
   my ($run, $bug_id) = @_;
@@ -110,10 +119,9 @@ sub _trim {
   return undef unless ref $run eq 'HASH';
   return undef unless ($run->{run_id} // '') =~ HACKBOT_RUN_ID_REGEX;
 
-  # Only keep runs that are for this bug. The API filters by bug_id, but an
-  # API that ignored the filter (an older deploy treats it as an unknown query
-  # parameter) would return every run, including runs on bugs this user may
-  # not be allowed to see.
+  # Only keep runs that are for this bug. The endpoint is already per bug, but
+  # this cache is shared by everyone who can see the bug, so a run for any
+  # other bug must never get into it, whatever the API sends back.
   my $inputs = ref $run->{inputs} eq 'HASH' ? $run->{inputs} : {};
   return undef unless ($inputs->{bug_id} // '') =~ /^\d+$/;
   return undef unless $inputs->{bug_id} == $bug_id;

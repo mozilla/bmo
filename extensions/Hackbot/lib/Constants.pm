@@ -35,7 +35,8 @@ use constant HACKBOT_GROUP => 'editbugs';
 # asynchronously, so a slow API delays only the table, never the bug page.
 use constant HACKBOT_API_TIMEOUT => 10;
 
-# The most runs shown for one bug (sent as the API's `limit`; newest first).
+# The most runs shown for one bug. The API returns them all, newest first, and
+# BugRuns keeps this many.
 use constant HACKBOT_MAX_RUNS => 50;
 
 # Freshness window: how long a cached run list is served without contacting
