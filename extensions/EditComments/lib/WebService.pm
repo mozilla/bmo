@@ -123,10 +123,14 @@ sub update_comment {
     sync_fulltext => 1,
   });
 
+  # Render what the bug page shows, which can differ from the stored text: the
+  # comment_body_full hook lets extensions hide part of it (eg. Hackbot's front
+  # matter).
+  my $body = $comment->body_full({exclude_attachment => 1});
   my $html
     = $comment->is_markdown && Bugzilla->params->{use_markdown}
-    ? Bugzilla->markdown->render_html($new_comment, $bug)
-    : Bugzilla::Template::quoteUrls($new_comment, $bug);
+    ? Bugzilla->markdown->render_html($body, $bug)
+    : Bugzilla::Template::quoteUrls($body, $bug);
 
   # Respond with the updated comment and number of revisions
   return {
