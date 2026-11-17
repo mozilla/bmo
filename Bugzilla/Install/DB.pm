@@ -4649,8 +4649,8 @@ sub _set_flag_activity_who_not_null {
   my $dbh = Bugzilla->dbh;
   return if $dbh->bz_column_info('flag_activity', 'who')->{NOTNULL};
 
-  # MySQL can't make a column of a foreign key NOT NULL. Drop the key:
-  # bz_setup_foreign_keys adds it back at the end of checksetup.
+  # MySQL can't make a column of a foreign key NOT NULL. Drop the key and add
+  # it back right after.
   $dbh->bz_drop_fk('flag_activity', 'who');
   $dbh->bz_alter_column(
     'flag_activity',
@@ -4661,6 +4661,16 @@ sub _set_flag_activity_who_not_null {
       REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}
     }
   );
+
+  # With foreign_key_checks on, MySQL copies the whole table to add the key,
+  # blocking flag changes on live pods meanwhile. The values don't need the
+  # check: they were written under this key or copied from setter_id, which has
+  # its own.
+  my $mysql = $dbh->isa('Bugzilla::DB::Mysql');
+  $dbh->do('SET foreign_key_checks = 0') if $mysql;
+  $dbh->bz_add_fk('flag_activity', 'who',
+    $dbh->bz_fk_info('flag_activity', 'who'));
+  $dbh->do('SET foreign_key_checks = 1') if $mysql;
 }
 
 sub _remove_duo_recovery_codes {
