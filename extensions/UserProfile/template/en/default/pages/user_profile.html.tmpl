@@ -285,7 +285,13 @@
 <tr>
   <td>&nbsp;</td>
   <th>[% terms.Bugs %] poked</th>
-  <td class="numeric">[% stats.touched || 0 FILTER html %]</td>
+  <td class="numeric">
+  [% IF user.id %]
+      <a href="[% basepath FILTER none %]buglist.cgi?query_format=advanced&amp;emailtype1=exact&amp;emailqa_contact1=1&amp;emailassigned_to1=1&amp;emaillongdesc1=1&amp;emailbug_mentor1=1&amp;emailreporter1=1&amp;email1=[% target.login FILTER uri %]">
+  [% END %]
+  [% stats.touched || 0 FILTER html %]
+  [% "</a>" IF user.id %]
+  </td>
 </tr>
 
 <tr>
