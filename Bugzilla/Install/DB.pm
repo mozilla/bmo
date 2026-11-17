@@ -4620,7 +4620,8 @@ sub _add_flag_activity_start_rows {
   }
   print "Added a flag_activity row for $added flags.\n" if $added > 0;
 
-  # See Bugzilla::FlagActivity->cutoff.
+  # Flag changes up to this time are to be read from bugs_activity, later ones
+  # from flag_activity.
   $dbh->do(
     'INSERT INTO flag_activity_migration (cutoff) VALUES (LOCALTIMESTAMP(0))');
 }
