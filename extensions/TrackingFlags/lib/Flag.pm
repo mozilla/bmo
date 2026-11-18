@@ -29,6 +29,10 @@ use Bugzilla::Extension::TrackingFlags::Flag::Visibility;
 
 use constant DB_TABLE => 'tracking_flags';
 
+# Names are interpolated into SQL as identifiers by Bugzilla::Search, so
+# apply the same restriction as core custom fields.
+use constant NAME_REGEX => qr/^cf_\w+$/a;
+
 use constant DB_COLUMNS => qw(
   id
   field_id
@@ -352,6 +356,8 @@ sub _check_name {
   my ($invocant, $name) = @_;
   $name = trim($name);
   $name || ThrowCodeError('param_required', {param => 'name'});
+
+  $name =~ NAME_REGEX || ThrowUserError('field_invalid_name', {name => $name});
   return $name;
 }
 
