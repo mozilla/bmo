@@ -114,6 +114,12 @@ SKIP: {
 }
 $t->get_ok('/rest/mydashboard/run_flag_query' => \%auth)
   ->json_is('/error' => 1, 'type is required');
+$t->get_ok('/rest/mydashboard/run_flag_query?type=bogus' => \%auth)
+  ->json_is('/error' => 1)
+  ->json_like(
+  '/message' => qr/type.*is not a valid parameter/s,
+  'unknown type'
+  );
 
 # run_last_changes
 $t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>
