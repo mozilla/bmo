@@ -445,7 +445,10 @@ sub cf_hidden_in_product {
 
   # check Bugzilla's built-in visibility controls first
   if ($bug) {
-    my $field = Bugzilla::Field->new({name => $field_name, cache => 1});
+    # Bugzilla->fields is loaded once per request, so prefer it over a
+    # memcached lookup per field (two round trips each for a lookup by name).
+    my $field = Bugzilla->fields({by_name => 1})->{$field_name}
+      // Bugzilla::Field->new({name => $field_name, cache => 1});
     return 1 if $field && !$field->is_visible_on_bug($bug);
   }
 

@@ -203,8 +203,8 @@ This is a JSON object and can set any limit described in [BSD::Resource](https:/
 Typically it used for setting RLIMIT_AS, and the default value is `{ "RLIMIT_AS": 2000000000 }`.
 
 **BMO_size_limit**  
-This is the max amount of unshared memory the worker processes are allowed to
-use before they will exit. Minimum 750000 (750MiB)
+This is the max virtual memory size (VmSize, in kB) the worker processes are
+allowed to use before they will exit. Minimum 750000 (750MiB)
 
 **BMO_mail_delivery_method**  
 Usually configured on the MTA section of admin interface, but may be set here for testing purposes.

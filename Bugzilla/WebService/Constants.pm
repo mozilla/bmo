@@ -312,11 +312,8 @@ sub WS_DISPATCH {
   my %hook_dispatch;
   Bugzilla::Hook::process('webservice', {dispatch => \%hook_dispatch});
 
-  my $dispatch = {
-    'Bugzilla'         => 'Bugzilla::WebService::Bugzilla',
-    %hook_dispatch
-  };
-  return $dispatch;
+  # Only extensions still dispatch here; core resources are native Mojo API.
+  return {%hook_dispatch};
 }
 
 # Custom HTTP headers that can be used for API authentication rather than

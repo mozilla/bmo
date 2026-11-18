@@ -283,12 +283,9 @@ my %optional_features = (
     description => 'Linux::PID',
     prereqs     => {runtime => {requires => {'Linux::Pid' => 0},},},
   },
-  linux_smaps => {
-    description => 'Linux::Smaps::Tiny for limiting memory usage',
-    prereqs     => {
-      runtime =>
-        {requires => {'Linux::Smaps::Tiny' => '0', 'BSD::Resource' => 0}}
-    },
+  rlimit => {
+    description => 'BSD::Resource for limiting memory usage',
+    prereqs     => {runtime => {requires => {'BSD::Resource' => 0}}},
   },
   linux_pdeath => {
     description => 'Linux::Pdeathsig for a good parent/child relationships',
