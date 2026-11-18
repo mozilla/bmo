@@ -856,6 +856,9 @@ sub update_table_definitions {
   # After _add_flag_activity_who, which fills the rows without it.
   _set_flag_activity_who_not_null();
 
+  # Bug 2085398 - xavier.lhour@gmail.com
+  _set_flag_activity_requestee_fk_set_null();
+
   # Bug 1806896 - xavier.lhour@gmail.com
   _migrate_flag_state_activity();
 
@@ -4671,6 +4674,21 @@ sub _set_flag_activity_who_not_null {
   $dbh->do('SET foreign_key_checks = 0') if $mysql;
   $dbh->bz_add_fk('flag_activity', 'who',
     $dbh->bz_fk_info('flag_activity', 'who'));
+  $dbh->do('SET foreign_key_checks = 1') if $mysql;
+}
+
+# The start rows name the requestees of older pending requests. Without this,
+# their accounts couldn't be deleted any more.
+sub _set_flag_activity_requestee_fk_set_null {
+  my $dbh = Bugzilla->dbh;
+  my $fk  = $dbh->bz_fk_info('flag_activity', 'requestee_id');
+  return if !$fk || defined $fk->{DELETE};
+  $fk->{DELETE} = 'SET NULL';
+
+  # As for who above: the values were written under this key already.
+  my $mysql = $dbh->isa('Bugzilla::DB::Mysql');
+  $dbh->do('SET foreign_key_checks = 0') if $mysql;
+  $dbh->bz_alter_fk('flag_activity', 'requestee_id', $fk);
   $dbh->do('SET foreign_key_checks = 1') if $mysql;
 }
 

@@ -754,9 +754,11 @@ use constant ABSTRACT_SCHEMA => {
         NOTNULL    => 1,
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
       },
+
+      # Set to NULL when the requestee's account is deleted.
       requestee_id => {
         TYPE       => 'INT3',
-        REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
+        REFERENCES => {TABLE => 'profiles', COLUMN => 'userid', DELETE => 'SET NULL'},
       },
       bug_id       => {
         TYPE       => 'INT3',

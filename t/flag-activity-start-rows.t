@@ -149,4 +149,32 @@ is(
   'the starting row of an attachment flag has its columns'
 );
 
+# Requestees named in the flag history can still be deleted. On a database
+# where the requestee foreign key has no ON DELETE rule, checksetup adds it.
+$dbh->bz_alter_fk('flag_activity', 'requestee_id',
+  {TABLE => 'profiles', COLUMN => 'userid'});
+Bugzilla::Install::DB->update_table_definitions({});
+is($dbh->bz_fk_info('flag_activity', 'requestee_id')->{DELETE},
+  'SET NULL', 'the requestee foreign key sets NULL on delete');
+
+my $gone = create_user('gone@bmo.test', '*');
+$dbh->do(
+  "INSERT INTO flag_activity
+     (flag_when, type_id, flag_id, setter_id, who, requestee_id, bug_id, status)
+   VALUES ('2099-01-01 15:00:00', ?, ?, ?, ?, ?, ?, 'X')", undef, $needinfo_id,
+  $attach_flag_id, $setter->id, $setter->id, $gone->id, $bug_id
+);
+my $row_id = $dbh->bz_last_key('flag_activity', 'id');
+ok(eval { $dbh->do('DELETE FROM profiles WHERE userid = ?', undef, $gone->id) },
+  'a requestee named in the flag history can be deleted')
+  or diag $@;
+is(
+  scalar $dbh->selectrow_array(
+    'SELECT COUNT(*) FROM flag_activity WHERE id = ? AND requestee_id IS NULL',
+    undef, $row_id
+  ),
+  1,
+  'and the history row is kept without the requestee'
+);
+
 done_testing;
