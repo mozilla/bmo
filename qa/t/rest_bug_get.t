@@ -46,7 +46,6 @@ $t->put_ok($url . "rest/bug/$private_id" =>
       blocks                => {set => [$public_id]},
       dupe_of               => $public_id,
       is_creator_accessible => 0,
-      keywords              => {set => ['test-keyword-1', 'test-keyword-2']},
       see_also              => {
         add => [
           "${base_url}show_bug.cgi?id=$public_id",
@@ -64,7 +63,9 @@ $private_bug->{is_open}               = 0;
 $private_bug->{resolution}            = 'DUPLICATE';
 $private_bug->{is_creator_accessible} = 0;
 $private_bug->{is_cc_accessible}      = 1;
-$private_bug->{keywords}              = ['test-keyword-1', 'test-keyword-2'];
+# PRIVATE_BUG_USER has no canconfirm, so cannot set keywords (Bug 2078325).
+# They are set on the public bug by admin below instead.
+$private_bug->{keywords}              = [];
 $private_bug->{see_also}              = [
   "${base_url}show_bug.cgi?id=$public_id",
   "https://bugzilla-dev.allizom.org/show_bug.cgi?id=123456"
@@ -77,7 +78,7 @@ $public_bug->{resolution}            = '';
 $public_bug->{is_open}               = 1;
 $public_bug->{is_creator_accessible} = 1;
 $public_bug->{is_cc_accessible}      = 1;
-$public_bug->{keywords}              = [];
+$public_bug->{keywords}              = ['test-keyword-1', 'test-keyword-2'];
 
 # Local Bugzilla bugs are automatically updated.
 $public_bug->{cf_qa_status}     = [];
@@ -87,6 +88,7 @@ $public_bug->{cf_single_select} = '---';
 $t->put_ok($url . "rest/bug/$public_id" =>
     {'X-Bugzilla-API-Key' => $config->{admin_user_api_key}} => json => {
       deadline       => '2038-01-01',
+      keywords       => {set => ['test-keyword-1', 'test-keyword-2']},
       estimated_time => '10.0',
       remaining_time => '5.0',
     })->status_is(200);
@@ -100,6 +102,9 @@ $public_bug->{groups}          = [];
 # The user filing $private_bug doesn't have permission to set the status
 # or qa_contact, so they differ from normal $public_bug values.
 $private_bug->{qa_contact} = $config->{PRIVATE_BUG_USER . '_user_login'};
+
+# PRIVATE_BUG_USER has no editbugs, so severity is reset (Bug 2078325).
+$private_bug->{severity} = Bugzilla->params->{defaultseverity};
 
 sub check_bug {
   my ($test, $json) = @_;
