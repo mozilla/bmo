@@ -675,12 +675,6 @@ sub search_operator_field_override {
 # web service / pages
 #
 
-sub webservice {
-  my ($self, $args) = @_;
-  my $dispatch = $args->{dispatch};
-  $dispatch->{Review} = "Bugzilla::Extension::Review::WebService";
-}
-
 sub user_preferences {
   my ($self, $args) = @_;
   return unless $args->{current_tab} eq 'account' && $args->{save_changes};
