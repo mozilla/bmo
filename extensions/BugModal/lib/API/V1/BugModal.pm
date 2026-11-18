@@ -66,9 +66,9 @@ sub type {
   return Bugzilla::API::V1::Util->type($type, $value);
 }
 
-# The request params, with the id from the path unless the request has one,
-# as on the legacy server. Logs the user in if credentials were sent. Returns
-# nothing after rendering an error.
+# The request params with the id from the path. As on the legacy server, an
+# id sent with a PUT replaces the one in the path, but not on a GET. Logs the
+# user in if credentials were sent. Returns nothing after rendering an error.
 sub _params {
   my ($self, $lists) = @_;
   Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
@@ -79,17 +79,9 @@ sub _params {
     $self->user_error($error);
     return;
   }
-  $params->{id} //= $self->stash('id');
+  $params->{id} = $self->stash('id')
+    if $self->req->method eq 'GET' || !defined $params->{id};
   return $params;
-}
-
-# The bug named by the id param. A hash here would reach Bugzilla::Bug->check()
-# as a set of object conditions.
-sub _bug {
-  my ($self, $params) = @_;
-  ThrowUserError('invalid_params', {type_error => 'id must be a single value'})
-    if ref $params->{id};
-  return Bugzilla::Bug->check({id => $params->{id}});
 }
 
 # GET /bug_modal/initial_field_values
@@ -133,7 +125,7 @@ sub edit {
   my ($self) = @_;
   my $params = $self->_params or return;
   my $user   = Bugzilla->user;
-  my $bug    = $self->_bug($params);
+  my $bug    = Bugzilla::Bug->check({id => $params->{id}});
 
   # the keys of the options hash must match the field id in the ui
   my %options;
@@ -199,7 +191,7 @@ sub cc {
   my ($self)   = @_;
   my $params   = $self->_params or return;
   my $template = Bugzilla->template;
-  my $bug      = $self->_bug($params);
+  my $bug      = Bugzilla::Bug->check({id => $params->{id}});
   my $vars     = {
     bug     => $bug,
     cc_list => [sort { lc($a->identity) cmp lc($b->identity) } @{$bug->cc_users}]
@@ -303,7 +295,7 @@ sub new_product {
   my $params = $self->_params or return;
   my $dbh    = Bugzilla->dbh;
   my $user   = Bugzilla->user;
-  my $bug    = $self->_bug($params);
+  my $bug    = Bugzilla::Bug->check({id => $params->{id}});
   ThrowCodeError('params_required',
     {function => 'BugModal.new_product', params => ['product']})
     if ref $params->{product};

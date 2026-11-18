@@ -86,12 +86,19 @@ $t->get_ok("/rest/bug_modal/edit/$bug_id" => \%auth)
   ->json_has('/keywords', 'edit options');
 $t->get_ok("/rest/bug_modal/edit/$bug_id" => \%auth => json =>
     {id => {condition => 'bug_id = ?', values => [$bug_id]}})
-  ->json_is('/error' => 1, 'a hash id is refused');
+  ->status_is(200)
+  ->json_is(
+  '/options/component/0/name' => $bug->component,
+  'on a GET, an id in the body is ignored'
+  );
 $t->get_ok("/rest/bug_modal/cc/$bug_id" => \%auth)
   ->status_is(200)
   ->json_like('/html' => qr/data-user-id="${\ $admin->id }"/, 'cc list html');
 $t->get_ok('/rest/bug_modal/cc/999999999')
   ->json_is('/error' => 1, 'unknown bug');
+$t->get_ok("/rest/bug_modal/cc/$bug_id?id=999999999" => \%auth)
+  ->status_is(200)
+  ->json_has('/html', 'on a GET, the id in the path wins');
 
 # comment_tags, update_comment_tags
 $t->get_ok("/rest/bug_modal/comment_tags/$public")
