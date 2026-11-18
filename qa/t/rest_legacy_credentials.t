@@ -10,7 +10,7 @@
 # Test for Bugzilla_login/Bugzilla_password, which    #
 # resources still on the legacy REST server accept    #
 # (only extensions are left there).                   #
-# GET /rest/component-watching                        #
+# GET /rest/bug_modal/initial_field_values            #
 # Delete with the last legacy resource.               #
 #######################################################
 
@@ -38,10 +38,11 @@ my $t = Test::Mojo->new();
 $t->ua->max_redirects(1);
 
 $t->get_ok(rest_get_url(
-  $url, 'rest/component-watching',
+  $url,
+  'rest/bug_modal/initial_field_values',
   {Bugzilla_login => $user, Bugzilla_password => $pass}
 ))->status_is(200);
-is(ref $t->tx->res->json, 'ARRAY', 'Valid credentials return the watch list');
+ok($t->tx->res->json('/products'), 'Valid credentials return the field values');
 
 my @tests = (
   {login => $user, password => '',    test => "Empty password can't log in"},
@@ -67,7 +68,8 @@ my @tests = (
 
 foreach my $test (@tests) {
   $t->get_ok(rest_get_url(
-    $url, 'rest/component-watching',
+    $url,
+    'rest/bug_modal/initial_field_values',
     {Bugzilla_login => $test->{login}, Bugzilla_password => $test->{password}}
   ))->status_isnt(200);
   my $expected = $test->{error} // $error;
