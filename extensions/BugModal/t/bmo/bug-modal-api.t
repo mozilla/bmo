@@ -1,0 +1,134 @@
+#!/usr/bin/env perl
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+#
+# This Source Code Form is "Incompatible With Secondary Licenses", as
+# defined by the Mozilla Public License, v. 2.0.
+
+use strict;
+use warnings;
+use 5.10.1;
+use lib qw( . lib local/lib/perl5 );
+
+BEGIN {
+  $ENV{LOG4PERL_CONFIG_FILE}     = 'log4perl-t.conf';
+  $ENV{BUGZILLA_DISABLE_HOSTAGE} = 1;
+}
+
+use Test::More;
+use Test::Mojo;
+
+use Bugzilla;
+BEGIN { Bugzilla->extensions }
+use Bugzilla::Constants;
+use Bugzilla::Bug;
+use Bugzilla::Product;
+use Bugzilla::User;
+use Bugzilla::Test::Util qw(issue_api_key);
+
+Bugzilla->usage_mode(USAGE_MODE_TEST);
+Bugzilla->error_mode(ERROR_MODE_DIE);
+
+my $admin = Bugzilla::User->new({name => 'admin@mozilla.bugs'});
+my ($product)
+  = grep { $_->is_active && @{$_->components} && @{$_->versions} }
+  Bugzilla::Product->get_all;
+plan skip_all => 'Need an admin and a product' unless $admin && $product;
+
+my %auth = ('X-Bugzilla-API-Key' => issue_api_key($admin->login)->api_key);
+my $t    = Test::Mojo->new('Bugzilla::App');
+
+Bugzilla->set_user($admin);
+my $bug = Bugzilla::Bug->create({
+  short_desc   => "BugModal API test $$",
+  product      => $product->name,
+  component    => $product->components->[0]->name,
+  bug_type     => 'defect',
+  bug_severity => 'normal',
+  op_sys       => 'Unspecified',
+  rep_platform => 'Unspecified',
+  version      => $product->versions->[0]->name,
+  comment      => 'a comment',
+  cc           => [$admin->login],
+});
+$bug->add_comment('a private comment');
+$bug->update;
+my ($public, $private)
+  = map { $_->id } @{Bugzilla::Bug->new($bug->id)->comments}[0, 1];
+
+# The admin isn't an insider here, so it can't add a private comment.
+Bugzilla->dbh->do('UPDATE longdescs SET isprivate = 1 WHERE comment_id = ?',
+  undef, $private);
+my $bug_id = $bug->id;
+Bugzilla->clear_request_cache;
+
+# initial_field_values and product_info
+$t->get_ok('/rest/bug_modal/initial_field_values')
+  ->status_is(200)
+  ->json_has('/products')
+  ->json_has('/keywords')
+  ->json_has('/default_bug_types/0', 'initial field values, signed out');
+my $name = $product->name;
+$t->get_ok('/rest/bug_modal/product_info' => form => {product => $name})
+  ->status_is(200)
+  ->json_is('/components/0/name' => $product->components->[0]->name)
+  ->json_has('/versions/0/name', 'product info');
+$t->get_ok('/rest/bug_modal/product_info?product=No.Such%20Product')
+  ->json_is('/error' => 1)
+  ->json_like('/message' => qr/No\.Such Product/, 'unknown product');
+
+# edit, cc
+$t->get_ok("/rest/bug_modal/edit/$bug_id" => \%auth)
+  ->status_is(200)
+  ->json_is('/options/component/0/name' => $bug->component)
+  ->json_has('/options/bug_type/0/name')
+  ->json_has('/keywords', 'edit options');
+$t->get_ok("/rest/bug_modal/edit/$bug_id" => \%auth => json =>
+    {id => {condition => 'bug_id = ?', values => [$bug_id]}})
+  ->json_is('/error' => 1, 'a hash id is refused');
+$t->get_ok("/rest/bug_modal/cc/$bug_id" => \%auth)
+  ->status_is(200)
+  ->json_like('/html' => qr/data-user-id="${\ $admin->id }"/, 'cc list html');
+$t->get_ok('/rest/bug_modal/cc/999999999')
+  ->json_is('/error' => 1, 'unknown bug');
+
+# comment_tags, update_comment_tags
+$t->get_ok("/rest/bug_modal/comment_tags/$public")
+  ->status_is(200)
+  ->json_has('/html', 'comment tags html');
+$t->get_ok("/rest/bug_modal/comment_tags/$private")
+  ->json_is('/error' => 1)
+  ->json_like(
+  '/message' => qr/private/,
+  'private comment hidden when signed out'
+  );
+$t->put_ok(
+  "/rest/bug_modal/update_comment_tags/$public" => json => {add => ['bmtag']})
+  ->status_is(401, 'update_comment_tags needs a login');
+$t->put_ok("/rest/bug_modal/update_comment_tags/$public" => \%auth => json =>
+    {add => ['bmtag']})
+  ->status_is(200)
+  ->json_like('/html' => qr/bmtag/, 'tag added');
+$t->put_ok("/rest/bug_modal/update_comment_tags/$public" => \%auth => json =>
+    {remove => ['bmtag']})
+  ->status_is(200)
+  ->json_unlike('/html' => qr/bmtag/, 'tag removed');
+$t->put_ok("/rest/bug_modal/update_comment_tags/$public" => \%auth => json =>
+    {id => {condition => 'comment_id = ?', values => [$public]}})
+  ->json_is('/error' => 1)
+  ->json_like('/message' => qr/numeric/, 'a hash id is refused');
+
+# new_product
+$t->get_ok(
+  "/rest/bug_modal/new_product/$bug_id" => \%auth => form => {product => $name})
+  ->status_is(200)
+  ->json_is('/component/0/name'     => $bug->component)
+  ->json_is('/component/0/selected' => Mojo::JSON::true)
+  ->json_has('/version/0/name')
+  ->json_has('/target_milestone/0/name')
+  ->json_has('/groups', 'fields for the same product');
+$t->get_ok("/rest/bug_modal/new_product/$bug_id" => \%auth)
+  ->json_is('/error' => 1, 'product is required');
+
+done_testing;

@@ -5,14 +5,14 @@
 # This Source Code Form is "Incompatible With Secondary Licenses", as
 # defined by the Mozilla Public License, v. 2.0.
 
-package Bugzilla::Extension::BugModal::WebService;
+package Bugzilla::Extension::BugModal::API::V1::BugModal;
+
 use 5.10.1;
-use strict;
-use warnings;
+use Mojo::Base qw(Mojolicious::Controller);
 
-use base qw(Bugzilla::WebService);
-
+use Bugzilla;
 use Bugzilla::Bug;
+use Bugzilla::Comment;
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Field;
@@ -23,124 +23,117 @@ use Bugzilla::Milestone;
 use Bugzilla::Product;
 use Bugzilla::Util qw(detaint_natural);
 use Bugzilla::Version;
-use List::MoreUtils qw(any first_value);
+use Bugzilla::API::V1::Util qw(merge_request_params);
+use List::MoreUtils         qw(any first_value);
 
 # these methods are much lighter than our public API calls
 
-sub rest_resources {
-  return [
-    # return all the products accessible by the user.
-    # required by new-bug
-    qr{^/bug_modal/initial_field_values},
-    {GET => {method => 'initial_field_values'},},
+sub setup_routes {
+  my ($class, $r) = @_;
+  my $to = 'BugModal::API::V1::BugModal#';
+  my @id = (id => qr/\d+/);
 
-    # return all the components pertaining to the product.
-    # required by new-bug
-    qr{^/bug_modal/product_info},
-    {
-      GET => {
-        method => 'product_info',
-        params => sub {
-          return {product_name => Bugzilla->input_params->{product}};
-        },
-      },
-    },
+  # return all the products accessible by the user.
+  # required by new-bug
+  $r->get('/bug_modal/initial_field_values')->to($to . 'initial_field_values');
 
-    # return all the lazy-loaded data; kept in sync with the UI's
-    # requirements.
-    qr{^/bug_modal/edit/(\d+)$},
-    {
-      GET => {
-        method => 'edit',
-        params => sub {
-          return {id => $_[0]};
-        },
-      },
-    },
+  # return all the components pertaining to the product (?product=).
+  # required by new-bug
+  $r->get('/bug_modal/product_info')->to($to . 'product_info');
 
-    # returns pre-formatted HTML, enabling reuse of the user template
-    qr{^/bug_modal/cc/(\d+)$},
-    {
-      GET => {
-        method => 'cc',
-        params => sub {
-          return {id => $_[0]};
-        },
-      },
-    },
+  # return all the lazy-loaded data; kept in sync with the UI's
+  # requirements.
+  $r->get('/bug_modal/edit/:id' => [@id])->to($to . 'edit');
 
-    # returns pre-formatted HTML representing the comment tags
-    qr{^/bug_modal/comment_tags/(\d+)$},
-    {
-      GET => {
-        method => 'comment_tags',
-        params => sub {
-          return {id => $_[0]};
-        },
-      },
-    },
+  # returns pre-formatted HTML, enabling reuse of the user template
+  $r->get('/bug_modal/cc/:id' => [@id])->to($to . 'cc');
 
-    # make changes to comment tags and return preformatted html
-    qr{^/bug_modal/update_comment_tags/(\d+)$},
-    {
-      PUT => {
-        method => 'update_comment_tags',
-        params => sub {
-          return {id => $_[0]};
-        },
-      },
-    },
+  # returns pre-formatted HTML representing the comment tags
+  $r->get('/bug_modal/comment_tags/:id' => [@id])->to($to . 'comment_tags');
 
-    # returns fields that require touching when the product is changed
-    qw{^/bug_modal/new_product/(\d+)$},
-    {
-      GET => {
-        method => 'new_product',
-        params => sub {
+  # make changes to comment tags and return preformatted html
+  $r->put('/bug_modal/update_comment_tags/:id' => [@id])
+    ->to($to . 'update_comment_tags');
 
-          # products with slashes in their name means we have to grab
-          # the product from the query-string instead of the path
-          return {id => $_[0], product_name => Bugzilla->input_params->{product}};
-        },
-      },
-    },
-  ];
+  # returns fields that require touching when the product is changed.
+  # products with slashes in their name means we have to grab the product
+  # from the query-string (?product=) instead of the path
+  $r->get('/bug_modal/new_product/:id' => [@id])->to($to . 'new_product');
 }
 
-sub initial_field_values {
-  my $user = Bugzilla->user;
-  return {
-    products => _name($user->get_enterable_products),
-    keywords => _name([Bugzilla::Keyword->get_all()]),
-    default_bug_types => get_legal_field_values('bug_type'),
-  };
+sub type {
+  my ($self, $type, $value) = @_;
+  return Bugzilla::API::V1::Util->type($type, $value);
 }
 
-sub product_info {
+# The request params, with the id from the path unless the request has one,
+# as on the legacy server. Logs the user in if credentials were sent. Returns
+# nothing after rendering an error.
+sub _params {
+  my ($self, $lists) = @_;
+  Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
+  $self->bugzilla->login;
+
+  my ($params, $error) = merge_request_params($self, $lists);
+  if ($error) {
+    $self->user_error($error);
+    return;
+  }
+  $params->{id} //= $self->stash('id');
+  return $params;
+}
+
+# The bug named by the id param. A hash here would reach Bugzilla::Bug->check()
+# as a set of object conditions.
+sub _bug {
   my ($self, $params) = @_;
-  if (!ref $params->{product_name}) {
-  }
-  else {
-    ThrowCodeError('params_required',
-      {function => 'BugModal.components', params => ['product']});
-  }
+  ThrowUserError('invalid_params', {type_error => 'id must be a single value'})
+    if ref $params->{id};
+  return Bugzilla::Bug->check({id => $params->{id}});
+}
+
+# GET /bug_modal/initial_field_values
+sub initial_field_values {
+  my ($self) = @_;
+  $self->_params or return;
+  my $user = Bugzilla->user;
+  return $self->render(
+    json => {
+      products          => _name($user->get_enterable_products),
+      keywords          => _name([Bugzilla::Keyword->get_all()]),
+      default_bug_types => get_legal_field_values('bug_type'),
+    }
+  );
+}
+
+# GET /bug_modal/product_info?product=<name>
+sub product_info {
+  my ($self) = @_;
+  my $params = $self->_params or return;
+  ThrowCodeError('params_required',
+    {function => 'BugModal.components', params => ['product']})
+    if ref $params->{product};
   my $product
-    = Bugzilla::Product->check({name => $params->{product_name}, cache => 1});
+    = Bugzilla::Product->check({name => $params->{product}, cache => 1});
   $product = Bugzilla->user->can_enter_product($product, 1);
   my @components = map { {
-    name => $_->name,
-    description => $_->description,
+    name             => $_->name,
+    description      => $_->description,
     default_bug_type => $_->default_bug_type,
   } } @{$product->components};
-  return {components => \@components, versions => _name($product->versions),};
+  return $self->render(
+    json => {components => \@components, versions => _name($product->versions)});
 }
 
 # everything we need for edit mode in a single call, returning just the fields
 # that the ui requires.
+#
+# GET /bug_modal/edit/<id>
 sub edit {
-  my ($self, $params) = @_;
-  my $user = Bugzilla->user;
-  my $bug = Bugzilla::Bug->check({id => $params->{id}});
+  my ($self) = @_;
+  my $params = $self->_params or return;
+  my $user   = Bugzilla->user;
+  my $bug    = $self->_bug($params);
 
   # the keys of the options hash must match the field id in the ui
   my %options;
@@ -163,8 +156,7 @@ sub edit {
 
   # custom select fields
   my @custom_fields = grep {
-         $_->type == FIELD_TYPE_SINGLE_SELECT
-      || $_->type == FIELD_TYPE_MULTI_SELECT
+    $_->type == FIELD_TYPE_SINGLE_SELECT || $_->type == FIELD_TYPE_MULTI_SELECT
   } Bugzilla->active_custom_fields(
     {product => $bug->product_obj, component => $bug->component_obj});
   foreach my $field (@custom_fields) {
@@ -186,7 +178,8 @@ sub edit {
   my @keywords = grep { $_->is_active } Bugzilla::Keyword->get_all();
 
   # results
-  return {options => \%options, keywords => [map { $_->name } @keywords],};
+  return $self->render(
+    json => {options => \%options, keywords => [map { $_->name } @keywords]});
 }
 
 sub _name {
@@ -198,14 +191,15 @@ sub _name {
     $values = Bugzilla::Field->new({name => $values, cache => 1})->legal_values;
   }
   return [map { {name => $_->name} }
-      grep { (defined $current && $_->name eq $current) || $_->is_active }
-      @$values];
+    grep { (defined $current && $_->name eq $current) || $_->is_active } @$values];
 }
 
+# GET /bug_modal/cc/<id>
 sub cc {
-  my ($self, $params) = @_;
+  my ($self)   = @_;
+  my $params   = $self->_params or return;
   my $template = Bugzilla->template;
-  my $bug      = Bugzilla::Bug->check({id => $params->{id}});
+  my $bug      = $self->_bug($params);
   my $vars     = {
     bug     => $bug,
     cc_list => [sort { lc($a->identity) cmp lc($b->identity) } @{$bug->cc_users}]
@@ -214,11 +208,13 @@ sub cc {
   my $html = '';
   $template->process('bug_modal/cc_list.html.tmpl', $vars, \$html)
     || ThrowTemplateError($template->error);
-  return {html => $html};
+  return $self->render(json => {html => $html});
 }
 
+# GET /bug_modal/comment_tags/<comment id>
 sub comment_tags {
-  my ($self, $params) = @_;
+  my ($self)   = @_;
+  my $params   = $self->_params or return;
   my $user     = Bugzilla->user;
   my $template = Bugzilla->template;
 
@@ -237,12 +233,15 @@ sub comment_tags {
     ThrowUserError('comment_is_private', {id => $comment->id});
   }
 
-  return {html => _render_comment_html($comment, $user)};
+  return $self->render(json => {html => _render_comment_html($comment, $user)});
 }
 
+# PUT /bug_modal/update_comment_tags/<comment id> {add: [...], remove: [...]}
 sub update_comment_tags {
-  my ($self, $params) = @_;
-  my $user = Bugzilla->login(LOGIN_REQUIRED);
+  my ($self) = @_;
+  my $params = $self->_params([qw(add remove)]) or return;
+  my $user   = Bugzilla->user;
+  $user->id || ThrowUserError('login_required');
 
   Bugzilla->params->{'comment_taggers_group'}
     || ThrowUserError('comment_tag_disabled');
@@ -281,14 +280,14 @@ sub update_comment_tags {
   $comment->update();
   $dbh->bz_commit_transaction();
 
-  return {html => _render_comment_html($comment, $user)};
+  return $self->render(json => {html => _render_comment_html($comment, $user)});
 }
 
 sub _render_comment_html {
   my ($comment, $user) = @_;
   my $template = Bugzilla->template;
-  my $html = '';
-  my $vars = {
+  my $html     = '';
+  my $vars     = {
     comment  => $comment,
     user     => $user,
     basepath => Bugzilla->localconfig->basepath
@@ -298,13 +297,18 @@ sub _render_comment_html {
   return $html;
 }
 
+# GET /bug_modal/new_product/<id>?product=<name>
 sub new_product {
-  my ($self, $params) = @_;
-  my $dbh  = Bugzilla->dbh;
-  my $user = Bugzilla->user;
-  my $bug  = Bugzilla::Bug->check({id => $params->{id}});
+  my ($self) = @_;
+  my $params = $self->_params or return;
+  my $dbh    = Bugzilla->dbh;
+  my $user   = Bugzilla->user;
+  my $bug    = $self->_bug($params);
+  ThrowCodeError('params_required',
+    {function => 'BugModal.new_product', params => ['product']})
+    if ref $params->{product};
   my $product
-    = Bugzilla::Product->check({name => $params->{product_name}, cache => 1});
+    = Bugzilla::Product->check({name => $params->{product}, cache => 1});
   my $true = $self->type('boolean', 1);
   my %result;
 
@@ -319,6 +323,7 @@ sub new_product {
     $component->{selected} = $true;
   }
   elsif (scalar @{$components} == 1) {
+
     # New product has one component so preselect it
     $components->[0]->{selected} = $true;
   }
@@ -332,10 +337,12 @@ sub new_product {
 
   my $milestones        = _name($product->milestones);
   my $current_milestone = $bug->target_milestone;
-  my $can_change = $bug->check_can_change_field('target_milestone', 0, 1);
-  if ($can_change->{allowed}
+  my $can_change        = $bug->check_can_change_field('target_milestone', 0, 1);
+  if (
+    $can_change->{allowed}
     && (my $milestone
-      = first_value { $_->{name} eq $current_milestone } @$milestones))
+      = first_value { $_->{name} eq $current_milestone } @$milestones)
+    )
   {
     # identical milestone in both products
     $milestone->{selected} = $true;
@@ -385,9 +392,10 @@ sub new_product {
     }
   }
   if (!$selected_version) {
+
     # use default version
     my $default_version = $product->default_version;
-    my $version = first_value { $_->{name} eq $default_version } @$versions;
+    my $version         = first_value { $_->{name} eq $default_version } @$versions;
     $version->{selected} = $true;
   }
   $result{version} = $versions;
@@ -511,7 +519,7 @@ sub new_product {
     $vars, \$result{groups})
     || ThrowTemplateError($template->error);
 
-  return \%result;
+  return $self->render(json => \%result);
 }
 
 1;
