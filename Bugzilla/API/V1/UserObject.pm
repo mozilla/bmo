@@ -511,6 +511,9 @@ sub update {
       $change->[0] = join(',', @{$change->[0]}) if ref $change->[0];
       $change->[1] = join(',', @{$change->[1]}) if ref $change->[1];
 
+      # Never return the password hash, only that it changed.
+      $change->[1] = '******' if $field eq 'cryptpassword';
+
       $hash{changes}{$field} = {
         removed => $self->type('string', $change->[0]),
         added   => $self->type('string', $change->[1])
