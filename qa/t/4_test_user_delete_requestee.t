@@ -21,36 +21,64 @@ log_in($sel, $config, 'admin');
 set_parameters($sel,
   {"Administrative Policies" => {"allowuserdeletion-on" => undef}});
 
-# flag_activity.requestee_id keeps a user from being deleted, so the
-# confirmation page must not offer it.
-my $dbh = Bugzilla->dbh;
+# A user asked to set a flag, and named as requestee in the flag history, can
+# be deleted: the request is cleared and the history keeps the row without
+# the requestee.
+my $dbh   = Bugzilla->dbh;
+my $login = 'requestee@selenium.bugzilla.org';
 $dbh->do(
   "INSERT INTO profiles (login_name, realname, cryptpassword)
-          VALUES ('requestee\@selenium.bugzilla.org', 'Requestee', '*')"
+          VALUES (?, 'Requestee', '*')", undef, $login
 );
 my $user_id = $dbh->bz_last_key('profiles', 'userid');
 my ($admin_id)
   = $dbh->selectrow_array('SELECT userid FROM profiles WHERE login_name = ?',
   undef, $config->{admin_user_login});
-my ($bug_id)  = $dbh->selectrow_array('SELECT MIN(bug_id) FROM bugs');
-my ($type_id) = $dbh->selectrow_array('SELECT MIN(id) FROM flagtypes');
+my ($bug_id) = $dbh->selectrow_array('SELECT MIN(bug_id) FROM bugs');
+my ($type_id)
+  = $dbh->selectrow_array(
+  "SELECT MIN(id) FROM flagtypes WHERE target_type = 'b'");
+$dbh->do(
+  "INSERT INTO flags (type_id, status, bug_id, creation_date,
+                      modification_date, setter_id, requestee_id)
+   VALUES (?, '?', ?, NOW(), NOW(), ?, ?)", undef, $type_id, $bug_id, $admin_id,
+  $user_id
+);
+my $flag_id = $dbh->bz_last_key('flags', 'id');
 $dbh->do(
   "INSERT INTO flag_activity
      (flag_when, type_id, flag_id, setter_id, who, requestee_id, bug_id, status)
-   VALUES (NOW(), ?, 0, ?, ?, ?, ?, 'X')", undef, $type_id, $admin_id, $admin_id,
-  $user_id, $bug_id
+   VALUES (NOW(), ?, ?, ?, ?, ?, ?, '?')", undef, $type_id, $flag_id, $admin_id,
+  $admin_id, $user_id, $bug_id
 );
-
-# The page has its verdict only if there is also something safe to report.
-$dbh->do('INSERT INTO cc (bug_id, who) VALUES (?, ?)', undef, $bug_id,
-  $user_id);
+my $history_id = $dbh->bz_last_key('flag_activity', 'id');
 
 $sel->open_ok("/editusers.cgi?action=del&userid=$user_id");
-$sel->is_text_present_ok('named in the flag history');
-$sel->is_text_present_ok('You cannot delete this user account');
+$sel->title_is("Confirm deletion of user $login");
+ok(!$sel->is_text_present('You cannot delete this user account'),
+  'The requestee can be deleted');
+$sel->click_ok("delete");
+$sel->wait_for_page_to_load_ok(WAIT_TIME);
+$sel->title_is("User $login deleted");
 
-$dbh->do('DELETE FROM cc WHERE who = ?',                     undef, $user_id);
-$dbh->do('DELETE FROM flag_activity WHERE requestee_id = ?', undef, $user_id);
-$dbh->do('DELETE FROM profiles WHERE userid = ?',            undef, $user_id);
+is(
+  scalar $dbh->selectrow_array(
+    'SELECT COUNT(*) FROM flag_activity WHERE id = ? AND requestee_id IS NULL',
+    undef, $history_id
+  ),
+  1,
+  'The flag history keeps the row without the requestee'
+);
+is(
+  scalar $dbh->selectrow_array(
+    'SELECT COUNT(*) FROM flags WHERE id = ? AND requestee_id IS NULL',
+    undef, $flag_id
+  ),
+  1,
+  'The request is cleared'
+);
+
+$dbh->do('DELETE FROM flag_activity WHERE flag_id = ?', undef, $flag_id);
+$dbh->do('DELETE FROM flags WHERE id = ?',              undef, $flag_id);
 
 logout($sel);

@@ -399,11 +399,6 @@ elsif ($action eq 'del') {
     undef, ($otherUserID) x 3
   );
 
-  # The foreign key forbids deleting a requestee kept in the flag history.
-  $vars->{'flag_activity_requestee'}
-    = $dbh->selectrow_array(
-    'SELECT COUNT(*) FROM flag_activity WHERE requestee_id = ?',
-    undef, $otherUserID);
   $vars->{'component_cc'}
     = $dbh->selectrow_array('SELECT COUNT(*) FROM component_cc WHERE user_id = ?',
     undef, $otherUserID);
@@ -538,7 +533,7 @@ elsif ($action eq 'delete') {
       my ($removed, $added)
         = Bugzilla::Flag->update_activity(\@old_summaries, \@new_summaries);
       LogActivityEntry($bug_id, 'flagtypes.name', $removed, $added, $userid,
-        $timestamp, undef, $attach_id);
+        $timestamp, undef, $attach_id || undef);
 
       # Logged in both tables, like every other flag change, until history
       # and bugmail read flag changes after the cutoff from flag_activity.
