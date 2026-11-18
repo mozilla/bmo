@@ -16,6 +16,22 @@ use Test::More "no_plan";
 use QA::Util;
 
 my ($sel, $config) = get_selenium();
+my $dbh = Bugzilla->dbh;
+my ($user_id, $flag_id);
+
+# Runs even if a check below dies, so that a rerun finds a clean database.
+END {
+  if ($flag_id) {
+    $dbh->do('DELETE FROM flag_activity WHERE flag_id = ?', undef, $flag_id);
+    $dbh->do('DELETE FROM flags WHERE id = ?',              undef, $flag_id);
+  }
+  $dbh->do('DELETE FROM profiles WHERE userid = ?', undef, $user_id) if $user_id;
+  eval {
+    set_parameters($sel,
+      {"Administrative Policies" => {"allowuserdeletion-off" => undef}});
+    logout($sel);
+  };
+}
 
 log_in($sel, $config, 'admin');
 set_parameters($sel,
@@ -24,13 +40,12 @@ set_parameters($sel,
 # A user asked to set a flag, and named as requestee in the flag history, can
 # be deleted: the request is cleared and the history keeps the row without
 # the requestee.
-my $dbh   = Bugzilla->dbh;
 my $login = 'requestee@selenium.bugzilla.org';
 $dbh->do(
   "INSERT INTO profiles (login_name, realname, cryptpassword)
           VALUES (?, 'Requestee', '*')", undef, $login
 );
-my $user_id = $dbh->bz_last_key('profiles', 'userid');
+$user_id = $dbh->bz_last_key('profiles', 'userid');
 my ($admin_id)
   = $dbh->selectrow_array('SELECT userid FROM profiles WHERE login_name = ?',
   undef, $config->{admin_user_login});
@@ -44,7 +59,7 @@ $dbh->do(
    VALUES (?, '?', ?, NOW(), NOW(), ?, ?)", undef, $type_id, $bug_id, $admin_id,
   $user_id
 );
-my $flag_id = $dbh->bz_last_key('flags', 'id');
+$flag_id = $dbh->bz_last_key('flags', 'id');
 $dbh->do(
   "INSERT INTO flag_activity
      (flag_when, type_id, flag_id, setter_id, who, requestee_id, bug_id, status)
@@ -77,8 +92,3 @@ is(
   1,
   'The request is cleared'
 );
-
-$dbh->do('DELETE FROM flag_activity WHERE flag_id = ?', undef, $flag_id);
-$dbh->do('DELETE FROM flags WHERE id = ?',              undef, $flag_id);
-
-logout($sel);
