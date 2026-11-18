@@ -18,8 +18,11 @@ use Time::localtime;
 
 sub setup_routes {
   my ($class, $r) = @_;
+
+  # An empty search gets the param_required error, not a 404.
   $r->get('/prod_comp_search/find/*search')
-    ->to('ProdCompSearch::API::V1::ProdCompSearch#prod_comp_search');
+    ->to('ProdCompSearch::API::V1::ProdCompSearch#prod_comp_search',
+    search => '');
   $r->get('/prod_comp_search/frequent')
     ->to('ProdCompSearch::API::V1::ProdCompSearch#list_frequent_components');
 }

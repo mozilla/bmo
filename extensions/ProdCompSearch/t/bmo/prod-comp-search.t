@@ -68,6 +68,10 @@ $t->get_ok("/rest/prod_comp_search/find/nosuchproduct$$")
   ->status_is(200)
   ->json_is('/products' => [], 'no match');
 
+$t->get_ok('/rest/prod_comp_search/find/')
+  ->json_is('/error' => 1)
+  ->json_is('/code'  => 50, 'an empty search is param_required, not a 404');
+
 $t->get_ok('/rest/prod_comp_search/frequent')
   ->status_is(200)
   ->json_is('/results' => [], 'nothing for a signed out user');
