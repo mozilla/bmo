@@ -11,15 +11,18 @@ use 5.10.1;
 use Moo;
 
 use Bugzilla::Constants;
+use Bugzilla::Extension::MozChangeField::Pre::TypePriSevEditbugs;
+
+my $RULE = 'Bugzilla::Extension::MozChangeField::Pre::TypePriSevEditbugs';
 
 sub evaluate_change {
   my ($self, $args) = @_;
-  my $changes  = $args->{changes};
-  my $editbugs = $args->{editbugs};
+  my $changes = $args->{changes};
 
-  # If changing the bug_type, severity, or priority, editbugs is required.
+  # Backstop for the Pre rule: type needs editbugs; severity and priority need
+  # editbugs or can_triage.
   foreach my $field (qw(bug_type bug_severity priority)) {
-    if (exists $changes->{$field} && !$editbugs) {
+    if (exists $changes->{$field} && !$RULE->can_set_field($field, $args)) {
       ThrowUserError('mozchangefield_field_needs_editbugs', {field => $field});
     }
   }
