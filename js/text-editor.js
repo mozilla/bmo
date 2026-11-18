@@ -927,7 +927,9 @@ Bugzilla.CommentEditor = class CommentEditor extends Bugzilla.TextEditor {
     const lines = [];
 
     if (needinfo.length) {
-      lines.push(`${this.str.mention_needinfo.htmlEncode()} ${needinfo.join(', ')}`);
+      const heading = `<strong>${this.str.mention_needinfo.htmlEncode()}</strong>`;
+
+      lines.push(`${heading} ${needinfo.join(', ')}`);
     }
 
     if (ccOnly.length) {

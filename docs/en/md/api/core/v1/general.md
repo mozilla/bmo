@@ -105,14 +105,14 @@ Preferences pages.
 Send only one authentication method with each request. BMO does not combine
 credentials or choose the strongest method when more than one is supplied.
 
-Most resources have been migrated off the legacy authentication path onto BMO's
-native REST framework, which accepts a cookie, an `X-Bugzilla-API-Key`
+All core resources have been migrated off the legacy authentication path onto
+BMO's native REST framework, which accepts a cookie, an `X-Bugzilla-API-Key`
 header, or an OAuth2 bearer token (plus the deprecated `Bugzilla_api_key`
 and `api_key` query parameters described in the warning below, kept only as
 a stopgap for undiscovered callers). Legacy `Bugzilla_login` and
 `Bugzilla_password` credentials are **not** accepted on these resources, even
 though the old WebService dispatcher underneath BMO still supports them for
-resources not yet migrated (currently `Bugzilla`). On those
+resources not yet migrated (currently only some extension endpoints). On those
 not-yet-migrated resources, if a request supplies both
 `Bugzilla_login`/`Bugzilla_password` and an API key, BMO does not combine
 them or choose the strongest method: the legacy credentials take precedence,

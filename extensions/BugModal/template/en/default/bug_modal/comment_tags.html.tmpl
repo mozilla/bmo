@@ -6,8 +6,12 @@
   # defined by the Mozilla Public License, v. 2.0.
   #%]
 
+[% hidden_tags = [] %]
+[% Hook.process('before_tags', 'bug_modal/comment_tags.html.tmpl') %]
+
 [% FOREACH tag IN comment.tags ~%]
-  <span class="comment-tag" data-tag="[% tag FILTER html %]">
+  <span class="comment-tag" data-tag="[% tag FILTER html %]"
+      [%= 'hidden' IF hidden_tags.contains(tag.lower) %]>
     [%~ '<a role="button" aria-label="Remove" class="remove">×</a>' IF user.can_tag_comments %]
     [% IF comment.tag_url(tag) %]
       <a class="comment-tag-url" aria-label="More Information about this tag"

@@ -52,7 +52,7 @@ window should confirm the current operational guidance with the BMO team. A
 polling cycle should:
 
 - obtain BMO's current `db_time` from [GET /rest/time](core/v1/bugzilla.md#time)
-  before searching;
+  before searching (this method requires an authenticated user);
 - search from at least five minutes before the previous successful cycle's
   recorded time to provide headroom for replica lag and one-second timestamp
   precision;
