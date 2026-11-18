@@ -47,9 +47,10 @@ sub setup_routes {
   $r->get('/review/flag_activity/type_name/:type_name' => [type_name => qr/\w+/])
     ->to($to . 'flag_activity');
 
-  # flag activity by user or type id
+  # flag activity by user or type id (an empty one is ignored, as before)
   $r->get('/review/flag_activity/:field/*value' =>
-      [field => [qw(requestee setter type_id)]])->to($to . 'flag_activity');
+      [field => [qw(requestee setter type_id)]])
+    ->to($to . 'flag_activity', value => '');
 
   # flag activity with only query strings
   $r->get('/review/flag_activity')->to($to . 'flag_activity');
