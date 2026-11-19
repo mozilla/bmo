@@ -309,6 +309,15 @@ foreach my $raw ($parent, $child, $moved) {
 
   $t->get_ok('/rest/phabbugz/bug_revisions/' . $bug->id)
     ->status_is(401, 'bug_revisions needs a login');
+
+  $conduit->reset_calls;
+  api_error(
+    $author,
+    'bug_revisions/' . $private->id,
+    qr/not authorized to access/,
+    'bug_revisions refuses a bug the user cannot see'
+  );
+  is($conduit->call_count, 0, 'no Conduit calls for a hidden bug');
 }
 
 # Everything is refused while the integration is disabled
