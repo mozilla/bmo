@@ -39,7 +39,7 @@
 .hb-status-failed    { background-color: #ffebe9; color: #cf222e; }
 
 /* Column sizing hints */
-.hb-col-agent   { white-space: nowrap; font-family: monospace; }
+.hb-col-agent   { white-space: nowrap; }
 .hb-col-status  { white-space: nowrap; width: 7em; }
 .hb-col-origin  { width: 40%; }
 .hb-col-started { white-space: nowrap; }
