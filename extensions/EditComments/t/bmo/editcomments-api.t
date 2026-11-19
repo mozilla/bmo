@@ -23,6 +23,7 @@ use Bugzilla;
 BEGIN { Bugzilla->extensions }
 use Bugzilla::Constants;
 use Bugzilla::Bug;
+use Bugzilla::Group;
 use Bugzilla::Product;
 use Bugzilla::User;
 use Bugzilla::Test::Util qw(issue_api_key);
@@ -43,7 +44,7 @@ my $plain
   });
 
 Bugzilla->set_user($admin);
-my $bug = Bugzilla::Bug->create({
+my %fields = (
   short_desc   => "EditComments API test $$",
   product      => $product->name,
   component    => $product->components->[0]->name,
@@ -52,11 +53,29 @@ my $bug = Bugzilla::Bug->create({
   op_sys       => 'Unspecified',
   rep_platform => 'Unspecified',
   version      => $product->versions->[0]->name,
-  comment      => 'first comment',
-});
+);
+my $bug = Bugzilla::Bug->create({%fields, comment => 'first comment'});
 $bug->add_comment('second comment');
+$bug->add_comment('private comment');
 $bug->update;
-my ($c0, $c1) = map { $_->id } @{Bugzilla::Bug->new($bug->id)->comments};
+my ($c0, $c1, $c2) = map { $_->id } @{Bugzilla::Bug->new($bug->id)->comments};
+
+# The admin isn't an insider here, so it can't add a private comment.
+Bugzilla->dbh->do('UPDATE longdescs SET isprivate = 1 WHERE comment_id = ?',
+  undef, $c2);
+
+# A bug in a group the plain user isn't in.
+my $group = Bugzilla::Group->create({
+  name        => "editcomments-api-$$",
+  description => 'EditComments API test',
+  isbuggroup  => 1,
+});
+my $secret = Bugzilla::Bug->create({%fields, comment => 'secret comment'});
+Bugzilla->dbh->do('INSERT INTO bug_group_map (bug_id, group_id) VALUES (?, ?)',
+  undef, $secret->id, $group->id);
+my $s0  = $secret->comments->[0]->id;
+my $sid = $secret->id;
+Bugzilla->clear_request_cache;
 
 my %admin_auth
   = ('X-Bugzilla-API-Key' => issue_api_key($admin->login)->api_key);
@@ -83,6 +102,24 @@ $t->get_ok('/rest/editcomments/comment')
   ->status_is(400)
   ->json_like('/message' => qr/comment_ids/, 'comment_ids is required');
 
+# GET: private comments and hidden bugs
+$t->get_ok("/rest/editcomments/comment/$c2" => \%plain_auth)->json_like(
+  '/message' => qr/Comment id $c2 is private/,
+  'a non-insider cannot read a private comment'
+);
+$t->get_ok("/rest/editcomments/comment/$c2")->json_like(
+  '/message' => qr/Comment id $c2 is private/,
+  'a signed-out user cannot read a private comment'
+);
+$t->get_ok("/rest/editcomments/comment/$s0" => \%plain_auth)->json_like(
+  '/message' => qr/not authorized to access bug $sid/,
+  'a non-member cannot read a comment on a hidden bug'
+);
+$t->get_ok("/rest/editcomments/comment/$s0")->json_like(
+  '/message' => qr/not authorized to access bug $sid/,
+  'a signed-out user cannot read a comment on a hidden bug'
+);
+
 # PUT /comment/<id>
 my $comment_url = "/rest/editcomments/comment/$c1";
 $t->put_ok($comment_url => json => {new_comment => 'x'})
@@ -91,6 +128,16 @@ $t->put_ok($comment_url => json => {new_comment => 'x'})
 $t->put_ok($comment_url => \%plain_auth => json => {new_comment => 'x'})
   ->status_isnt(200)
   ->json_like('/message' => qr/not authorized/, 'others cannot edit it');
+$t->put_ok("/rest/editcomments/comment/$c2" => \%admin_auth => json =>
+    {new_comment => 'x'})->status_isnt(200)->json_like(
+  '/message' => qr/Comment id $c2 is private/,
+  'a non-insider cannot edit a private comment'
+    );
+$t->put_ok("/rest/editcomments/comment/$s0" => \%plain_auth => json =>
+    {new_comment => 'x'})->status_isnt(200)->json_like(
+  '/message' => qr/not authorized to access bug $sid/,
+  'a non-member cannot edit a comment on a hidden bug'
+    );
 $t->put_ok($comment_url => \%admin_auth => json =>
     {new_comment => 'x', is_hidden => 'maybe'})
   ->status_is(400)
