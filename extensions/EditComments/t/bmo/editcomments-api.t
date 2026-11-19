@@ -74,6 +74,11 @@ $t->get_ok('/rest/editcomments/comment' => form => {comment_ids => [$c0, $c1]})
   '/comments' => {$c0 => 'first comment', $c1 => 'second comment'},
   'several comments by query'
   );
+$t->get_ok('/rest/editcomments/comment' => form =>
+    {comment_ids => [$c0, $c1], comment_id => $c1})->status_is(200)->json_is(
+  '/comments' => {$c0 => 'first comment', $c1 => 'second comment'},
+  'comment_id in the query string is ignored'
+    );
 $t->get_ok('/rest/editcomments/comment')
   ->status_is(400)
   ->json_like('/message' => qr/comment_ids/, 'comment_ids is required');

@@ -35,7 +35,7 @@ sub _params {
   my ($self,   $lists) = @_;
   my ($params, $error) = merge_request_params($self, $lists);
   return (undef, $error) if $error;
-  if (defined(my $id = $self->param('comment_id'))) {
+  if (defined(my $id = $self->stash('comment_id'))) {
     $params->{comment_id}  = $id;
     $params->{comment_ids} = [$id] if $lists;
   }
