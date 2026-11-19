@@ -23,6 +23,7 @@ use Bugzilla;
 BEGIN { Bugzilla->extensions }
 use Bugzilla::Constants;
 use Bugzilla::Bug;
+use Bugzilla::Group;
 use Bugzilla::Product;
 use Bugzilla::User;
 use Bugzilla::Test::Util qw(issue_api_key);
@@ -40,7 +41,7 @@ my %auth = ('X-Bugzilla-API-Key' => issue_api_key($admin->login)->api_key);
 my $t    = Test::Mojo->new('Bugzilla::App');
 
 Bugzilla->set_user($admin);
-my $bug = Bugzilla::Bug->create({
+my %fields = (
   short_desc   => "BugModal API test $$",
   product      => $product->name,
   component    => $product->components->[0]->name,
@@ -51,7 +52,8 @@ my $bug = Bugzilla::Bug->create({
   version      => $product->versions->[0]->name,
   comment      => 'a comment',
   cc           => [$admin->login],
-});
+);
+my $bug = Bugzilla::Bug->create({%fields});
 $bug->add_comment('a private comment');
 $bug->update;
 my ($public, $private)
@@ -61,6 +63,24 @@ my ($public, $private)
 Bugzilla->dbh->do('UPDATE longdescs SET isprivate = 1 WHERE comment_id = ?',
   undef, $private);
 my $bug_id = $bug->id;
+
+# A bug in a group the plain user below isn't in.
+my $group = Bugzilla::Group->create({
+  name        => "bug-modal-api-$$",
+  description => 'BugModal API test',
+  isbuggroup  => 1,
+});
+my $secret_id = Bugzilla::Bug->create({%fields})->id;
+Bugzilla->dbh->do('INSERT INTO bug_group_map (bug_id, group_id) VALUES (?, ?)',
+  undef, $secret_id, $group->id);
+
+# A user who isn't in the comment taggers group.
+my $plain
+  = Bugzilla::User->create({
+  login_name => "bug-modal-api-$$\@bmo.tld", cryptpassword => '*',
+  });
+my %plain_auth
+  = ('X-Bugzilla-API-Key' => issue_api_key($plain->login)->api_key);
 Bugzilla->clear_request_cache;
 
 # initial_field_values and product_info
@@ -125,6 +145,12 @@ $t->put_ok("/rest/bug_modal/update_comment_tags/$public" => \%auth => json =>
     {id => {condition => 'comment_id = ?', values => [$public]}})
   ->json_is('/error' => 1)
   ->json_like('/message' => qr/numeric/, 'a hash id is refused');
+$t->put_ok(
+  "/rest/bug_modal/update_comment_tags/$public" => \%plain_auth => json =>
+    {add => ['bmtag']})->json_is('/error' => 1)->json_like(
+  '/message' => qr/aren't a member of the '[^']+' group/,
+  'only comment taggers can tag'
+    );
 
 # new_product
 $t->get_ok(
@@ -137,5 +163,14 @@ $t->get_ok(
   ->json_has('/groups', 'fields for the same product');
 $t->get_ok("/rest/bug_modal/new_product/$bug_id" => \%auth)
   ->json_is('/error' => 1, 'product is required');
+
+# edit, cc and new_product on a bug the caller can't see
+foreach my $path (qw(edit cc new_product)) {
+  $t->get_ok("/rest/bug_modal/$path/$secret_id" => \%plain_auth => form =>
+      {product => $name})->json_is('/error' => 1)->json_like(
+    '/message' => qr/not authorized to access bug $secret_id/,
+    "$path refuses a hidden bug"
+      );
+}
 
 done_testing;
