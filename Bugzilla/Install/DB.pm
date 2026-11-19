@@ -4653,9 +4653,20 @@ sub _set_flag_activity_who_not_null {
   my $dbh = Bugzilla->dbh;
   return if $dbh->bz_column_info('flag_activity', 'who')->{NOTNULL};
 
+  my $mysql = $dbh->isa('Bugzilla::DB::Mysql');
+
   # MySQL can't make a column of a foreign key NOT NULL. Drop the key and add
   # it back right after.
   $dbh->bz_drop_fk('flag_activity', 'who');
+
+  # Without strict mode, which Bugzilla::DB::Mysql turns off, MySQL copies the
+  # whole table to make the column NOT NULL, blocking flag changes on live pods
+  # meanwhile. _add_flag_activity_who just filled every who, so strict mode has
+  # nothing to refuse.
+  my $sql_mode = $mysql && $dbh->selectrow_array('SELECT @@SESSION.sql_mode');
+  $dbh->do('SET SESSION sql_mode = ?',
+    undef, join(',', grep {length} $sql_mode, 'STRICT_TRANS_TABLES'))
+    if $mysql;
   $dbh->bz_alter_column(
     'flag_activity',
     'who',
@@ -4665,12 +4676,11 @@ sub _set_flag_activity_who_not_null {
       REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}
     }
   );
+  $dbh->do('SET SESSION sql_mode = ?', undef, $sql_mode) if $mysql;
 
-  # With foreign_key_checks on, MySQL copies the whole table to add the key,
-  # blocking flag changes on live pods meanwhile. The values don't need the
-  # check: they were written under this key or copied from setter_id, which has
-  # its own.
-  my $mysql = $dbh->isa('Bugzilla::DB::Mysql');
+  # Likewise with foreign_key_checks on to add the key. The values don't need
+  # the check: they were written under this key or copied from setter_id, which
+  # has its own.
   $dbh->do('SET foreign_key_checks = 0') if $mysql;
   $dbh->bz_add_fk('flag_activity', 'who',
     $dbh->bz_fk_info('flag_activity', 'who'));
