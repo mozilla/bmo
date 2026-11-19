@@ -23,6 +23,7 @@ use Bugzilla;
 BEGIN { Bugzilla->extensions }
 use Bugzilla::Constants;
 use Bugzilla::Bug;
+use Bugzilla::Group;
 use Bugzilla::Product;
 use Bugzilla::User;
 use Bugzilla::API::V1::Util qw(extract_flags);
@@ -48,7 +49,7 @@ my $t    = Test::Mojo->new('Bugzilla::App');
 
 # A bug assigned to the user, with a needinfo request to them and a comment.
 Bugzilla->set_user($admin);
-my $bug = Bugzilla::Bug->create({
+my %fields = (
   short_desc   => "MyDashboard API test $$",
   product      => $product->name,
   component    => $product->components->[0]->name,
@@ -59,7 +60,8 @@ my $bug = Bugzilla::Bug->create({
   version      => $product->versions->[0]->name,
   assigned_to  => $user->login,
   comment      => 'first comment',
-});
+);
+my $bug      = Bugzilla::Bug->create({%fields});
 my $flag_set = eval {
   my ($flags, $new_flags)
     = extract_flags(
@@ -74,6 +76,28 @@ my $since = $bug->creation_ts;
 my $later = datetime_from($since)->add(seconds => 2)->strftime('%Y-%m-%d %T');
 $bug->add_comment('a newer comment');
 $bug->update($later);
+
+# Then a private comment, the only one newer than $later. The admin isn't an
+# insider here, so it can't add a private comment.
+my $latest = datetime_from($later)->add(seconds => 2)->strftime('%Y-%m-%d %T');
+my $fresh  = Bugzilla::Bug->new($bug->id);
+$fresh->add_comment('a private comment');
+$fresh->update($latest);
+Bugzilla->dbh->do(
+  'UPDATE longdescs SET isprivate = 1 WHERE bug_id = ? AND bug_when = ?',
+  undef, $bug->id, $latest);
+
+# A bug in a group the user isn't in, not assigned to them.
+my $group = Bugzilla::Group->create({
+  name        => "mydashboard-api-$$",
+  description => 'MyDashboard API test',
+  isbuggroup  => 1,
+});
+my $secret_id
+  = Bugzilla::Bug->create({%fields, assigned_to => $admin->login})->id;
+Bugzilla->dbh->do('INSERT INTO bug_group_map (bug_id, group_id) VALUES (?, ?)',
+  undef, $secret_id, $group->id);
+Bugzilla->clear_request_cache;
 
 # Login is required.
 for my $path (
@@ -130,6 +154,18 @@ $t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>
   ->json_has('/results/0/last_changes/when');
 $t->get_ok('/rest/mydashboard/run_last_changes?bug_id=999999999' => \%auth)
   ->json_is('/error' => 1, 'unknown bug');
+$t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>
+    {bug_id => $bug->id, changeddate_api => $later})
+  ->status_is(200)
+  ->json_hasnt('/results/0/last_changes/comment_html')
+  ->content_unlike(qr/a private comment/, 'private comment hidden');
+$t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>
+    {bug_id => $secret_id, changeddate_api => $since})
+  ->json_is('/error' => 1)
+  ->json_like(
+  '/message' => qr/not authorized to access bug $secret_id/,
+  'a bug the user cannot see'
+  );
 
 # bug_interest_unmark, with and without the prefix
 my $interest = 'Bugzilla::Extension::MyDashboard::BugInterest';
