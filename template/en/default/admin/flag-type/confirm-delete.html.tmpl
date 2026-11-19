@@ -27,6 +27,16 @@
   doc_section = "flags-overview.html#flags-delete"
 %]
 
+[% IF flag_type.has_activity %]
+<p>
+  The flag type [% flag_type.name FILTER html %] has been used, and deleting it
+  would also delete the history of its flags, so it cannot be deleted. You can
+  <a href="[% basepath FILTER none %]editflagtypes.cgi?action=deactivate&amp;id=[% flag_type.id %]&amp;token=
+          [%- token FILTER html %]">deactivate it</a>
+  instead: the type and its flags will remain in the database but will not
+  appear in the [% terms.Bugzilla %] UI.
+</p>
+[% ELSE %]
 <p>
   [% IF flag_type.flag_count %]
     There are [% flag_type.flag_count %] flags of type [% flag_type.name FILTER html %].
@@ -59,5 +69,6 @@
       </td>
    </tr>
 </table>
+[% END %]
 
 [% PROCESS global/footer.html.tmpl %]

@@ -12,7 +12,8 @@ use strict;
 use warnings;
 
 use Bugzilla::Error;
-use Bugzilla::Util qw(trim datetime_from);
+use Bugzilla::Field qw(get_field_id);
+use Bugzilla::Util  qw(trim datetime_from);
 use List::MoreUtils qw(none);
 
 use base qw( Bugzilla::Object );
@@ -84,6 +85,61 @@ sub bug_id        { return $_[0]->{bug_id} }
 sub requestee_id  { return $_[0]->{requestee_id} }
 sub attachment_id { return $_[0]->{attachment_id} }
 sub status        { return $_[0]->{status} }
+
+# Flag changes up to the cutoff are read from bugs_activity, which has them
+# all: flag_activity has only some of them, and doesn't always know their who.
+# Later ones are read from flag_activity only. The cutoff is when checksetup
+# stopped writing flag changes to bugs_activity: pods still on the older code
+# write both tables until the end of the rolling deploy, and their
+# bugs_activity rows must not be listed twice.
+sub cutoff {
+  my $cache = Bugzilla->request_cache;
+  $cache->{flag_activity_cutoff} //= Bugzilla->dbh->selectrow_array(
+    'SELECT cutoff FROM flag_activity_migration') // '1970-01-01 00:00:00';
+  return $cache->{flag_activity_cutoff};
+}
+
+# SQL condition on flag_activity row $alias: true after the cutoff.
+sub after_cutoff_sql {
+  my ($class, $alias) = @_;
+  return "$alias.flag_when > " . Bugzilla->dbh->quote($class->cutoff);
+}
+
+# SQL condition on bugs_activity row $alias: false for a flag change after the
+# cutoff.
+sub bugs_activity_before_cutoff_sql {
+  my ($class, $alias) = @_;
+  my $field_id = get_field_id('flagtypes.name');
+  return
+    "($alias.fieldid <> $field_id OR $alias.bug_when <= "
+    . Bugzilla->dbh->quote($class->cutoff) . ')';
+}
+
+# A flag created and updated in one request has several rows with the same
+# flag_when and who. History shows the request's net change, like
+# bugs_activity did: only its last row, compared with the flag's last row
+# before the request. Rows are picked by id, which orders same-second rows.
+
+# SQL condition on flag_activity row $alias: true for the request's last row.
+sub last_of_request_sql {
+  my ($class, $alias) = @_;
+  return "NOT EXISTS (
+            SELECT 1 FROM flag_activity next_fa
+             WHERE next_fa.flag_id = $alias.flag_id
+                   AND next_fa.flag_when = $alias.flag_when
+                   AND next_fa.who = $alias.who
+                   AND next_fa.id > $alias.id)";
+}
+
+# SQL subquery: the id of the flag's last row before $alias's request.
+sub previous_id_sql {
+  my ($class, $alias) = @_;
+  return "(SELECT MAX(prev_fa.id) FROM flag_activity prev_fa
+            WHERE prev_fa.flag_id = $alias.flag_id
+                  AND prev_fa.id < $alias.id
+                  AND NOT (prev_fa.flag_when = $alias.flag_when
+                           AND prev_fa.who = $alias.who))";
+}
 
 sub type {
   my ($self) = @_;

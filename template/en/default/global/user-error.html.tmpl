@@ -801,6 +801,12 @@
     Sorry, but the flag type '[% flagtype.name FILTER html %]' also applies to some
     products you cannot see, and so you are not allowed to delete it.
 
+  [% ELSIF error == "flag_type_has_activity" %]
+    [% title = "Flag Type Deletion Not Allowed" %]
+    The flag type '[% flagtype.name FILTER html %]' has been used, and deleting
+    it would also delete the history of its flags. You can deactivate it
+    instead.
+
   [% ELSIF error == "flag_type_cc_list_invalid" %]
     [% title = "Flag Type CC List Invalid" %]
     [% admindocslinks = {'administering/flags.md'  => 'Administering Flags'} %]

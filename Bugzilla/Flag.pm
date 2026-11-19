@@ -61,7 +61,7 @@ use base qw(Bugzilla::Object Exporter);
 use constant DB_TABLE   => 'flags';
 use constant LIST_ORDER => 'id';
 
-# Flags are tracked in bugs_activity.
+# Flag changes are tracked in flag_activity (see Bugzilla::FlagActivity).
 use constant AUDIT_CREATES => 0;
 use constant AUDIT_UPDATES => 0;
 use constant AUDIT_REMOVES => 0;

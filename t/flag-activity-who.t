@@ -18,15 +18,14 @@ BEGIN {
 use Bugzilla::Test::MockLocalconfig (urlbase => 'http://bmo.test');
 use Bugzilla::Test::MockDB;
 use Bugzilla::Test::MockParams (mail_delivery_method => 'None');
-use Bugzilla::Test::Util qw(create_bug create_user);
+use Bugzilla::Test::Util qw(create_bug create_user set_flag_activity_cutoff);
 use Bugzilla::Bug;
 use Bugzilla::Install::DB;
 use Bugzilla::User;
 use Test2::V0;
 
-# Redirecting a request keeps the original setter, but flag_activity.who
-# records the user who redirected it. The column stays nullable while pods on
-# the previous code still insert rows without it.
+# Redirecting a request keeps the original setter, but flag_activity.who and
+# the bug history record the user who redirected it.
 
 create_user('automation@bmo.tld', '*');
 Bugzilla->set_user(Bugzilla::User->super_user);
@@ -35,6 +34,7 @@ my $dbh = Bugzilla->dbh;
 my $requester  = create_user('requester@bmo.test',  '*');
 my $redirector = create_user('redirector@bmo.test', '*');
 create_user($_, '*') for qw(bob@bmo.test carol@bmo.test);
+set_flag_activity_cutoff('2025-01-01 00:00:00');
 
 my $bug_id = create_bug(
   short_desc  => 'Flag redirect test bug',
@@ -75,22 +75,28 @@ is(
   'who is the user who made each change'
 );
 
-# A pod on the previous code inserts a row without who: it's saved, and the
-# next checksetup fills it with the setter.
-$dbh->do(
-  'INSERT INTO flag_activity (flag_when, type_id, flag_id, setter_id, bug_id,
-                              status)
-   VALUES (?, ?, ?, ?, ?, ?)', undef, '2026-01-01 12:00:00', $needinfo_id,
-  $flag->id, $requester->id, $bug_id, 'X'
-);
-Bugzilla::Install::DB::_add_flag_activity_who();
-my ($who)
-  = $dbh->selectrow_array(
-  "SELECT who FROM flag_activity WHERE flag_id = ? AND status = 'X'",
+my ($operations) = Bugzilla::Bug::GetBugActivity($bug_id);
+my ($redirect)   = grep {
+  grep { $_->{fieldname} eq 'flagtypes.name' && $_->{added} =~ /carol/ }
+    @{$_->{changes}}
+} @$operations;
+is($redirect->{who}, 'redirector@bmo.test', 'history shows the redirector');
+
+# A database left by bug 2088705: who nullable, with rows that pods on the
+# older code inserted without it. The next checksetup fills them and makes the
+# column NOT NULL.
+$dbh->bz_alter_column('flag_activity', 'who',
+  {TYPE => 'INT3', REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}});
+$dbh->do('UPDATE flag_activity SET who = NULL WHERE flag_id = ?',
   undef, $flag->id);
-is($who, $requester->id,
-  'a row inserted without who gets the setter on the next checksetup');
-ok(!$dbh->bz_column_info('flag_activity', 'who')->{NOTNULL},
-  'the column stays nullable');
+Bugzilla::Install::DB->update_table_definitions({});
+is(
+  scalar $dbh->selectrow_array(
+    'SELECT COUNT(*) FROM flag_activity WHERE who IS NULL'),
+  0,
+  'the rows without who are filled'
+);
+ok($dbh->bz_column_info('flag_activity', 'who')->{NOTNULL},
+  'and the column is NOT NULL');
 
 done_testing;
