@@ -65,7 +65,7 @@ sub make_reporter {
 }
 
 sub make_bug_as {
-  my ($reporter) = @_;
+  my ($reporter, %extra) = @_;
   Bugzilla->set_user($reporter);
   return Bugzilla::Bug->create({
     short_desc   => 'Invalid bug helper reporter test ' . $$,
@@ -76,6 +76,7 @@ sub make_bug_as {
     op_sys       => 'Unspecified',
     rep_platform => 'Unspecified',
     version      => $product->versions->[0]->name,
+    %extra,
   });
 }
 
@@ -112,6 +113,61 @@ $t->post_ok($close_url . $bug_from_editbugs_reporter->id => \%auth)
   '/message' => qr/reported by a member of the 'editbugs' group/,
   'refuses a bug reported by an editbugs member (bug 1684509)'
   );
+
+# A caller without editbugs is refused.
+my %plain_auth
+  = ('X-Bugzilla-API-Key' => issue_api_key($plain_reporter->login)->api_key);
+$t->post_ok($close_url . $bug_from_plain_reporter->id => \%plain_auth)
+  ->status_isnt(200)
+  ->json_like(
+  '/message' => qr/aren't a member of the 'editbugs' group/,
+  'refuses a caller who is not in editbugs'
+  );
+
+# A bug in a group that is mandatory for its product is refused to an editbugs
+# member outside that group, even when they can see the bug (as a CC). The admin
+# can't be that caller: new groups make the admin group a member of them.
+{
+  # Drop the last request's controller, gone with its transaction.
+  Bugzilla->clear_request_cache;
+  Bugzilla->set_user($admin);
+  my $group = Bugzilla::Group->create({
+    name        => "invalid-bug-helper-$$",
+    description => 'InvalidBugHelper test',
+    isbuggroup  => 1,
+  });
+  my $secure = make_bug_as(
+    $plain_reporter,
+    cc                => [$editbugs_reporter->login],
+    cclist_accessible => 1
+  );
+  $dbh->do('INSERT INTO bug_group_map (bug_id, group_id) VALUES (?, ?)',
+    undef, $secure->id, $group->id);
+
+  # Mandatory only for this request, so other tests can still file bugs here.
+  $dbh->do(
+    'INSERT INTO group_control_map
+       (group_id, product_id, entry, membercontrol, othercontrol, canedit)
+     VALUES (?, ?, 0, ?, ?, 0)', undef, $group->id, $product->id,
+    CONTROLMAPMANDATORY, CONTROLMAPMANDATORY
+  );
+  Bugzilla->clear_request_cache;
+
+  my %editbugs_auth
+    = ('X-Bugzilla-API-Key' => issue_api_key($editbugs_reporter->login)->api_key);
+  $t->post_ok($close_url . $secure->id => \%editbugs_auth)
+    ->status_isnt(200)
+    ->json_like(
+    '/message' => qr/aren't a member of the '\Q${\ $group->name }\E' group/,
+    'refuses a bug in a mandatory group the caller is not in'
+    );
+  is(Bugzilla::Bug->new($secure->id)->product,
+    $product->name, 'and leaves the bug in its product');
+
+  $dbh->do('DELETE FROM group_control_map WHERE group_id = ?', undef, $group->id);
+  Bugzilla->clear_request_cache;
+  Bugzilla->set_user($admin);
+}
 
 # The test data has no Invalid Bugs product, the one close_as_invalid moves
 # bugs to. It needs the version and milestone of the bug it receives.
