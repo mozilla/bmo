@@ -38,4 +38,22 @@ is([grep {/^Bugzilla::API::/} @warnings],
 # The controllers next to it still get their routes.
 $t->get_ok('/rest/whoami')->status_is(401)->json_is('/code' => 410);
 
+# Any other path under /rest, or the old /rest.cgi, is an unknown resource,
+# with the JSON error rest.cgi returned.
+foreach my $test (
+  ['get_ok',  '/rest/no_such_resource', 'GET /no_such_resource'],
+  ['post_ok', '/rest/bug/1/no_such',    'POST /bug/1/no_such'],
+  ['get_ok',  '/rest',                  'GET /'],
+  ['put_ok',  '/rest.cgi/bug/1',        'PUT /bug/1'],
+  )
+{
+  my ($method, $url, $resource) = @$test;
+  $t->$method($url)
+    ->status_is(404)
+    ->header_is('Access-Control-Allow-Origin' => '*');
+  $t->json_is('/error' => 1)
+    ->json_is('/code' => 32614)
+    ->json_like('/message' => qr/\Q'$resource'\E/);
+}
+
 done_testing;

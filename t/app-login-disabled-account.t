@@ -26,9 +26,7 @@ use Test::Mojo;
 
 # An API key minted while the account was usable must stop working on the
 # native Mojo routes as soon as the account is disabled or is confined to a
-# password reset, the same way it stops working on rest.cgi and in the web UI.
-# Only the native routes are exercised here: the legacy rest.cgi error path
-# exits the process, which Test::Mojo cannot survive in-process.
+# password reset, the same way it stops working in the web UI.
 
 my $disabled = create_user('disabled@mozilla.org', '*');
 my $pwreset  = create_user('pwreset@mozilla.org',  '*');

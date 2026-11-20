@@ -238,9 +238,6 @@ use constant WS_ERROR_CODE => {
   # Errors thrown by the WebService itself. The ones that are negative
   # conform to http://xmlrpc-epi.sourceforge.net/specs/rfc.fault_codes.php
   unknown_method                => -32601,
-  json_rpc_post_only            => 32610,
-  json_rpc_invalid_callback     => 32611,
-  json_rpc_illegal_content_type => 32613,
   rest_invalid_resource         => 32614,
 };
 
