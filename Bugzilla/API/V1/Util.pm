@@ -14,6 +14,7 @@ use warnings;
 use Mojo::JSON qw(decode_json true false);
 
 use Bugzilla;
+use Bugzilla::Constants qw(USAGE_MODE_MOJO_REST);
 use Bugzilla::Error;
 use Bugzilla::Logging;
 use Bugzilla::Util qw(datetime_from email_filter truncate_string);
@@ -36,6 +37,7 @@ our @EXPORT_OK = qw(
   filter_wants
   merge_request_params
   params_to_objects
+  render_options
   set_rest_cors_headers
   strip_request_params
   translate
@@ -68,6 +70,15 @@ sub set_rest_cors_headers {
   $headers->header('Access-Control-Allow-Origin' => '*');
   $headers->header(
     'Access-Control-Allow-Headers' => join(', ', @$allowed_headers));
+}
+
+# Answers a CORS preflight request with the methods in the route's "allow".
+sub render_options {
+  my ($c) = @_;
+  my $allow = $c->stash('allow');
+  $c->res->headers->header('Allow'                        => $allow);
+  $c->res->headers->header('Access-Control-Allow-Methods' => $allow);
+  return $c->rendered(200);
 }
 
 sub extract_flags {
@@ -318,6 +329,18 @@ sub merge_request_params {
     $params = {%$body_params, %$params} if ref $body_params eq 'HASH';
   }
 
+  # A list param sent as a single value in a JSON body is a list of one, and
+  # anything else that isn't a list of plain values, such as a hash or a
+  # nested list, is refused, as the legacy server's validate() did.
+  foreach my $name (sort keys %is_list) {
+    my $value = $params->{$name} // next;
+    $value = $params->{$name} = [$value] if !ref $value;
+    next if ref $value eq 'ARRAY' && !grep {ref} @$value;
+    Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
+    ThrowUserError('invalid_params',
+      {type_error => "$name must be a value or a list of values"});
+  }
+
   return ($params, undef);
 }
 
@@ -331,11 +354,14 @@ sub strip_request_params {
 # A JSON body sends booleans as real booleans, but the query string and a form
 # body send the literal string "true" or "false", which Perl treats as true
 # either way. Turns each of the given params that is set into 1 or 0, and
-# returns the error for the first one that isn't a boolean, if any.
+# returns the error for the first one that isn't a boolean, if any. A JSON
+# boolean is left as is; any other reference, such as [] or {}, is refused.
 sub coerce_booleans {
   my ($params, @fields) = @_;
   foreach my $field (@fields) {
-    next if !defined $params->{$field} || ref $params->{$field};
+    next if !defined $params->{$field};
+    next if ref $params->{$field} eq 'JSON::PP::Boolean';
+    return "$field must be true or false" if ref $params->{$field};
     my $value = lc $params->{$field};
     return "$field must be true or false" if $value !~ /^(?:true|false|1|0)$/;
     $params->{$field} = ($value eq 'true' || $value eq '1') ? 1 : 0;
@@ -601,6 +627,12 @@ Bugzilla::API::V1::Util - Helpers shared by the native API modules.
 
 =head1 FUNCTIONS
 
+=head2 render_options
+
+Route callback answering an C<OPTIONS> (CORS preflight) request with the
+methods given in the route's C<allow> stash value, e.g.
+C<< $r->options('/foo')->to(cb => \&render_options, allow => 'GET, PUT') >>.
+
 =head2 filter
 
 This helps implement the C<include_fields> and C<exclude_fields> arguments
@@ -675,4 +707,4 @@ Takes a params hashref and the names of boolean params, e.g.
 C<coerce_booleans($params, qw(is_open has_unconfirmed))>. Each one that is set
 to the string C<true>, C<false>, C<1> or C<0> (any case) becomes C<1> or C<0>;
 a JSON boolean is left as is. Returns an error message for the first one that
-is set to anything else, or C<undef>.
+is set to anything else, including an array or a hash, or C<undef>.

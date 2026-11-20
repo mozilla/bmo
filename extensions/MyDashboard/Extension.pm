@@ -170,12 +170,6 @@ sub user_preferences {
   }
 }
 
-sub webservice {
-  my ($self, $args) = @_;
-  my $dispatch = $args->{dispatch};
-  $dispatch->{MyDashboard} = "Bugzilla::Extension::MyDashboard::WebService";
-}
-
 sub bug_end_of_create {
   my ($self, $args) = @_;
   my ($bug, $params, $timestamp) = @$args{qw(bug params timestamp)};
