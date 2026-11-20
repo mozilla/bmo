@@ -65,10 +65,13 @@ my $bug = Bugzilla::Bug->create({
   short_desc  => "Review API test $$",
   bug_mentors => [$mentor->login],
 });
+# The requestee is on the CC list, so the needinfo below can be set on it.
 my $private = Bugzilla::Bug->create({
   %fields,
-  short_desc => "Review API private $$",
-  groups     => [$product->default_security_group]
+  short_desc        => "Review API private $$",
+  groups            => [$product->default_security_group],
+  cc                => [$requestee->login],
+  cclist_accessible => 1,
 });
 
 # A needinfo request on each bug, so they have flag activity.
@@ -109,7 +112,7 @@ $t->get_ok('/rest/review/suggestions')
 
 # flag_activity
 SKIP: {
-  skip 'no needinfo flag type', 18 unless $flagged;
+  skip 'no needinfo flag type', 21 unless $flagged;
   my $login = $requestee->login;
 
   $t->get_ok("/rest/review/flag_activity/requestee/$login" => \%auth)
@@ -136,6 +139,16 @@ SKIP: {
       . "?requestee=$login&include_fields=id,status" => \%auth)
     ->json_is('/0/status' => '?')
     ->json_hasnt('/0/type', 'by type name, include_fields as a list');
+
+  # A repeated bug_id or status matches any of the values.
+  my ($bid, $pid) = ($bug->id, $private->id);
+  $t->get_ok("/rest/review/flag_activity?bug_id=$bid&bug_id=$pid"
+      . "&status=X&status=?" => \%auth)->status_is(200);
+  is_deeply(
+    [sort { $a <=> $b } map { $_->{bug_id} } @{$t->tx->res->json}],
+    [$bid, $pid],
+    'activity on both bugs'
+  );
 }
 $t->get_ok('/rest/review/flag_activity/requestee/nobody-here@bmo.tld')
   ->json_is('/error' => 1, 'unknown requestee');

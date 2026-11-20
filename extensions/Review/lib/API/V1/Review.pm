@@ -8,7 +8,7 @@
 package Bugzilla::Extension::Review::API::V1::Review;
 
 use 5.10.1;
-use Mojo::Base qw( Mojolicious::Controller );
+use Mojo::Base qw(Mojolicious::Controller);
 
 use Bugzilla;
 use Bugzilla::Bug;
@@ -19,7 +19,7 @@ use Bugzilla::FlagActivity;
 use Bugzilla::FlagType;
 use Bugzilla::Product;
 use Bugzilla::User;
-use Bugzilla::Util          qw(detaint_natural );
+use Bugzilla::Util          qw(detaint_natural);
 use Bugzilla::API::V1::Util qw(filter merge_request_params render_options);
 
 use DateTime;
@@ -162,7 +162,8 @@ sub suggestions {
 # limit and offset. Only activity on bugs and attachments the user can see.
 sub flag_activity {
   my ($self) = @_;
-  my $params = $self->_params(['flag_ids'], qw(flag_id type_name)) || return;
+  my $params = $self->_params([qw(flag_ids bug_id status)], qw(flag_id type_name))
+    || return;
   if (defined(my $field = $self->stash('field'))) {
     $params->{$field} = $self->stash('value');
   }
@@ -197,7 +198,7 @@ sub flag_activity {
     $match_criteria{type_id} = [map { $_->id } @$flag_types];
   }
 
-  foreach my $user_field (qw( requestee setter )) {
+  foreach my $user_field (qw(requestee setter)) {
     if (my $user_name = $params->{$user_field}) {
       my $user = Bugzilla::User->check(
         {name => $user_name, cache => 1, _error => 'invalid_username'});
@@ -206,7 +207,7 @@ sub flag_activity {
     }
   }
 
-  foreach my $field (qw( bug_id status )) {
+  foreach my $field (qw(bug_id status)) {
     if (exists $params->{$field}) {
       $match_criteria{$field} = $params->{$field};
     }
