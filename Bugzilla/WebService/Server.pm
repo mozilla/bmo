@@ -11,42 +11,12 @@ use 5.10.1;
 use strict;
 use warnings;
 
-use Bugzilla::Logging;
 use Bugzilla::Error;
 use Bugzilla::Util qw(datetime_from);
 
 use Digest::MD5 qw(md5_base64);
 use Scalar::Util qw(blessed);
 use Storable qw(freeze);
-use Module::Runtime qw(require_module);
-use Try::Tiny;
-
-sub handle_login {
-  my ($self, $class, $method, $full_method) = @_;
-
-  # Throw error if the supplied class does not exist or the method is private
-  ThrowCodeError('unknown_method', {method => $full_method})
-    if (!$class or $method =~ /^_/);
-
-  # We never want to persist sessions for webservices. Setting auth_no_persist_login
-  # makes Bugzilla::Auth::Persist::Cookie skip setting session cookies.
-  Bugzilla->request_cache->{auth_no_persist_login} = 1;
-
-  try {
-    require_module($class);
-  }
-  catch {
-    ThrowCodeError('unknown_method', {method => $full_method});
-    FATAL($_);
-  };
-  return
-    if ($class->login_exempt($method)
-    and !defined Bugzilla->input_params->{Bugzilla_login});
-  Bugzilla->login();
-
-  Bugzilla::Hook::process('webservice_before_call',
-    {'method' => $method, full_method => $full_method});
-}
 
 sub datetime_format_inbound {
   my ($self, $time) = @_;
@@ -142,8 +112,6 @@ and L<Bugzilla::WebService::Server::REST|REST>.
 =head1 B<Methods in need of POD>
 
 =over
-
-=item handle_login
 
 =item datetime_format_outbound
 

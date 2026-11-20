@@ -31,8 +31,6 @@ our @EXPORT = qw(
 
   REST_CONTENT_TYPE_WHITELIST
 
-  WS_DISPATCH
-
   API_AUTH_HEADERS
 );
 
@@ -301,17 +299,6 @@ use constant REST_CONTENT_TYPE_WHITELIST => qw(
   application/javascript
   text/javascript
 );
-
-sub WS_DISPATCH {
-
-  # We "require" here instead of "use" above to avoid a dependency loop.
-  require Bugzilla::Hook;
-  my %hook_dispatch;
-  Bugzilla::Hook::process('webservice', {dispatch => \%hook_dispatch});
-
-  # Only extensions still dispatch here; core resources are native Mojo API.
-  return {%hook_dispatch};
-}
 
 # Custom HTTP headers that can be used for API authentication rather than
 # passing as URL parameters. This is useful if you do not want sensitive
