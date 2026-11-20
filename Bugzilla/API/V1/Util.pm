@@ -14,6 +14,7 @@ use warnings;
 use Mojo::JSON qw(decode_json true false);
 
 use Bugzilla;
+use Bugzilla::Constants qw(USAGE_MODE_MOJO_REST);
 use Bugzilla::Error;
 use Bugzilla::Logging;
 use Bugzilla::Util qw(datetime_from email_filter truncate_string);
@@ -328,11 +329,16 @@ sub merge_request_params {
     $params = {%$body_params, %$params} if ref $body_params eq 'HASH';
   }
 
-  # A list param sent as a single value in a JSON body is a list of one, as
-  # the legacy server's validate() made it.
-  foreach my $name (keys %is_list) {
-    $params->{$name} = [$params->{$name}]
-      if defined $params->{$name} && !ref $params->{$name};
+  # A list param sent as a single value in a JSON body is a list of one, and
+  # anything else that isn't a list of plain values, such as a hash or a
+  # nested list, is refused, as the legacy server's validate() did.
+  foreach my $name (sort keys %is_list) {
+    my $value = $params->{$name} // next;
+    $value = $params->{$name} = [$value] if !ref $value;
+    next if ref $value eq 'ARRAY' && !grep {ref} @$value;
+    Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
+    ThrowUserError('invalid_params',
+      {type_error => "$name must be a value or a list of values"});
   }
 
   return ($params, undef);

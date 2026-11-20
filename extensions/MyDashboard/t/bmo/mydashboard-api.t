@@ -186,6 +186,13 @@ $interest->mark($user->id, $bug->id, $since);
 $t->put_ok('/rest/mydashboard/bug_interest_unmark' => \%auth => form =>
     {bug_ids => $bug->id})->status_is(200);
 is($count->(), 0, 'one bug ID in the query string');
+$t->put_ok('/rest/mydashboard/bug_interest_unmark' => \%auth => json =>
+    {bug_ids => [[$bug->id]]})
+  ->status_is(400)
+  ->json_like(
+  '/message' => qr/bug_ids must be a value or a list of values/,
+  'a nested list of bug IDs is refused'
+  );
 $t->put_ok('/rest/mydashboard/bug_interest_unmark' => \%auth => json => {})
   ->json_is('/error' => 1, 'bug_ids is required');
 
