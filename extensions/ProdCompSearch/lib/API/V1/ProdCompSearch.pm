@@ -14,6 +14,7 @@ use Bugzilla;
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Util qw(detaint_natural trim);
+use Bugzilla::API::V1::Util qw(render_options);
 use Time::localtime;
 
 sub setup_routes {
@@ -25,6 +26,8 @@ sub setup_routes {
     search => '');
   $r->get('/prod_comp_search/frequent')
     ->to('ProdCompSearch::API::V1::ProdCompSearch#list_frequent_components');
+  $r->options($_)->to(cb => \&render_options, allow => 'GET', search => '')
+    foreach qw(/prod_comp_search/find/*search /prod_comp_search/frequent);
 }
 
 # GET /prod_comp_search/find/<search>?limit=<n>

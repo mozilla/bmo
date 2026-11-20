@@ -15,7 +15,7 @@ use Bugzilla::Component;
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Product;
-use Bugzilla::API::V1::Util qw(merge_request_params);
+use Bugzilla::API::V1::Util qw(merge_request_params render_options);
 
 sub setup_routes {
   my ($class, $r) = @_;
@@ -24,6 +24,10 @@ sub setup_routes {
   $r->post('/component-watching')->to($to . 'add');
   $r->get('/component-watching/:id' => [id => qr/\d+/])->to($to . 'get');
   $r->delete('/component-watching/:id' => [id => qr/\d+/])->to($to . 'remove');
+  $r->options('/component-watching')
+    ->to(cb => \&render_options, allow => 'GET, POST');
+  $r->options('/component-watching/:id' => [id => qr/\d+/])
+    ->to(cb => \&render_options, allow => 'DELETE, GET');
 }
 
 #

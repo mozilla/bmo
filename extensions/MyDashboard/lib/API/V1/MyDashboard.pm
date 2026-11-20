@@ -18,7 +18,7 @@ use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Template;
 use Bugzilla::Util          qw(template_var datetime_from);
-use Bugzilla::API::V1::Util qw(merge_request_params);
+use Bugzilla::API::V1::Util qw(merge_request_params render_options);
 
 use Bugzilla::Extension::MyDashboard::Queries
   qw(QUERY_DEFS query_bugs query_flags);
@@ -35,6 +35,11 @@ sub setup_routes {
   $r->get('/mydashboard/run_bug_query')->to($to . 'run_bug_query');
   $r->get('/mydashboard/run_flag_query')->to($to . 'run_flag_query');
   $r->get('/mydashboard/run_last_changes')->to($to . 'run_last_changes');
+
+  $r->options($_)->to(cb => \&render_options, allow => 'PUT')
+    foreach qw(/bug_interest_unmark /mydashboard/bug_interest_unmark);
+  $r->options("/mydashboard/$_")->to(cb => \&render_options, allow => 'GET')
+    foreach qw(run_bug_query run_flag_query run_last_changes);
 }
 
 sub type {

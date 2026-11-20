@@ -20,7 +20,7 @@ use Bugzilla::FlagType;
 use Bugzilla::Product;
 use Bugzilla::User;
 use Bugzilla::Util          qw(detaint_natural );
-use Bugzilla::API::V1::Util qw(filter merge_request_params);
+use Bugzilla::API::V1::Util qw(filter merge_request_params render_options);
 
 use DateTime;
 
@@ -54,6 +54,11 @@ sub setup_routes {
 
   # flag activity with only query strings
   $r->get('/review/flag_activity')->to($to . 'flag_activity');
+
+  # Every route above is a GET.
+  $r->options("/review/$_/*any")
+    ->to(cb => \&render_options, allow => 'GET', any => '')
+    foreach qw(suggestions flag_activity);
 }
 
 sub type {

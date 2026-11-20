@@ -17,6 +17,7 @@ use Bugzilla::Group;
 use Bugzilla::Logging;
 use Bugzilla::User;
 use Bugzilla::Util qw(trim);
+use Bugzilla::API::V1::Util qw(render_options);
 
 use Bugzilla::Extension::PhabBugz::Constants;
 use Bugzilla::Extension::PhabBugz::Revision;
@@ -58,6 +59,17 @@ sub setup_routes {
     ->to('PhabBugz::API::V1::PhabBugz#bug_revisions');
   $r->get('/phabbugz/user/:user_id' => [user_id => qr/\d+/])
     ->to('PhabBugz::API::V1::PhabBugz#user');
+
+  $r->options('/phabbugz/check_bug/:bug_id/:user_id' =>
+      [bug_id => qr/\d+/, user_id => qr/\d+/])
+    ->to(cb => \&render_options, allow => 'GET');
+  $r->options(
+    '/phabbugz/check_enter_bug/#product/:user_id' => [user_id => qr/\d+/])
+    ->to(cb => \&render_options, allow => 'GET');
+  $r->options('/phabbugz/bug_revisions/:bug_id' => [bug_id => qr/\d+/])
+    ->to(cb => \&render_options, allow => 'GET');
+  $r->options('/phabbugz/user/:user_id' => [user_id => qr/\d+/])
+    ->to(cb => \&render_options, allow => 'GET');
 }
 
 sub get_bugs {

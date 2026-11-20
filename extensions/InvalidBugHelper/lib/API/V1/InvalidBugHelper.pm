@@ -15,12 +15,15 @@ use Bugzilla::Bug;
 use Bugzilla::BugMail;
 use Bugzilla::Constants;
 use Bugzilla::Error;
-use Bugzilla::API::V1::Util qw(coerce_booleans merge_request_params);
+use Bugzilla::API::V1::Util qw(coerce_booleans merge_request_params
+  render_options);
 
 sub setup_routes {
   my ($class, $r) = @_;
   $r->post('/invalid_bug_helper/close/:id' => [id => qr/\d+/])
     ->to('InvalidBugHelper::API::V1::InvalidBugHelper#close_as_invalid');
+  $r->options('/invalid_bug_helper/close/:id' => [id => qr/\d+/])
+    ->to(cb => \&render_options, allow => 'POST');
 }
 
 # POST /invalid_bug_helper/close/<id>

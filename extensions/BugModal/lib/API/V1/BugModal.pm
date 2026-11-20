@@ -23,7 +23,7 @@ use Bugzilla::Milestone;
 use Bugzilla::Product;
 use Bugzilla::Util qw(detaint_natural);
 use Bugzilla::Version;
-use Bugzilla::API::V1::Util qw(merge_request_params);
+use Bugzilla::API::V1::Util qw(merge_request_params render_options);
 use List::MoreUtils         qw(any first_value);
 
 # these methods are much lighter than our public API calls
@@ -59,6 +59,14 @@ sub setup_routes {
   # products with slashes in their name means we have to grab the product
   # from the query-string (?product=) instead of the path
   $r->get('/bug_modal/new_product/:id' => [@id])->to($to . 'new_product');
+
+  $r->options("/bug_modal/$_")->to(cb => \&render_options, allow => 'GET')
+    foreach qw(initial_field_values product_info);
+  $r->options("/bug_modal/$_/:id" => [@id])
+    ->to(cb => \&render_options, allow => 'GET')
+    foreach qw(edit cc comment_tags new_product);
+  $r->options('/bug_modal/update_comment_tags/:id' => [@id])
+    ->to(cb => \&render_options, allow => 'PUT');
 }
 
 sub type {

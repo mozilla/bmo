@@ -17,6 +17,7 @@ use Bugzilla::Error;
 use Bugzilla::Search;
 use Bugzilla::Search::Quicksearch;
 use Bugzilla::Util qw(mojo_user_agent);
+use Bugzilla::API::V1::Util qw(render_options);
 use URI;
 use URI::QueryParam;
 
@@ -24,6 +25,8 @@ sub setup_routes {
   my ($class, $r) = @_;
   $r->get('/bitly/shorten')->to('Bitly::API::V1::Bitly#shorten');
   $r->get('/bitly/list')->to('Bitly::API::V1::Bitly#list');
+  $r->options($_)->to(cb => \&render_options, allow => 'GET')
+    foreach qw(/bitly/shorten /bitly/list);
 }
 
 # GET /bitly/shorten?url=<buglist.cgi URL>

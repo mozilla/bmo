@@ -17,7 +17,8 @@ use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Template;
 use Bugzilla::Util          qw(trim);
-use Bugzilla::API::V1::Util qw(coerce_booleans merge_request_params);
+use Bugzilla::API::V1::Util qw(coerce_booleans merge_request_params
+  render_options);
 
 sub setup_routes {
   my ($class, $r) = @_;
@@ -28,6 +29,13 @@ sub setup_routes {
   $r->put('/editcomments/comment/:comment_id' => [comment_id => qr/\d+/])
     ->to($to . 'update_comment');
   $r->put('/editcomments/revision')->to($to . 'modify_revision');
+
+  $r->options('/editcomments/comment')
+    ->to(cb => \&render_options, allow => 'GET');
+  $r->options('/editcomments/comment/:comment_id' => [comment_id => qr/\d+/])
+    ->to(cb => \&render_options, allow => 'GET, PUT');
+  $r->options('/editcomments/revision')
+    ->to(cb => \&render_options, allow => 'PUT');
 }
 
 # Request params, with the comment ID from the path if there is one.

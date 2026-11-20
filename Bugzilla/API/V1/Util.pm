@@ -36,6 +36,7 @@ our @EXPORT_OK = qw(
   filter_wants
   merge_request_params
   params_to_objects
+  render_options
   set_rest_cors_headers
   strip_request_params
   translate
@@ -68,6 +69,15 @@ sub set_rest_cors_headers {
   $headers->header('Access-Control-Allow-Origin' => '*');
   $headers->header(
     'Access-Control-Allow-Headers' => join(', ', @$allowed_headers));
+}
+
+# Answers a CORS preflight request with the methods in the route's "allow".
+sub render_options {
+  my ($c) = @_;
+  my $allow = $c->stash('allow');
+  $c->res->headers->header('Allow'                        => $allow);
+  $c->res->headers->header('Access-Control-Allow-Methods' => $allow);
+  return $c->rendered(200);
 }
 
 sub extract_flags {
@@ -600,6 +610,12 @@ __END__
 Bugzilla::API::V1::Util - Helpers shared by the native API modules.
 
 =head1 FUNCTIONS
+
+=head2 render_options
+
+Route callback answering an C<OPTIONS> (CORS preflight) request with the
+methods given in the route's C<allow> stash value, e.g.
+C<< $r->options('/foo')->to(cb => \&render_options, allow => 'GET, PUT') >>.
 
 =head2 filter
 
