@@ -143,6 +143,10 @@ $t->put_ok($comment_url => \%admin_auth => json =>
   ->status_is(400)
   ->json_like('/message' => qr/is_hidden must be true or false/);
 $t->put_ok($comment_url => \%admin_auth => json =>
+    {new_comment => 'x', is_hidden => []})
+  ->status_is(400)
+  ->json_like('/message' => qr/is_hidden must be true or false/);
+$t->put_ok($comment_url => \%admin_auth => json =>
     {new_comment => 'edited comment', is_hidden => 1})
   ->status_is(200)
   ->json_is('/text'  => 'edited comment')

@@ -341,11 +341,14 @@ sub strip_request_params {
 # A JSON body sends booleans as real booleans, but the query string and a form
 # body send the literal string "true" or "false", which Perl treats as true
 # either way. Turns each of the given params that is set into 1 or 0, and
-# returns the error for the first one that isn't a boolean, if any.
+# returns the error for the first one that isn't a boolean, if any. A JSON
+# boolean is left as is; any other reference, such as [] or {}, is refused.
 sub coerce_booleans {
   my ($params, @fields) = @_;
   foreach my $field (@fields) {
-    next if !defined $params->{$field} || ref $params->{$field};
+    next if !defined $params->{$field};
+    next if ref $params->{$field} eq 'JSON::PP::Boolean';
+    return "$field must be true or false" if ref $params->{$field};
     my $value = lc $params->{$field};
     return "$field must be true or false" if $value !~ /^(?:true|false|1|0)$/;
     $params->{$field} = ($value eq 'true' || $value eq '1') ? 1 : 0;
@@ -691,4 +694,4 @@ Takes a params hashref and the names of boolean params, e.g.
 C<coerce_booleans($params, qw(is_open has_unconfirmed))>. Each one that is set
 to the string C<true>, C<false>, C<1> or C<0> (any case) becomes C<1> or C<0>;
 a JSON boolean is left as is. Returns an error message for the first one that
-is set to anything else, or C<undef>.
+is set to anything else, including an array or a hash, or C<undef>.
