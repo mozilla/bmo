@@ -142,6 +142,10 @@ $t->put_ok("/rest/bug_modal/update_comment_tags/$public" => \%auth => json =>
   ->status_is(200)
   ->json_unlike('/html' => qr/bmtag/, 'tag removed');
 $t->put_ok("/rest/bug_modal/update_comment_tags/$public" => \%auth => json =>
+    {add => 'bmtag2'})
+  ->status_is(200)
+  ->json_like('/html' => qr/bmtag2/, 'a single tag to add, not in a list');
+$t->put_ok("/rest/bug_modal/update_comment_tags/$public" => \%auth => json =>
     {id => {condition => 'comment_id = ?', values => [$public]}})
   ->json_is('/error' => 1)
   ->json_like('/message' => qr/numeric/, 'a hash id is refused');

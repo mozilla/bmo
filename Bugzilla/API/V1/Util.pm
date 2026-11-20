@@ -328,6 +328,13 @@ sub merge_request_params {
     $params = {%$body_params, %$params} if ref $body_params eq 'HASH';
   }
 
+  # A list param sent as a single value in a JSON body is a list of one, as
+  # the legacy server's validate() made it.
+  foreach my $name (keys %is_list) {
+    $params->{$name} = [$params->{$name}]
+      if defined $params->{$name} && !ref $params->{$name};
+  }
+
   return ($params, undef);
 }
 
