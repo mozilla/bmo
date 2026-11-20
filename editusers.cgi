@@ -391,14 +391,9 @@ elsif ($action eq 'del') {
     undef, $otherUserID);
   $vars->{'cc'} = $dbh->selectrow_array('SELECT COUNT(*) FROM cc WHERE who = ?',
     undef, $otherUserID);
-
-  # Flag changes are in flag_activity, not bugs_activity.
-  $vars->{'bugs_activity'} = $dbh->selectrow_array(
-    'SELECT (SELECT COUNT(*) FROM bugs_activity WHERE who = ?)
-          + (SELECT COUNT(*) FROM flag_activity WHERE who = ? OR setter_id = ?)',
-    undef, ($otherUserID) x 3
-  );
-
+  $vars->{'bugs_activity'}
+    = $dbh->selectrow_array('SELECT COUNT(*) FROM bugs_activity WHERE who = ?',
+    undef, $otherUserID);
   $vars->{'component_cc'}
     = $dbh->selectrow_array('SELECT COUNT(*) FROM component_cc WHERE user_id = ?',
     undef, $otherUserID);
