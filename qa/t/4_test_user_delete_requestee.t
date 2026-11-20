@@ -92,3 +92,11 @@ is(
   1,
   'The request is cleared'
 );
+is_deeply(
+  $dbh->selectall_arrayref(
+    'SELECT status, who, requestee_id FROM flag_activity
+      WHERE flag_id = ? AND id > ?', undef, $flag_id, $history_id
+  ),
+  [['?', $admin_id, undef]],
+  'Clearing the request is logged in the flag history, by the admin'
+);
