@@ -82,7 +82,7 @@ sub run_last_changes {
   if (!$user->is_insider) {
     $last_comment_sql .= " AND isprivate = 0";
   }
-  $last_comment_sql .= " LIMIT 1";
+  $last_comment_sql .= " ORDER BY bug_when DESC, comment_id DESC LIMIT 1";
   my $last_comment_sth = $dbh->prepare($last_comment_sql);
 
   my $last_changes = {};
