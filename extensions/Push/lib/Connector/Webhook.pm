@@ -27,6 +27,17 @@ use JSON qw(decode_json encode_json);
 use List::MoreUtils qw(any);
 use Try::Tiny;
 
+# Each webhook event maps to a sub that decides whether a message belongs to
+# that event. Matchers are called as ($message, $payload, $webhook).
+use constant EVENT_MATCHERS => {
+  create            => sub { $_[0]->routing_key eq 'bug.create' },
+  change            => sub { $_[0]->routing_key =~ /^bug[.]modify/ },
+  comment           => sub { $_[0]->routing_key eq 'comment.create' },
+  attachment        => sub { $_[0]->routing_key eq 'attachment.create' },
+  attachment_change => sub { $_[0]->routing_key =~ /^attachment[.]modify/ },
+  needinfo          => \&_needinfo_requested_from_owner,
+};
+
 sub new {
   my ($class, $webhook_id) = @_;
   my $self = {};
@@ -76,14 +87,9 @@ sub should_send {
   if (($product eq $bug_data->{product} || $product eq 'Any')
     && ($component eq $bug_data->{component} || $component eq 'Any'))
   {
-    if ( ($events{create} && $message->routing_key eq 'bug.create')
-      || ($events{change} && $message->routing_key =~ /^bug\.modify/)
-      || ($events{comment} && $message->routing_key eq 'comment.create')
-      || ($events{attachment_change} && $message->routing_key =~ /^attachment[.]modify/)
-      || ($events{attachment} && $message->routing_key eq 'attachment.create'))
-    {
-      return 1;
-    }
+    return 1 if any {
+      $events{$_} && EVENT_MATCHERS->{$_}->($message, $payload, $webhook)
+    } keys %{+EVENT_MATCHERS};
   }
 
   # check if the bug was removed from a product/component we care about
@@ -207,6 +213,19 @@ sub _boolean {
 sub _integer {
   my ($value) = @_;
   return defined($value) ? $value + 0 : undef;
+}
+
+# True when the change sets needinfo? on the webhook owner. Flags set at bug
+# creation are pushed as a follow-up bug.modify, so only modifications matter.
+# Each requestee gets its own 'flag.needinfo' change (see _split_flagtypes).
+sub _needinfo_requested_from_owner {
+  my ($message, $payload, $webhook) = @_;
+  return 0 unless $message->routing_key =~ /^bug[.]modify/;
+  return 0 unless Bugzilla::Extension::Webhooks::Webhook->needinfo_available;
+
+  my $requested = '? (' . $webhook->user->login . ')';
+  return any { $_->{field} eq 'flag.needinfo' && $_->{added} eq $requested }
+    @{$payload->{event}->{changes} || []};
 }
 
 sub _owner_can_see {

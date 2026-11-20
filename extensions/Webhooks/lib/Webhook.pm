@@ -17,6 +17,7 @@ use Bugzilla::User;
 use Bugzilla::Product;
 use Bugzilla::Component;
 use Bugzilla::Error;
+use Bugzilla::FlagType;
 
 use constant DB_TABLE => 'webhooks';
 
@@ -116,6 +117,15 @@ sub api_key_header {
 sub api_key_value {
   my ($self) = @_;
   return $self->{api_key_value}
+}
+
+# class methods
+
+# The needinfo event depends on a 'needinfo' flag type, which only exists on
+# installations that use it (eg. via the Needinfo extension).
+sub needinfo_available {
+  return Bugzilla->request_cache->{webhooks_needinfo_available}
+    //= Bugzilla::FlagType::count({name => 'needinfo'}) ? 1 : 0;
 }
 
 # validators
