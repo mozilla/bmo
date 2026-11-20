@@ -95,16 +95,21 @@
 
 /* Live region: kept in the document while empty so screen readers announce updates */
 .text-editor .mention-warning:not(:empty) {
-  margin: 4px 0 0;
-  border-left: 4px solid var(--warning-message-border-color);
+  margin: 8px 0 0;
+  border: 1px solid var(--warning-message-border-color);
+  border-left-width: 6px;
   border-radius: 4px;
-  padding: 4px 8px;
+  padding: 8px 12px;
   background-color: var(--warning-message-background-color);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-medium);
 }
 
 .text-editor .mention-warning p {
   margin: 0;
+}
+
+.text-editor .mention-warning p + p {
+  margin-top: 4px;
 }
 
 .text-editor footer:not([hidden]) {

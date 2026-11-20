@@ -1003,14 +1003,20 @@ sub fetch_product_versions {
   my ($product) = @_;
   my $key = "${product}_versions";
 
-  # First check to see if the values are stored in cache. If not
-  # then we will call the end point to get the latest versions.
-  my $versions = Bugzilla->request_cache->{$key}
-    || Bugzilla->memcached->get_data({key => $key});
+  # Look each product up at most once per request, remembering failures too.
+  # Some callers loop over every product channel (e.g. the buglist column
+  # aliases call this 42 times per page), so without this every call went
+  # back to memcached, or to the endpoint again if it was failing.
+  my $request_cache = Bugzilla->request_cache;
+  return $request_cache->{$key} if exists $request_cache->{$key};
+
+  # Then check memcached. If not there, call the end point to get the
+  # latest versions.
+  my $versions = Bugzilla->memcached->get_data({key => $key});
 
   unless ($versions) {
     my $product_endpoint = Bugzilla->params->{product_details_endpoint};
-    return undef if !$product_endpoint;
+    return $request_cache->{$key} = undef if !$product_endpoint;
 
     # Wrap the call in a try block so that we do not block the loading
     # of a bug page if it does not succeed.
@@ -1021,10 +1027,7 @@ sub fetch_product_versions {
       if ($response->is_success) {
         $versions = decode_json($response->body);
 
-        # Cache the values if we need them again in the near term
-        # request_cache is on for a single page load but memcache
-        # will keep the data for a full day before reloading.
-        Bugzilla->request_cache->{$key} = $versions;
+        # Memcached keeps the data for a full day before reloading.
         Bugzilla->memcached->set_data({
           key => $key, value => $versions, expires_in => 86_400,
         });
@@ -1040,7 +1043,7 @@ sub fetch_product_versions {
     };
   }
 
-  return $versions;
+  return $request_cache->{$key} = $versions;
 }
 
 sub mojo_user_agent {

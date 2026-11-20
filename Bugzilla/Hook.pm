@@ -735,6 +735,25 @@ spaces.
 =back
 
 
+=head2 comment_body_full
+
+Called by L<Bugzilla::Comment/body_full> for a plain comment, before any
+wrapping, so that an extension can change the text people read without
+changing the stored text. Bugmail, webhook and Pulse payloads use the changed
+text, while L<Bugzilla::Comment/body> and the C<raw_text> REST field keep
+returning the stored text.
+
+Params:
+
+=over
+
+=item C<comment> - The L<Bugzilla::Comment> being read.
+
+=item C<body> - A reference to the comment text, which you can modify.
+
+=back
+
+
 =head2 config_add_panels
 
 If you want to add new panels to the Parameters administrative interface,
