@@ -227,8 +227,8 @@ sub register {
         # Native /rest routes start in USAGE_MODE_REST (see
         # Bugzilla::App::Controller::API::_prepare_rest_request) and only some
         # handlers switch to USAGE_MODE_MOJO_REST before authenticating. The
-        # legacy REST error path needs Bugzilla->_json_server, which only
-        # rest.cgi ever creates, so normalize before raising anything below.
+        # Mojo error plugin only renders JSON in USAGE_MODE_MOJO_REST, so
+        # normalize before raising anything below.
         if ($usage_mode == USAGE_MODE_REST) {
           Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
           $usage_mode = USAGE_MODE_MOJO_REST;

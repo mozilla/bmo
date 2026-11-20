@@ -69,8 +69,7 @@ $t->get_ok('/rest/webhooks/list' => {'X-Bugzilla-API-Key' => $enabled_key})
 
 # /rest/bug/<id>/graph authenticates while still in USAGE_MODE_REST, because it
 # only switches to USAGE_MODE_MOJO_REST after calling login. The refusal has to
-# render through the Mojo error plugin anyway; the legacy REST error path would
-# die on an unset Bugzilla->_json_server and return a 500 instead.
+# render through the Mojo error plugin anyway.
 $t->get_ok('/rest/bug/1/graph' => {'X-Bugzilla-API-Key' => $disabled_key})
   ->status_is(401)
   ->json_is('/code' => 301);

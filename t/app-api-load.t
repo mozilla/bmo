@@ -23,6 +23,8 @@ use Test2::V0;
 use Test::Mojo;
 
 use Bugzilla::App::Controller::API;
+use Bugzilla::Constants;
+use Bugzilla::Error;
 
 # Bugzilla::API::V1 also holds helper modules that are not controllers, such
 # as Util. Loading the routes must skip them rather than warn at every startup.
@@ -55,5 +57,18 @@ foreach my $test (
     ->json_is('/code' => 32614)
     ->json_like('/message' => qr/\Q'$resource'\E/);
 }
+
+# An error thrown while a /rest route is still in USAGE_MODE_REST, before its
+# handler switches to USAGE_MODE_MOJO_REST, is rendered as JSON all the same.
+$t->app->routes->get(
+  '/_test/rest-mode-error' => sub {
+    Bugzilla->usage_mode(USAGE_MODE_REST);
+    ThrowUserError('login_required');
+  }
+);
+$t->get_ok('/_test/rest-mode-error')
+  ->status_is(401)
+  ->header_like('Content-Type' => qr{^application/json\b});
+$t->json_is('/error' => 1)->json_is('/code' => 410);
 
 done_testing;
