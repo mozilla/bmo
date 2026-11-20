@@ -20,6 +20,7 @@ use Bugzilla::User;
 use Bugzilla::Bug;
 use Bugzilla::BugMail;
 use Bugzilla::Flag;
+use Bugzilla::FlagActivity;
 use Bugzilla::Field;
 use Bugzilla::Group;
 use Bugzilla::Token;
@@ -527,7 +528,23 @@ elsif ($action eq 'delete') {
       my ($removed, $added)
         = Bugzilla::Flag->update_activity(\@old_summaries, \@new_summaries);
       LogActivityEntry($bug_id, 'flagtypes.name', $removed, $added, $userid,
-        $timestamp, undef, $attach_id);
+        $timestamp, undef, $attach_id || undef);
+
+      # Logged in both tables, like every other flag change, until history
+      # and bugmail read flag changes after the cutoff from flag_activity.
+      foreach my $flag (@{$bugs{$bug_id}->{$attach_id}}) {
+        Bugzilla::FlagActivity->create({
+          flag_when     => $timestamp,
+          setter_id     => $flag->setter_id,
+          who           => $userid,
+          status        => $flag->status,
+          type_id       => $flag->type_id,
+          flag_id       => $flag->id,
+          requestee_id  => $flag->requestee_id,
+          bug_id        => $bug_id,
+          attachment_id => $attach_id || undef,
+        });
+      }
     }
     $sth_set_bug_timestamp->execute($timestamp, $bug_id);
     $updatedbugs{$bug_id} = 1;
