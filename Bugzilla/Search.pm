@@ -1189,6 +1189,9 @@ sub _sql_select {
 
     # Aliases cannot contain dots in them. We convert them to underscores.
     $alias =~ s/\./_/g;
+
+    # The alias is interpolated unquoted, so it must be a plain identifier.
+    $alias =~ /^\w+$/a || ThrowCodeError('invalid_field_name', {field => $alias});
     my $sql = $self->COLUMNS->{$column}->{name} . " AS $alias";
     push(@sql_fields, $sql);
   }

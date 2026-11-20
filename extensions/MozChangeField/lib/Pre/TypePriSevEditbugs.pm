@@ -10,26 +10,54 @@ package Bugzilla::Extension::MozChangeField::Pre::TypePriSevEditbugs;
 use 5.10.1;
 use Moo;
 
+use Bugzilla;
 use Bugzilla::Constants;
+
+# Fields reset to their default when a user may not set them on a new bug.
+# bug_type is deliberately absent: it is required on bug entry and
+# check_can_change_field lets anyone set it when filing.
+my %CREATE_DEFAULT_PARAM
+  = (bug_severity => 'defaultseverity', priority => 'defaultpriority');
+
+# Who may set each field. Triagers need severity and priority to triage
+# (BMO requires an S* severity on triaged defects), so can_triage is enough
+# for those; bug_type stays editbugs only.
+my %ALLOWED_BY = (
+  bug_type     => ['editbugs'],
+  bug_severity => ['editbugs', 'can_triage'],
+  priority     => ['editbugs', 'can_triage'],
+);
+
+# True unless $field is restricted and the user holds none of the permissions
+# that allow it. $perms is the hash built by _populate_permissions. Also used
+# by Post::TypePriSevEditbugs so update and create share one rule.
+sub can_set_field {
+  my ($class, $field, $perms) = @_;
+  my $allowed_by = $ALLOWED_BY{$field} or return 1;
+  return scalar grep { $perms->{$_} } @$allowed_by;
+}
 
 sub evaluate_change {
   my ($self, $args) = @_;
+  my $field = $args->{'field'};
 
-  my $field    = $args->{'field'};
-  my $editbugs = $args->{'editbugs'};
+  return undef if $self->can_set_field($field, $args);
 
-  # The user needs to have 'editbugs' permission to change the type, severity
-  # and priority fields.
-  if (($field eq 'bug_type' || $field eq 'bug_severity' || $field eq 'priority')
-    && !$editbugs)
-  {
-    return {
-      result => PRIVILEGES_REQUIRED_EMPOWERED,
-      reason => 'You need "editbugs" permissions to change this field.',
-    };
+  my $who = join(' or ', map {"\"$_\""} @{$ALLOWED_BY{$field}});
+  return {
+    result => PRIVILEGES_REQUIRED_EMPOWERED,
+    reason => "You need $who permissions to change this field.",
+  };
+}
+
+sub sanitize_create {
+  my ($self, $args) = @_;
+  my $params = $args->{params};
+
+  foreach my $field (keys %CREATE_DEFAULT_PARAM) {
+    next if $self->can_set_field($field, $args);
+    $params->{$field} = Bugzilla->params->{$CREATE_DEFAULT_PARAM{$field}};
   }
-
-  return undef;
 }
 
 1;

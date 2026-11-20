@@ -1,0 +1,53 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ *
+ * This Source Code Form is "Incompatible With Secondary Licenses", as
+ * defined by the Mozilla Public License, v. 2.0. */
+
+/* The header already names the agent, so its comment tag is only kept for search. */
+.comment-tag[hidden] {
+  display: none;
+}
+
+.hackbot-meta {
+  display: flex;
+  overflow: hidden;
+  margin-inline: 8px;
+  border: 1px solid var(--primary-region-border-color);
+  border-radius: 16px;
+  width: max-content;
+  font-size: var(--font-size-small);
+}
+
+.hackbot-meta .agent,
+.hackbot-meta .run {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 1px 8px;
+  min-height: 1.5em;
+}
+
+.hackbot-meta .agent {
+  background-color: var(--control-background-color);
+}
+
+.hackbot-meta .agent .icon::before {
+  color: rgb(var(--accent-color-yellow-1));
+  font-family: var(--icon-font-family);
+  font-size: var(--icon-size-x-small);
+  vertical-align: middle;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  content: '\e65f';
+}
+
+@media screen and (max-width: 799px) {
+  .hackbot-meta {
+    justify-content: center;
+    flex-wrap: wrap;
+    border-radius: 8px;
+    width: auto;
+    min-width: 6em;
+  }
+}
