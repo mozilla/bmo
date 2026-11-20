@@ -110,7 +110,7 @@ sub run_last_changes {
     my $comment = Bugzilla::Comment->new($last_comment_id);
     my $text    = $comment->body_full;
     my $html
-      = Bugzilla->params->{use_markdown}
+      = $comment->is_markdown && Bugzilla->params->{use_markdown}
       ? Bugzilla->markdown->render_html($text, $bug)
       : Bugzilla::Template::quoteUrls($text, $bug);
     $last_changes->{comment_html} = $html;
