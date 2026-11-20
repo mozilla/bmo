@@ -329,7 +329,6 @@ sub check_user_permission_for_bug {
   my ($self) = @_;
   Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
   my $user = $self->_login || return;
-  Bugzilla->switch_to_shadow_db();
 
   $self->_validate_phab_user($user);
 
@@ -355,7 +354,6 @@ sub check_user_enter_bug_permission {
   my ($self) = @_;
   Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
   my $user = $self->_login || return;
-  Bugzilla->switch_to_shadow_db();
 
   $self->_validate_phab_user($user);
 
@@ -386,7 +384,6 @@ sub bug_revisions {
   $self->_check_phabricator();
 
   my $user = $self->_login || return;
-  Bugzilla->switch_to_shadow_db();
 
   my $bug_id = $self->param('bug_id');
 
