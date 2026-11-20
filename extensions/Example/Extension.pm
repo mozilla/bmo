@@ -979,13 +979,6 @@ sub user_preferences {
   $$handled = 1;
 }
 
-sub webservice {
-  my ($self, $args) = @_;
-
-  my $dispatch = $args->{dispatch};
-  $dispatch->{Example} = "Bugzilla::Extension::Example::WebService";
-}
-
 sub webservice_error_codes {
   my ($self, $args) = @_;
 
@@ -1038,17 +1031,6 @@ sub webservice_rest_request {
   if (exists $params->{'test_field'}) {
     $params->{'test_field'} = delete $params->{'cf_test_field'};
   }
-}
-
-sub webservice_rest_resources {
-  my ($self, $args) = @_;
-  my $rpc       = $args->{'rpc'};
-  my $resources = $args->{'resources'};
-
-  # Add a new resource that allows for /rest/example/hello
-  # to call Example.hello
-  $resources->{'Bugzilla::Extension::Example::WebService'}
-    = [qr{^/example/hello$}, {GET => {method => 'hello',}}];
 }
 
 sub webservice_rest_response {

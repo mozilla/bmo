@@ -1660,13 +1660,6 @@ sub _last_closed_date {
   return $self->{'last_closed_date'};
 }
 
-sub webservice {
-  my ($self, $args) = @_;
-
-  my $dispatch = $args->{dispatch};
-  $dispatch->{BMO} = "Bugzilla::Extension::BMO::WebService";
-}
-
 our $search_content_matches;
 
 BEGIN {
