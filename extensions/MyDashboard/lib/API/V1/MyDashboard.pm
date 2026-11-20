@@ -102,8 +102,7 @@ sub run_last_changes {
     $datetime->set_time_zone($user->timezone);
     $last_changes->{when} = $datetime->strftime('%Y-%m-%d %T %Z');
   }
-  my $last_comment_id
-    = $dbh->selectrow_array($last_comment_sth, undef, $params->{bug_id},
+  my $last_comment_id = $dbh->selectrow_array($last_comment_sth, undef, $bug->id,
     $params->{changeddate_api});
   if ($last_comment_id) {
 

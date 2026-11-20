@@ -88,7 +88,8 @@ Bugzilla->dbh->do(
   undef, $bug->id, $latest);
 
 # A bug with two comments after its creation, to get the latest one.
-my $two = Bugzilla::Bug->create({%fields, comment => 'description'});
+my $two = Bugzilla::Bug->create(
+  {%fields, comment => 'description', alias => "mydashboard-api-$$"});
 for my $n (1, 2) {
   my $when = datetime_from($two->creation_ts)->add(seconds => 2 * $n);
   my $obj  = Bugzilla::Bug->new($two->id);
@@ -167,6 +168,13 @@ $t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>
   ->json_like(
   '/results/0/last_changes/comment_html' => qr/comment number 2/,
   'the latest comment, not the first one after the date'
+  );
+$t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>
+    {bug_id => "mydashboard-api-$$", changeddate_api => $two->creation_ts})
+  ->status_is(200)
+  ->json_like(
+  '/results/0/last_changes/comment_html' => qr/comment number 2/,
+  'a bug alias finds the comment too'
   );
 $t->get_ok('/rest/mydashboard/run_last_changes?bug_id=999999999' => \%auth)
   ->json_is('/error' => 1, 'unknown bug');
