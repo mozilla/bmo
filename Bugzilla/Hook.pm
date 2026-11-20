@@ -1738,23 +1738,6 @@ See L<Bugzilla::WebService::Constants/WS_ERROR_CODE> for an example.
 
 =back
 
-=head2 webservice_fix_credentials
-
-This hook allows for altering the credential parameters provided by the client
-before authentication actually occurs. For example, this can be used to allow mapping
-of custom parameters to the standard Bugzilla_login and Bugzilla_password parameters.
-
-Params:
-
-=over
-
-=item C<params>
-
-A hash ref containing the parameters passed into the webservice after
-they have been obtained from the URL or body of the request.
-
-=back
-
 =head2 webservice_status_code_map
 
 This hook allows an extension to change the status codes returned by

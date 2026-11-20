@@ -98,9 +98,7 @@ sub _throw_error {
   elsif (Bugzilla->error_mode == ERROR_MODE_DIE) {
     die "$message\n";
   }
-  elsif (Bugzilla->error_mode == ERROR_MODE_JSON_RPC
-    || Bugzilla->error_mode == ERROR_MODE_REST)
-  {
+  elsif (Bugzilla->error_mode == ERROR_MODE_REST) {
     # Clone the hash so we aren't modifying the constant.
     my %error_map = %{WS_ERROR_CODE()};
     Bugzilla::Hook::process('webservice_error_codes', {error_map => \%error_map});
@@ -113,16 +111,9 @@ sub _throw_error {
     {
       my $server = Bugzilla->_json_server;
 
-      my $status_code = 0;
-      if (Bugzilla->error_mode == ERROR_MODE_REST) {
-        my %status_code_map = %{REST_STATUS_CODE_MAP()};
-        $status_code = $status_code_map{$code} || $status_code_map{'_default'};
-        $logfunc->("REST error: $error (HTTP $status_code, internal code $code)");
-      }
-      else {
-        my $fake_code = 100000 + $code;
-        $logfunc->("JSON-RPC error: $error ($fake_code)");
-      }
+      my %status_code_map = %{REST_STATUS_CODE_MAP()};
+      my $status_code     = $status_code_map{$code} || $status_code_map{'_default'};
+      $logfunc->("REST error: $error (HTTP $status_code, internal code $code)");
 
       # Technically JSON-RPC isn't allowed to have error numbers
       # higher than 999, but we do this to avoid conflicts with
@@ -253,28 +244,14 @@ sub ThrowErrorPage {
     die("error: $message");
   }
 
-  if (Bugzilla->error_mode == ERROR_MODE_JSON_RPC) {
-    my $code   = ERROR_UNKNOWN_TRANSIENT;
-    my $server = Bugzilla->_json_server;
-    $server->raise_error(
-      code    => 100000 + $code,
-      message => $message,
-      id      => $server->{_bz_request_id},
-      version => $server->version
-    );
-    die if _in_eval();
-    $server->response($server->error_response_header);
-  }
-  else {
-    my $cgi      = Bugzilla->cgi;
-    my $template = Bugzilla->template;
-    my $vars     = {};
-    $vars->{message} = $message;
-    print $cgi->header();
-    $template->process($template_name, $vars)
-      || ThrowTemplateError($template->error());
-    exit;
-  }
+  my $cgi      = Bugzilla->cgi;
+  my $template = Bugzilla->template;
+  my $vars     = {};
+  $vars->{message} = $message;
+  print $cgi->header();
+  $template->process($template_name, $vars)
+    || ThrowTemplateError($template->error());
+  exit;
 }
 
 1;

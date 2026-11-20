@@ -29,8 +29,6 @@ our @EXPORT = qw(
   ERROR_UNKNOWN_FATAL
   ERROR_UNKNOWN_TRANSIENT
 
-  REST_CONTENT_TYPE_WHITELIST
-
   API_AUTH_HEADERS
 );
 
@@ -292,13 +290,6 @@ use constant ERROR_UNKNOWN_FATAL     => -32000;
 use constant ERROR_UNKNOWN_TRANSIENT => 32000;
 
 use constant ERROR_GENERAL => 999;
-
-# The first content type specified is used as the default.
-use constant REST_CONTENT_TYPE_WHITELIST => qw(
-  application/json
-  application/javascript
-  text/javascript
-);
 
 # Custom HTTP headers that can be used for API authentication rather than
 # passing as URL parameters. This is useful if you do not want sensitive

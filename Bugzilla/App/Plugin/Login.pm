@@ -175,8 +175,8 @@ sub register {
         # Deprecated fallback for the legacy ?Bugzilla_api_key=<key> and
         # ?api_key=<key> query parameters, with the same precedence as the
         # legacy WebService dispatcher (header, then Bugzilla_api_key, then
-        # api_key; see Bugzilla::WebService::Util::fix_credentials). This is
-        # a deprecation-pending stopgap, not a first-class supported method.
+        # api_key, as its fix_credentials did). This is a deprecation-pending
+        # stopgap, not a first-class supported method.
         # Only the query string is read, not urlencoded/multipart body params,
         # to keep the reopened deprecated surface minimal.
         my $query_params = $c->req->query_params;

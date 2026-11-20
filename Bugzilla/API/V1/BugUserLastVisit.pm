@@ -120,10 +120,9 @@ sub _ids_from_request {
 
   my $path_id = $self->stash('id');
 
-  # Legacy REST layer (_retrieve_json_params in
-  # Bugzilla::WebService::Server::REST): for GET, the path id wins over any
-  # query-string ids. For POST, request-body/query-string params are merged
-  # in *after* the path-derived params, so they win instead.
+  # As in the legacy REST server (its _retrieve_json_params): for GET, the
+  # path id wins over any query-string ids. For POST, request-body/query-string
+  # params are merged in *after* the path-derived params, so they win instead.
   if (defined $path_id && $self->req->method ne 'POST') {
     return [$path_id];
   }

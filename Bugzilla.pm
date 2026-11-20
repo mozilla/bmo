@@ -514,9 +514,6 @@ sub usage_mode {
     elsif ($newval == USAGE_MODE_CMDLINE) {
       $class->error_mode(ERROR_MODE_DIE);
     }
-    elsif ($newval == USAGE_MODE_JSON) {
-      $class->error_mode(ERROR_MODE_JSON_RPC);
-    }
     elsif ($newval == USAGE_MODE_EMAIL) {
       $class->error_mode(ERROR_MODE_DIE);
     }

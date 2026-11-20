@@ -996,17 +996,5 @@ sub webservice_status_code_map {
   #$status_code_map->{51} = STATUS_BAD_REQUEST;
 }
 
-sub webservice_fix_credentials {
-  my ($self, $args) = @_;
-  my $rpc    = $args->{'rpc'};
-  my $params = $args->{'params'};
-
-  # Allow user to pass in username=foo&password=bar
-  if (exists $params->{'username'} && exists $params->{'password'}) {
-    $params->{'Bugzilla_login'}    = $params->{'username'};
-    $params->{'Bugzilla_password'} = $params->{'password'};
-  }
-}
-
 # This must be the last line of your extension.
 __PACKAGE__->NAME;
