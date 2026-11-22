@@ -75,14 +75,7 @@ sub register {
   }
 }
 
-# Virtual memory size of this process in kB, or undef if unavailable (non-Linux).
-#
-# This is the same total that Linux::Smaps::Tiny reports as {Size} (the sum of
-# every mapping's Size), but the kernel keeps it precomputed in VmSize, so this
-# reads a few dozen lines instead of parsing all of /proc/self/smaps (tens of
-# thousands of lines in a BMO worker) after every request. Linux::Smaps::Tiny
-# 0.10 also silently fell back to its pure-Perl parser: its XS loader runs in a
-# BEGIN block before $VERSION is set, so the version check always failed.
+# Virtual memory size in kB from VmSize, or undef if unavailable (non-Linux).
 sub vm_size_kb {
   open my $fh, '<', PROC_STATUS or return undef;
   my $size;

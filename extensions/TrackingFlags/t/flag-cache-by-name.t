@@ -94,6 +94,9 @@ subtest 'id lookups are unchanged' => sub {
   new_request(a => $a);
   is($FLAG->new(1),      exact_ref($a), 'cached by id');
   is(scalar @db_lookups, 0,             'no database lookups');
+  is($FLAG->new({id => 2, name => 'cf_status_firefox140'}),
+    undef, 'id wins over a cached name');
+  is(scalar @db_lookups, 1, 'id lookup went to the database');
 };
 
 subtest 'bug_check_can_change_field skips non-tracking fields' => sub {

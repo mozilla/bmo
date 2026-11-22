@@ -283,7 +283,7 @@ my %optional_features = (
     description => 'Linux::PID',
     prereqs     => {runtime => {requires => {'Linux::Pid' => 0},},},
   },
-  linux_smaps => {
+  rlimit => {
     description => 'BSD::Resource for limiting memory usage',
     prereqs     => {runtime => {requires => {'BSD::Resource' => 0}}},
   },

@@ -118,13 +118,15 @@ subsequent comments start with 1.</td>
 <tr>
 <td>text</td>
 <td>string</td>
-<td>The body of the comment, including any special text (such as "this bug was
-marked as a duplicate of...").</td>
+<td>The body of the comment as people read it, including any special text (such
+as "this bug was marked as a duplicate of..."). Extensions can hide part of the
+stored text here, such as the metadata at the top of Hackbot comments.</td>
 </tr>
 <tr>
 <td>raw_text</td>
 <td>string</td>
-<td>The body of the comment without any special additional text.</td>
+<td>The body of the comment as stored, without any special additional text.
+Unlike <code>text</code>, nothing is hidden from it.</td>
 </tr>
 <tr>
 <td>creator</td>

@@ -241,6 +241,8 @@ sub _validate {
     && ThrowUserError('tracking_flags_missing_mandatory', {fields => \@missing});
 
   $flag->{name} =~ /^cf_/ || ThrowUserError('tracking_flags_cf_prefix');
+  $flag->{name} =~ Bugzilla::Extension::TrackingFlags::Flag->NAME_REGEX
+    || ThrowUserError('field_invalid_name', {name => $flag->{name}});
 
   if ($flag->{id}) {
     my $old_flag
