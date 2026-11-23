@@ -45,7 +45,9 @@ Fetches activity for all flags of the type specified by its name.
 GET /rest/review/flag_activity
 ```
 
-Fetches activity for all flags.
+Fetches activity matching the `flag_ids`, `type_id`, `type_name`,
+`requestee`, `setter`, `bug_id` or `status` query parameters. At least one of
+them is required.
 
 There are also query parameters that can be used to further filter the
 response:
@@ -147,5 +149,5 @@ If a nonexistent but properly specified (i.e. integer value) flag or flag-type
 ID is given, a 200 OK response will be returned with an empty array. In other
 cases, different response codes may be returned:
 
-- 400 (Bad Request): An invalid flag or flag-type ID was given, or `offset` was
-  given without a value for `limit`.
+- 400 (Bad Request): An invalid flag or flag-type ID was given, `offset` was
+  given without a value for `limit`, or no search criteria were given.
