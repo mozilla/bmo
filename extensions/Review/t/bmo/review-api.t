@@ -139,6 +139,11 @@ SKIP: {
       . "?requestee=$login&include_fields=id,status" => \%auth)
     ->json_is('/0/status' => '?')
     ->json_hasnt('/0/type', 'by type name, include_fields as a list');
+  $t->get_ok("/rest/review/flag_activity/type_name/needinfo"
+      . "?requestee=$login&include_fields=id&include_fields=status" => \%auth)
+    ->json_has('/0/id')
+    ->json_has('/0/status')
+    ->json_hasnt('/0/type', 'include_fields repeated keeps every value');
 
   # A repeated bug_id or status matches any of the values.
   my ($bid, $pid) = ($bug->id, $private->id);

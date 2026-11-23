@@ -162,7 +162,9 @@ sub suggestions {
 # limit and offset. Only activity on bugs and attachments the user can see.
 sub flag_activity {
   my ($self) = @_;
-  my $params = $self->_params([qw(flag_ids bug_id status)], qw(flag_id type_name))
+  my $params
+    = $self->_params([qw(flag_ids bug_id status include_fields exclude_fields)],
+    qw(flag_id type_name))
     || return;
   if (defined(my $field = $self->stash('field'))) {
     $params->{$field} = $self->stash('value');
