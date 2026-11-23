@@ -109,12 +109,12 @@ sub initial_field_values {
 # GET /bug_modal/product_info?product=<name>
 sub product_info {
   my ($self) = @_;
-  my $params = $self->_params or return;
+  my $params = $self->_params(['product']) or return;
+  my $names  = $params->{product} || [];
   ThrowCodeError('params_required',
     {function => 'BugModal.components', params => ['product']})
-    if ref $params->{product};
-  my $product
-    = Bugzilla::Product->check({name => $params->{product}, cache => 1});
+    if @$names > 1;
+  my $product = Bugzilla::Product->check({name => $names->[0], cache => 1});
   $product = Bugzilla->user->can_enter_product($product, 1);
   my @components = map { {
     name             => $_->name,
@@ -300,16 +300,16 @@ sub _render_comment_html {
 # GET /bug_modal/new_product/<id>?product=<name>
 sub new_product {
   my ($self) = @_;
-  my $params = $self->_params or return;
+  my $params = $self->_params(['product']) or return;
   my $dbh    = Bugzilla->dbh;
   my $user   = Bugzilla->user;
   my $bug    = Bugzilla::Bug->check({id => $params->{id}});
+  my $names  = $params->{product} || [];
   ThrowCodeError('params_required',
     {function => 'BugModal.new_product', params => ['product']})
-    if ref $params->{product};
-  my $product
-    = Bugzilla::Product->check({name => $params->{product}, cache => 1});
-  my $true = $self->type('boolean', 1);
+    if @$names > 1;
+  my $product = Bugzilla::Product->check({name => $names->[0], cache => 1});
+  my $true    = $self->type('boolean', 1);
   my %result;
 
   # components
