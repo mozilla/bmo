@@ -23,6 +23,8 @@ use Test2::V0;
 use Test::Mojo;
 
 use Bugzilla::App::Controller::API;
+use Bugzilla::Constants;
+use Bugzilla::Error;
 
 # Bugzilla::API::V1 also holds helper modules that are not controllers, such
 # as Util. Loading the routes must skip them rather than warn at every startup.
@@ -37,5 +39,36 @@ is([grep {/^Bugzilla::API::/} @warnings],
 
 # The controllers next to it still get their routes.
 $t->get_ok('/rest/whoami')->status_is(401)->json_is('/code' => 410);
+
+# Any other path under /rest, or the old /rest.cgi, is an unknown resource,
+# with the JSON error rest.cgi returned.
+foreach my $test (
+  ['get_ok',  '/rest/no_such_resource', 'GET /no_such_resource'],
+  ['post_ok', '/rest/bug/1/no_such',    'POST /bug/1/no_such'],
+  ['get_ok',  '/rest',                  'GET /'],
+  ['put_ok',  '/rest.cgi/bug/1',        'PUT /bug/1'],
+  )
+{
+  my ($method, $url, $resource) = @$test;
+  $t->$method($url)
+    ->status_is(404)
+    ->header_is('Access-Control-Allow-Origin' => '*');
+  $t->json_is('/error' => 1)
+    ->json_is('/code' => 32614)
+    ->json_like('/message' => qr/\Q'$resource'\E/);
+}
+
+# An error thrown while a /rest route is still in USAGE_MODE_REST, before its
+# handler switches to USAGE_MODE_MOJO_REST, is rendered as JSON all the same.
+$t->app->routes->get(
+  '/_test/rest-mode-error' => sub {
+    Bugzilla->usage_mode(USAGE_MODE_REST);
+    ThrowUserError('login_required');
+  }
+);
+$t->get_ok('/_test/rest-mode-error')
+  ->status_is(401)
+  ->header_like('Content-Type' => qr{^application/json\b});
+$t->json_is('/error' => 1)->json_is('/code' => 410);
 
 done_testing;
