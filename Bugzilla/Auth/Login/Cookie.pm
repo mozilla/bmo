@@ -20,6 +20,7 @@ use Bugzilla::Token;
 use Bugzilla::Util;
 
 use List::Util qw(first);
+use Mojo::Util qw(secure_compare);
 
 use constant requires_persistence  => 0;
 use constant requires_verification => 0;
@@ -90,13 +91,14 @@ sub get_login_info {
     # we're going to verify against the db
     detaint_natural($user_id);
 
-    my $db_cookie = $dbh->selectrow_array(
+    my $cookie_hash = hash_login_cookie($login_cookie);
+    my $db_cookie   = $dbh->selectrow_array(
       'SELECT cookie FROM logincookies WHERE cookie = ? AND userid = ?',
-      undef, ($login_cookie, $user_id)
+      undef, ($cookie_hash, $user_id)
     );
 
     # If the cookie is valid, return a valid username.
-    if (defined $db_cookie && $login_cookie eq $db_cookie) {
+    if (defined $db_cookie && secure_compare($cookie_hash, $db_cookie)) {
 
       # forbid logging in with a cookie if only api-keys are allowed
       if (i_am_webservice() && !$is_internal) {
@@ -111,7 +113,7 @@ sub get_login_info {
       # time on the login cookie
       $dbh->do(
         "UPDATE logincookies SET lastused = NOW()
-                       WHERE cookie = ?", undef, $login_cookie
+                       WHERE cookie = ?", undef, $cookie_hash
       );
       return {user_id => $user_id};
     }
