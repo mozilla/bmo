@@ -88,9 +88,16 @@ Bugzilla->dbh->do(
   'UPDATE longdescs SET isprivate = 1 WHERE bug_id = ? AND bug_when = ?',
   undef, $bug->id, $latest);
 
-# A bug with two comments after its creation, to get the latest one.
-my $two = Bugzilla::Bug->create(
-  {%fields, comment => 'description', alias => "mydashboard-api-$$"});
+# A bug with two comments after its creation, to get the latest one. Not
+# assigned to the user, so it stays out of the assignedbugs query below, whose
+# first bug must be $bug.
+my $two = Bugzilla::Bug->create({
+  %fields,
+  assigned_to => $admin->login,
+  comment     => 'description',
+  alias       => "mydashboard-api-$$"
+});
+
 for my $n (1, 2) {
   my $when = datetime_from($two->creation_ts)->add(seconds => 2 * $n);
   my $obj  = Bugzilla::Bug->new($two->id);
@@ -99,7 +106,8 @@ for my $n (1, 2) {
 }
 
 # A bug whose last comment is plain text, not written in Markdown.
-my $plain = Bugzilla::Bug->create({%fields, comment => 'description'});
+my $plain = Bugzilla::Bug->create(
+  {%fields, assigned_to => $admin->login, comment => 'description'});
 $plain->add_comment('a *plain* comment', {is_markdown => 0});
 $plain->update(
   datetime_from($plain->creation_ts)->add(seconds => 2)->strftime('%Y-%m-%d %T'));
