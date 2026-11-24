@@ -473,12 +473,6 @@ sub get_bug_activity {
   }
 }
 
-sub webservice {
-  my ($self, $args) = @_;
-  my $dispatch = $args->{dispatch};
-  $dispatch->{EditComments} = "Bugzilla::Extension::EditComments::WebService";
-}
-
 sub db_sanitize {
   my $dbh = Bugzilla->dbh;
   print "Deleting edited comment histories...\n";
