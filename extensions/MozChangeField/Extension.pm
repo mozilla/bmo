@@ -20,6 +20,7 @@ use Bugzilla::Extension::MozChangeField::Pre::CanConfirm;
 use Bugzilla::Extension::MozChangeField::Pre::CommentClosedBugs;
 use Bugzilla::Extension::MozChangeField::Pre::CustomField;
 use Bugzilla::Extension::MozChangeField::Pre::Graveyard;
+use Bugzilla::Extension::MozChangeField::Pre::KeywordsCanconfirm;
 use Bugzilla::Extension::MozChangeField::Pre::Reopen;
 use Bugzilla::Extension::MozChangeField::Pre::TypePriSevEditbugs;
 
@@ -28,6 +29,7 @@ my @pre_instances = (
   Bugzilla::Extension::MozChangeField::Pre::CommentClosedBugs->new,
   Bugzilla::Extension::MozChangeField::Pre::CustomField->new,
   Bugzilla::Extension::MozChangeField::Pre::Graveyard->new,
+  Bugzilla::Extension::MozChangeField::Pre::KeywordsCanconfirm->new,
   Bugzilla::Extension::MozChangeField::Pre::Reopen->new,
   Bugzilla::Extension::MozChangeField::Pre::TypePriSevEditbugs->new,
 );
@@ -66,6 +68,34 @@ sub bug_check_can_change_field {
   }
 }
 
+# check_can_change_field() is only consulted when updating a bug, so the Pre
+# rules above never run when filing one. Pre modules that implement
+# sanitize_create() get a chance to reset field values the user isn't allowed
+# to set, before the bug is inserted. This covers every entry path (REST API,
+# post_bug.cgi, guided entry).
+#
+# Server-side code that files bugs on the user's behalf with values it chose
+# itself (never taken from user input) can skip this by wrapping the create:
+#
+#   local Bugzilla->request_cache->{mozchangefield_trusted_create} = 1;
+#
+# A plain string key is used so callers in other extensions need not depend on
+# this one. Never set it on paths where params come from the request.
+sub bug_end_of_create_validators {
+  my ($self, $args) = @_;
+
+  return if Bugzilla->request_cache->{mozchangefield_trusted_create};
+
+  # The bug doesn't exist yet, so take the product from the validated params.
+  my $perms = {params => $args->{params}};
+  _populate_permissions($perms, $args->{params}->{product_id});
+
+  foreach my $instance (@pre_instances) {
+    next if !$instance->can('sanitize_create');
+    $instance->sanitize_create($perms);
+  }
+}
+
 sub bug_update_before_logging {
   my ($self, $args) = @_;
 
@@ -89,13 +119,16 @@ sub bug_end_of_create {
 }
 
 sub _populate_permissions {
-  my ($args) = @_;
+  my ($args, $product_id) = @_;
   my $user = Bugzilla->user;
+  $product_id //= $args->{bug}->{'product_id'};
 
   # Some modules need these permissions to function so only look up once
-  $args->{canconfirm}
-    = $user->in_group('canconfirm', $args->{bug}->{'product_id'});
-  $args->{editbugs} = $user->in_group('editbugs', $args->{bug}->{'product_id'});
+  $args->{canconfirm} = $user->in_group('canconfirm', $product_id);
+  $args->{editbugs}   = $user->in_group('editbugs',   $product_id);
+
+  # can_triage is added to Bugzilla::User by the BMO extension.
+  $args->{can_triage} = $user->can('can_triage') && $user->can_triage;
 }
 
 __PACKAGE__->NAME;

@@ -1666,6 +1666,48 @@ sub visible_bugs {
   return [grep { $visible_cache->{blessed $_ ? $_->id : $_} } @$bugs];
 }
 
+# SQL equivalent of visible_bugs(), for filtering inside a query (e.g. before
+# a LIMIT) rather than afterwards. Keep the two in sync.
+sub visible_bugs_sql {
+  my ($self, $alias) = @_;
+  $alias ||= 'bugs';
+  my $user_id = $self->id;
+
+  # Public bugs, or bugs whose groups the user is all a member of.
+  my @terms = (
+    "NOT EXISTS (SELECT 1 FROM bug_group_map
+                  WHERE bug_group_map.bug_id = $alias.bug_id
+                    AND NOT ("
+      . $self->groups_in_sql('bug_group_map.group_id') . '))'
+  );
+
+  # Authenticated; users directly associated with the bug have visibility.
+  if ($user_id) {
+    push @terms,
+      "$alias.reporter_accessible = 1 AND $alias.reporter = $user_id",
+      "$alias.assigned_to = $user_id",
+      "$alias.cclist_accessible = 1
+       AND EXISTS (SELECT 1 FROM cc
+                    WHERE cc.bug_id = $alias.bug_id AND cc.who = $user_id)";
+    if (Bugzilla->params->{'useqacontact'}) {
+      push @terms, "$alias.qa_contact = $user_id";
+    }
+
+    # Triage owners can see all bugs in their component, but only if they are
+    # also a member of the mozilla-employee-confidential group.
+    if ($self->is_employee_confidential) {
+      push @terms,
+        "EXISTS (SELECT 1 FROM components
+                  WHERE components.id = $alias.component_id
+                    AND components.triage_owner_id = $user_id)";
+    }
+  }
+
+  # Like visible_bugs(), never treat unfinished bugs as visible.
+  return "($alias.creation_ts IS NOT NULL AND (("
+    . join(') OR (', @terms) . ')))';
+}
+
 sub clear_product_cache {
   my $self = shift;
   delete $self->{enterable_products};
@@ -3424,6 +3466,13 @@ at all.
 =item C<can_see_bug(bug_id)>
 
 Determines if the user can see the specified bug.
+
+=item C<visible_bugs_sql($alias)>
+
+Returns an SQL boolean expression that is true for rows of the C<bugs> table
+(aliased as C<$alias>, default C<bugs>) that the user can see. It applies the
+same rules as C<visible_bugs>, so callers can filter restricted bugs out
+before ranking or limiting results in SQL.
 
 =item C<can_see_product(product_name)>
 

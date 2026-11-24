@@ -280,7 +280,7 @@ This a JSON object whose keys are the named constants for the setrlimit(1) C lib
 function. The default sets RLIMIT_AS to 2GiB.
 EOT
   localconfig_size_limit => <<EOT,
-This is the max amount of unshared memory the worker processes are allowed to use before they will exit.
+This is the max virtual memory size (VmSize, in kB) the worker processes are allowed to use before they will exit.
 EOT
   localconfig_shadowdb_user => <<EOT,
 The username used to authenticate to the shadow db.

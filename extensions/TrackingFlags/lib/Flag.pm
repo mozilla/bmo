@@ -29,6 +29,10 @@ use Bugzilla::Extension::TrackingFlags::Flag::Visibility;
 
 use constant DB_TABLE => 'tracking_flags';
 
+# Names are interpolated into SQL as identifiers by Bugzilla::Search, so
+# apply the same restriction as core custom fields.
+use constant NAME_REGEX => qr/^cf_\w+$/a;
+
 use constant DB_COLUMNS => qw(
   id
   field_id
@@ -85,7 +89,45 @@ sub new {
     return $cache->{'tracking_flags'}->{$param};
   }
 
+  # Lookups by name: reuse a flag already loaded in this request (get_all
+  # loads all of them) instead of running a query for every lookup.
+  if ( ref $param eq 'HASH'
+    && defined $param->{name}
+    && !defined $param->{id}
+    && !exists $param->{condition}
+    && exists $cache->{'tracking_flags'})
+  {
+    my $flag = _cached_flag_by_name($cache, $param->{name});
+    return $flag if $flag;
+  }
+
   return $class->SUPER::new($param);
+}
+
+# Returns the flag named $name from the request cache, or undef if it is not
+# there. The cache can be partial, so callers must fall back to the database.
+sub _cached_flag_by_name {
+  my ($cache, $name) = @_;
+  my $flags = $cache->{'tracking_flags'};
+  my $index = $cache->{'tracking_flags_by_name'};
+
+  # Rebuild the name index if the cache was replaced or flags were added or
+  # removed since it was built.
+  if (!$index || $index->{flags} != $flags || $index->{count} != keys %$flags) {
+    $index = $cache->{'tracking_flags_by_name'} = {
+      flags   => $flags,
+      count   => scalar keys %$flags,
+      by_name => {map { lc($_->name) => $_ } values %$flags},
+    };
+  }
+
+  my $flag = $index->{by_name}{lc $name} // return undef;
+
+  # update() and remove_from_db() change the cache in place, so only trust the
+  # index if the flag is still cached under its id and still has this name.
+  my $current = $flags->{$flag->flag_id} // return undef;
+  return undef unless $current == $flag && lc($flag->name) eq lc($name);
+  return $flag;
 }
 
 sub new_from_hash {
@@ -352,6 +394,8 @@ sub _check_name {
   my ($invocant, $name) = @_;
   $name = trim($name);
   $name || ThrowCodeError('param_required', {param => 'name'});
+
+  $name =~ NAME_REGEX || ThrowUserError('field_invalid_name', {name => $name});
   return $name;
 }
 
