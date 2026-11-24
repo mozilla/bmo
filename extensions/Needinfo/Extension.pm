@@ -16,6 +16,7 @@ use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Flag;
 use Bugzilla::FlagType;
+use Bugzilla::Group;
 use Bugzilla::Logging;
 use Bugzilla::User;
 use Bugzilla::User::Setting;
@@ -26,6 +27,11 @@ our $VERSION = '0.01';
 
 use constant MAX_MENTIONS => 10;
 
+# block_needinfo values that only accept needinfo requests from members of a
+# group (directly or through a group nested in it), keyed to that group.
+use constant NEEDINFO_ALLOWED_GROUPS =>
+  {editbugs => 'editbugs', hackbot_needinfo => 'hackbot_needinfo_allowed'};
+
 BEGIN {
   *Bugzilla::User::needinfo_blocked = \&_user_needinfo_blocked;
 }
@@ -35,12 +41,12 @@ sub _user_needinfo_blocked {
   my $setting = $requestee->settings->{block_needinfo} or return 0;
 
   return 1 if $setting->{value} eq 'on';
-  return 0 unless $setting->{value} eq 'editbugs';
+  my $group = NEEDINFO_ALLOWED_GROUPS->{$setting->{value}} or return 0;
 
   # Never block someone from needinfo'ing themselves.
   return 0 if Bugzilla->user->id == $requestee->id;
 
-  return Bugzilla->user->in_group('editbugs') ? 0 : 1;
+  return Bugzilla->user->in_group($group) ? 0 : 1;
 }
 
 sub install_update_db {
@@ -74,17 +80,37 @@ sub install_update_db {
   });
 }
 
+# Users who set block_needinfo to 'hackbot_needinfo' only accept needinfo
+# requests from members of this group. Admins add groups (such as
+# mozilla-employee-confidential) to it rather than individual users.
+# Called from install_before_final_checks rather than install_update_db:
+# other extensions (e.g. SecureMail) add group columns in their own
+# install_update_db, and Group->create needs those on a fresh database.
+sub _create_hackbot_needinfo_group {
+  my $name = NEEDINFO_ALLOWED_GROUPS->{hackbot_needinfo};
+  return if Bugzilla::Group->new({name => $name});
+
+  print "Creating $name group ...\n";
+  Bugzilla::Group->create({
+    name        => $name,
+    description => 'Users who may needinfo people that only accept '
+      . 'needinfo requests from hackbot-permitted users',
+    isbuggroup => 0,
+  });
+}
+
 sub install_before_final_checks {
   my ($self, $args) = @_;
+  _create_hackbot_needinfo_group();
   add_setting({
     name        => 'block_needinfo',
-    options     => ['on', 'editbugs', 'off'],
+    options     => ['on', 'editbugs', 'hackbot_needinfo', 'off'],
     default     => 'off',
     category    => 'Reviews and Needinfo',
 
-    # The setting predates the 'editbugs' option, so force add_setting to
-    # rebuild it. remove_setting only drops user choices outside the new
-    # option list, so existing 'on'/'off' preferences survive.
+    # The setting predates the 'editbugs' and 'hackbot_needinfo' options, so
+    # force add_setting to rebuild it. remove_setting only drops user choices
+    # outside the new option list, so existing preferences survive.
     force_check => 1,
   });
 }
@@ -662,11 +688,12 @@ sub _check_requestee {
     : Bugzilla::User->new({name => $requestee, cache => 1});
   return unless $user->needinfo_blocked;
 
-  my $blocked_editbugs
-    = $user->settings->{block_needinfo}->{value} eq 'editbugs';
-  ThrowUserError(
-    $blocked_editbugs ? 'needinfo_blocked_editbugs' : 'needinfo_blocked',
-    {requestee => $user});
+  my %errors = (
+    editbugs         => 'needinfo_blocked_editbugs',
+    hackbot_needinfo => 'needinfo_blocked_hackbot',
+  );
+  my $value = $user->settings->{block_needinfo}->{value};
+  ThrowUserError($errors{$value} // 'needinfo_blocked', {requestee => $user});
 }
 
 sub config_add_panels {
