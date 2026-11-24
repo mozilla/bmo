@@ -203,8 +203,13 @@ sub quoteUrls {
               ~egox;
 
   # non-mailto protocols
+  # Skip http(s) and ftp URLs without "//" after the scheme (e.g. a mistyped
+  # "https:/example.com/" or "https:example.com/"). Browsers resolve such
+  # hrefs as relative paths on the current site, producing a broken link, so
+  # leave them as text.
   my $safe_protocols = SAFE_URL_REGEXP();
-  $text =~ s~\b($safe_protocols)
+  my $relative_url   = qr{(?:https?|ftp):(?!//)}i;
+  $text =~ s~\b(?!$relative_url)($safe_protocols)
               ~($tmp = html_quote($1)) &&
                ($things[$count++]
                 = "<a target=\"_blank\" rel=\"nofollow noreferrer\" href=\"$tmp\">$tmp</a>") &&
