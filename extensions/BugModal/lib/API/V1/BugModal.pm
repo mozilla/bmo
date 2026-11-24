@@ -82,9 +82,9 @@ sub _params {
   Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
   $self->bugzilla->login;
 
-  my ($params, $error) = merge_request_params($self, $lists);
+  my ($params, $error, $vars) = merge_request_params($self, $lists);
   if ($error) {
-    $self->user_error($error);
+    $self->user_error($error, $vars);
     return;
   }
   $params->{id} = $self->stash('id')

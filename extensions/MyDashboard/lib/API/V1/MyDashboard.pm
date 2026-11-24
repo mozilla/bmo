@@ -57,9 +57,9 @@ sub _login {
     $self->user_error('login_required');
     return;
   }
-  my ($params, $error) = merge_request_params($self, $lists);
+  my ($params, $error, $vars) = merge_request_params($self, $lists);
   if ($error) {
-    $self->user_error($error);
+    $self->user_error($error, $vars);
     return;
   }
   return ($user, $params);

@@ -64,8 +64,8 @@ sub add {
   my ($self) = @_;
   my $user = $self->_login || return;
 
-  my ($params, $error) = merge_request_params($self, ['component']);
-  return $self->user_error($error) if $error;
+  my ($params, $error, $vars) = merge_request_params($self, ['component']);
+  return $self->user_error($error, $vars) if $error;
   my $result;
 
   # load product and verify access

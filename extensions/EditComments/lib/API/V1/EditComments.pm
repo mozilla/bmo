@@ -40,9 +40,9 @@ sub setup_routes {
 
 # Request params, with the comment ID from the path if there is one.
 sub _params {
-  my ($self,   $lists) = @_;
-  my ($params, $error) = merge_request_params($self, $lists);
-  return (undef, $error) if $error;
+  my ($self, $lists) = @_;
+  my ($params, $error, $vars) = merge_request_params($self, $lists);
+  return (undef, $error, $vars) if $error;
   if (defined(my $id = $self->stash('comment_id'))) {
     $params->{comment_id}  = $id;
     $params->{comment_ids} = [$id] if $lists;
@@ -60,8 +60,8 @@ sub comments {
   my $user = $self->bugzilla->login;
   Bugzilla->switch_to_shadow_db();
 
-  my ($params, $error) = $self->_params(['comment_ids']);
-  return $self->user_error($error) if $error;
+  my ($params, $error, $vars) = $self->_params(['comment_ids']);
+  return $self->user_error($error, $vars) if $error;
 
   if (!@{$params->{comment_ids} || []}) {
     ThrowCodeError('param_required',
@@ -107,8 +107,8 @@ sub update_comment {
   my $user = $self->bugzilla->login;
   $user->id || return $self->user_error('login_required');
 
-  my ($params, $error) = $self->_params;
-  return $self->user_error($error) if $error;
+  my ($params, $error, $vars) = $self->_params;
+  return $self->user_error($error, $vars) if $error;
   if ($error = coerce_booleans($params, 'is_hidden')) {
     return $self->user_error('invalid_params', {type_error => $error});
   }

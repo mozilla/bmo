@@ -14,7 +14,6 @@ use warnings;
 use Mojo::JSON qw(decode_json true false);
 
 use Bugzilla;
-use Bugzilla::Constants qw(USAGE_MODE_MOJO_REST);
 use Bugzilla::Error;
 use Bugzilla::Logging;
 use Bugzilla::Util qw(datetime_from email_filter truncate_string);
@@ -336,8 +335,7 @@ sub merge_request_params {
     my $value = $params->{$name} // next;
     $value = $params->{$name} = [$value] if !ref $value;
     next if ref $value eq 'ARRAY' && !grep {ref} @$value;
-    Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
-    ThrowUserError('invalid_params',
+    return (undef, 'invalid_params',
       {type_error => "$name must be a value or a list of values"});
   }
 
@@ -669,9 +667,9 @@ by both "ids" and "names". Returns an arrayref of objects.
 
 =head2 merge_request_params
 
-Takes a Mojolicious controller and returns a two-element list
-C<($params, $error)>, merging its query string/form-body params with a
-decoded JSON request body, if any. Query-string/form-body values win on a
+Takes a Mojolicious controller and returns C<($params, $error, $vars)>,
+merging its query string/form-body params with a decoded JSON request body,
+if any. Query-string/form-body values win on a
 key collision. For use by native Mojo REST controllers that need to accept
 parameters from either the query string or a JSON body on non-GET
 requests.
@@ -682,9 +680,15 @@ as arrayrefs, however many times they appear in the request; every other
 parameter is always returned as a scalar. Declaring them is required because
 a parameter's type must not depend on the number of occurrences sent.
 
-If the request has a non-empty body that fails to decode as JSON, C<$params>
-is C<undef> and C<$error> is set to C<rest_malformed_json>; callers should
-pass it to C<user_error>. Otherwise C<$error> is C<undef>.
+A list parameter sent as a single value in a JSON body is wrapped into a list
+of one. One sent as anything else that is not a list of plain values, such as
+a hash or a nested list, is refused.
+
+On an error, C<$params> is C<undef>, C<$error> is the error and a third
+element holds its variables; callers should pass both to C<user_error>.
+C<$error> is C<rest_malformed_json> if the request has a non-empty body that
+fails to decode as JSON, and C<invalid_params> if a list parameter is refused.
+Otherwise C<$error> is C<undef>.
 
 =head2 strip_request_params
 
