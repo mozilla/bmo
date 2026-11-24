@@ -23,6 +23,7 @@ use Bugzilla;
 BEGIN { Bugzilla->extensions }
 use Bugzilla::Constants;
 use Bugzilla::Bug;
+use Bugzilla::Config qw(SetParam write_params);
 use Bugzilla::Group;
 use Bugzilla::Product;
 use Bugzilla::User;
@@ -86,6 +87,30 @@ $fresh->update($latest);
 Bugzilla->dbh->do(
   'UPDATE longdescs SET isprivate = 1 WHERE bug_id = ? AND bug_when = ?',
   undef, $bug->id, $latest);
+
+# A bug with two comments after its creation, to get the latest one. Not
+# assigned to the user, so it stays out of the assignedbugs query below, whose
+# first bug must be $bug.
+my $two = Bugzilla::Bug->create({
+  %fields,
+  assigned_to => $admin->login,
+  comment     => 'description',
+  alias       => "mydashboard-api-$$"
+});
+
+for my $n (1, 2) {
+  my $when = datetime_from($two->creation_ts)->add(seconds => 2 * $n);
+  my $obj  = Bugzilla::Bug->new($two->id);
+  $obj->add_comment("comment number $n");
+  $obj->update($when->strftime('%Y-%m-%d %T'));
+}
+
+# A bug whose last comment is plain text, not written in Markdown.
+my $plain = Bugzilla::Bug->create(
+  {%fields, assigned_to => $admin->login, comment => 'description'});
+$plain->add_comment('a *plain* comment', {is_markdown => 0});
+$plain->update(
+  datetime_from($plain->creation_ts)->add(seconds => 2)->strftime('%Y-%m-%d %T'));
 
 # A bug in a group the user isn't in, not assigned to them.
 my $group = Bugzilla::Group->create({
@@ -152,6 +177,43 @@ $t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>
   ->json_like('/results/0/last_changes/comment_html' => qr/a newer comment/)
   ->json_is('/results/0/last_changes/email' => $admin->login)
   ->json_has('/results/0/last_changes/when');
+$t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>
+    {bug_id => $two->id, changeddate_api => $two->creation_ts})
+  ->status_is(200)
+  ->json_like(
+  '/results/0/last_changes/comment_html' => qr/comment number 2/,
+  'the latest comment, not the first one after the date'
+  );
+$t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>
+    {bug_id => "mydashboard-api-$$", changeddate_api => $two->creation_ts})
+  ->status_is(200)
+  ->json_like(
+  '/results/0/last_changes/comment_html' => qr/comment number 2/,
+  'a bug alias finds the comment too'
+  );
+
+# Markdown is only used for comments written in Markdown. The app reads params
+# from the database, so set it there, and put it back afterwards. Only once it
+# was read, as END also runs when the test skips or dies before that.
+my $use_markdown = Bugzilla->params->{use_markdown};
+
+END {
+  if (defined $use_markdown) {
+    SetParam('use_markdown', $use_markdown);
+    write_params();
+  }
+}
+
+SetParam('use_markdown', 1);
+write_params();
+$t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>
+    {bug_id => $plain->id, changeddate_api => $plain->creation_ts})
+  ->status_is(200)
+  ->json_like(
+  '/results/0/last_changes/comment_html' => qr/a \*plain\* comment/,
+  'a plain text comment is not rendered as Markdown'
+  );
+
 $t->get_ok('/rest/mydashboard/run_last_changes?bug_id=999999999' => \%auth)
   ->json_is('/error' => 1, 'unknown bug');
 $t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>

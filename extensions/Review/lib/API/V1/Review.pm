@@ -215,6 +215,9 @@ sub flag_activity {
     }
   }
 
+  # Refuse a search on the date range alone, which returns the whole table.
+  ThrowUserError('flag_activity_parameters_required') if !%match_criteria;
+
   ThrowCodeError('param_required',
     {param => 'limit', function => 'Review.flag_activity()'})
     if defined $params->{offset} && !defined $params->{limit};
@@ -250,11 +253,6 @@ sub flag_activity {
   $match_criteria{OFFSET} = $offset if defined $offset;
   $match_criteria{WHERE}
     = {'date(flag_when) BETWEEN ? AND ?' => [$after, $before]};
-
- # Throw error if no other parameters have been passed other than limit and offset
-  if (!grep(!/^(LIMIT|OFFSET)$/, keys %match_criteria)) {
-    ThrowUserError('flag_activity_parameters_required');
-  }
 
   my $matches = Bugzilla::FlagActivity->match(\%match_criteria);
   my $user    = Bugzilla->user;

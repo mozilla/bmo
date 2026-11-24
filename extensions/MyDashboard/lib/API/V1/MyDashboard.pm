@@ -82,7 +82,7 @@ sub run_last_changes {
   if (!$user->is_insider) {
     $last_comment_sql .= " AND isprivate = 0";
   }
-  $last_comment_sql .= " LIMIT 1";
+  $last_comment_sql .= " ORDER BY bug_when DESC, comment_id DESC LIMIT 1";
   my $last_comment_sth = $dbh->prepare($last_comment_sql);
 
   my $last_changes = {};
@@ -102,8 +102,7 @@ sub run_last_changes {
     $datetime->set_time_zone($user->timezone);
     $last_changes->{when} = $datetime->strftime('%Y-%m-%d %T %Z');
   }
-  my $last_comment_id
-    = $dbh->selectrow_array($last_comment_sth, undef, $params->{bug_id},
+  my $last_comment_id = $dbh->selectrow_array($last_comment_sth, undef, $bug->id,
     $params->{changeddate_api});
   if ($last_comment_id) {
 
@@ -111,7 +110,7 @@ sub run_last_changes {
     my $comment = Bugzilla::Comment->new($last_comment_id);
     my $text    = $comment->body_full;
     my $html
-      = Bugzilla->params->{use_markdown}
+      = $comment->is_markdown && Bugzilla->params->{use_markdown}
       ? Bugzilla->markdown->render_html($text, $bug)
       : Bugzilla::Template::quoteUrls($text, $bug);
     $last_changes->{comment_html} = $html;
