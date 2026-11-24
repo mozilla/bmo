@@ -365,6 +365,51 @@ foreach my $later_first (0, 1) {
   );
 }
 
+# Bug 2097284: SecureMail finds the bug from its header, not from a leading
+# flag name holding brackets and digits, so a secure bug's mail is secured
+# and its rewritten subject keeps the '[Bug N]' token.
+{
+  my $reader = create_user('flagmail-securereader@mozilla.example', '*');
+  my $group  = group_with('flagmail-securemail', $reader);
+  $dbh->do('UPDATE `groups` SET secure_mail = 1 WHERE id = ?', undef, $group->id);
+  Bugzilla->memcached->clear({table => 'groups', id => $group->id});
+
+  my $public = new_bug();
+  my $secure = new_bug();
+  $dbh->do('INSERT INTO bug_group_map (bug_id, group_id) VALUES (?, ?)',
+    undef, $secure->id, $group->id);
+  my $id = $secure->id;
+
+  # The flag name holds the public bug's ID, then the secure bug's own.
+  foreach my $flag_id ($public->id, $id) {
+    my $mail = Email::MIME->create(
+      header_str => [
+        To              => $reader->email,
+        Subject         => "flagmail[esr$flag_id] requested: [Bug $id] Flag mail test",
+        'X-Bugzilla-ID' => $id,
+        'X-Bugzilla-Status'    => 'NEW',
+        'X-Bugzilla-Type'      => 'changed',
+        'X-Bugzilla-Product'   => 'Firefox',
+        'X-Bugzilla-Component' => 'General',
+      ],
+      attributes => {
+        content_type => 'text/plain',
+        charset      => 'UTF-8',
+        encoding     => 'quoted-printable',
+      },
+      body_str => "Flag mail test\015\012",
+    );
+    Bugzilla::Extension::SecureMail->mailer_before_send({email => $mail});
+    is($mail->header('X-Bugzilla-Secure-Email'),
+      'Yes', "flag name holding bug $flag_id: the secure bug's mail is secured");
+    is(
+      $mail->header('Subject'),
+      "flagmail[esr$flag_id] requested: [Bug $id]"
+        . " (Secure bug $id in Firefox :: General)",
+      "flag name holding bug $flag_id: the subject keeps the bug token"
+    );
+  }
+}
 # Send: cancelling your own request doesn't mail you.
 {
   my $bug     = new_bug();
