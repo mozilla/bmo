@@ -157,14 +157,16 @@ SKIP: {
 }
 $t->get_ok('/rest/review/flag_activity/requestee/nobody-here@bmo.tld')
   ->json_is('/error' => 1, 'unknown requestee');
-$t->get_ok('/rest/review/flag_activity/requestee/')->json_like(
+$t->get_ok('/rest/review/flag_activity/requestee/')->status_is(400)->json_like(
   '/message' => qr/without any search terms/,
-  'an empty requestee is ignored, not a 404'
+  'an empty requestee alone is refused'
 );
-$t->get_ok('/rest/review/flag_activity?limit=5&after=2000-01-01')->json_like(
+$t->get_ok('/rest/review/flag_activity?limit=5&after=2000-01-01')
+  ->status_is(400)
+  ->json_like(
   '/message' => qr/without any search terms/,
   'limit and a date range alone are refused'
-);
+  );
 $t->get_ok('/rest/review/flag_activity?bug_id=1&offset=5')
   ->json_is('/error' => 1, 'offset needs a limit');
 
