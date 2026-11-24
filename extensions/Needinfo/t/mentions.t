@@ -354,8 +354,43 @@ is($render->({text => '@alice', id => 1, include_mentions => 1})->{mentions},
 $params{needinfo_mentions_enabled} = 1;
 
 # The live mention warning (POST /rest/needinfo/mentions) tells needinfo from
-# CC-only mentions.
-my $effects = \&Bugzilla::Extension::Needinfo::mention_effects;
+# CC-only mentions. Most tests only look at who would be notified.
+my $all_effects = \&Bugzilla::Extension::Needinfo::mention_effects;
+my $effects     = sub { $all_effects->(@_)->{mentions} };
+
+# Users who can't see the bug are listed separately, so the commenter knows
+# the mention won't reach them (bug 2085143).
+is(
+  $all_effects->({thetext => '@alice @hidden @me'}, {bug => FakeBug->new('')}),
+  {
+    mentions  => [{nick => 'alice',  name => 'Alice', needinfo => 1}],
+    no_access => [{nick => 'hidden', name => 'Hidden'}],
+  },
+  'warning: users who cannot see the bug are listed as no_access'
+);
+is(
+  $all_effects->(
+    {thetext => '@hidden', isprivate => 1},
+    {bug     => FakeBug->new('')}
+  )->{no_access},
+  [],
+  'warning: no_access skips users a private comment could not reach anyway'
+);
+$users{hidden}{insider} = 1;
+is(
+  $all_effects->(
+    {thetext => '@hidden', isprivate => 1},
+    {bug     => FakeBug->new('')}
+  )->{no_access},
+  [{nick => 'hidden', name => 'Hidden'}],
+  '... but lists insiders'
+);
+delete $users{hidden}{insider};
+is(
+  $all_effects->({thetext => '@hidden'}, {product => FakeProduct->new}),
+  {mentions => [], no_access => []},
+  'warning: new bug lists nobody, including no_access'
+);
 
 $preview_bug = FakeBug->new('');
 push @{$preview_bug->{type}{flags}},
@@ -466,7 +501,9 @@ is($effects->({thetext => '@alice'}, {product => FakeProduct->new}),
 # The prediction for the initial comment of a bug being filed, ready for when
 # it does: there is no bug to check visibility against, so the product and
 # the new bug's groups are used.
-my $new_bug_effects = \&Bugzilla::Extension::Needinfo::new_bug_mention_effects;
+my $all_new_bug_effects
+  = \&Bugzilla::Extension::Needinfo::new_bug_mention_effects;
+my $new_bug_effects = sub { $all_new_bug_effects->(@_)->{mentions} };
 my $needinfo_types  = [bless({multiplicable => 1}, 'FakeType')];
 my %type_criteria;
 my $mock_flagtype = mock 'Bugzilla::FlagType' => (
@@ -492,6 +529,12 @@ is(
   $new_bug_effects->({thetext => '@alice @bob'}, {product => $product}),
   [{nick => 'bob', name => 'Bob', needinfo => 1}],
   'new bug: users who cannot see the product are skipped'
+);
+is(
+  $all_new_bug_effects->({thetext => '@alice'}, {product => $product})
+    ->{no_access},
+  [{nick => 'alice', name => 'Alice'}],
+  '... and listed as no_access'
 );
 delete $users{alice}{sees_product};
 
@@ -557,8 +600,11 @@ $params{needinfo_mentions_enabled} = 1;
 $commenter->{editbugs} = 0;
 is($new_bug_effects->({thetext => '@alice'}, {product => $product}),
   [], 'new bug: nobody for commenters without editbugs');
-is($effects->({thetext => '@alice'}, {bug => FakeBug->new('')}),
-  [], 'warning: nobody for commenters without editbugs');
+is(
+  $all_effects->({thetext => '@alice @hidden'}, {bug => FakeBug->new('')}),
+  {mentions => [], no_access => []},
+  'warning: nobody for commenters without editbugs, including no_access'
+);
 
 @looked_up = ();
 $bug = FakeBug->new('@alice');
