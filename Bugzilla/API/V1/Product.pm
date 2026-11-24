@@ -73,8 +73,8 @@ sub get {
   my $user = $self->bugzilla->login;
 
   my @list_params = qw(ids names type include_fields exclude_fields);
-  my ($params, $error) = merge_request_params($self, \@list_params);
-  return $self->user_error($error) if $error;
+  my ($params, $error, $vars) = merge_request_params($self, \@list_params);
+  return $self->user_error($error, $vars) if $error;
 
   # A JSON body is merged in as-is, so a single value there is not yet a list;
   # legacy validate() coerced it the same way.

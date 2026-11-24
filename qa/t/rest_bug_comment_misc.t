@@ -98,6 +98,12 @@ $t->put_ok($url . "rest/bug/comment/$first/tags?add=$query_tag" => $headers)
   ->status_is(200);
 ok((grep { $_ eq $query_tag } @{$t->tx->res->json}),
   'add from the query string is applied');
+# A hash is not a list of tags.
+$t->put_ok($url
+    . "rest/bug/comment/$first/tags" => $headers => json =>
+    {add => {tag => $tag}})
+  ->status_is(400)
+  ->json_like('/message' => qr/add must be a value or a list of values/);
 
 $t->get_ok($url . 'rest/bug/comment/tags/' . substr($tag, 0, 8) => $headers)
   ->status_is(200);

@@ -17,60 +17,25 @@ BEGIN {
 }
 
 use Test::More;
+use Test::Mojo;
 
 use Bugzilla;
+BEGIN { Bugzilla->extensions }
 use Bugzilla::Constants;
 use Bugzilla::Bug;
 use Bugzilla::Component;
 use Bugzilla::Group;
 use Bugzilla::Product;
 use Bugzilla::User;
+use Bugzilla::Test::Util qw(issue_api_key);
 
-# Load Bugzilla::Extension to install the INC_HOOK that maps
-# Bugzilla::Extension::NAME::* to extensions/NAME/lib/*.
-use_ok('Bugzilla::Extension');
-
-# The INC_HOOK maps Bugzilla::Extension::InvalidBugHelper::* to
-# extensions/InvalidBugHelper/lib/*.
-use_ok('Bugzilla::Extension::InvalidBugHelper::WebService');
 use_ok('Bugzilla::Extension::InvalidBugHelper::Config');
-
-# Verify rest_resources returns the expected REST route.
-my $resources = Bugzilla::Extension::InvalidBugHelper::WebService->rest_resources;
-ok(ref $resources eq 'ARRAY', 'rest_resources returns an arrayref');
-ok(scalar(@$resources) == 2, 'rest_resources has two elements (pattern + handler)');
-
-my ($pattern, $handlers) = @$resources;
-ok(ref $pattern eq 'Regexp', 'first element is a regex');
-ok(exists $handlers->{POST}, 'handler defines a POST method');
-ok($handlers->{POST}{method} eq 'close_as_invalid',
-  'POST handler maps to close_as_invalid');
-
-# Verify the route regex matches valid bug IDs and rejects invalid ones.
-ok('/invalid_bug_helper/close/123' =~ $pattern, 'route matches numeric bug id');
-ok('/invalid_bug_helper/close/0' =~ $pattern,   'route matches bug id 0');
-ok('/invalid_bug_helper/close/abc' !~ $pattern,  'route rejects non-numeric id');
-ok('/invalid_bug_helper/close/' !~ $pattern,     'route rejects missing id');
-
-# Verify the params sub extracts bug_id from the capture group.
-my $params_sub = $handlers->{POST}{params};
-is(ref $params_sub, 'CODE', 'params is a code ref');
-is_deeply($params_sub->(42), {bug_id => 42}, 'params sub extracts bug_id');
-
-# Verify PUBLIC_METHODS includes close_as_invalid.
-my @public = Bugzilla::Extension::InvalidBugHelper::WebService->PUBLIC_METHODS;
-ok(grep({ $_ eq 'close_as_invalid' } @public),
-  'close_as_invalid is in PUBLIC_METHODS');
 
 # Verify Config returns the expected params.
 my @params = Bugzilla::Extension::InvalidBugHelper::Config->get_param_list;
 my %param_names = map { $_->{name} => 1 } @params;
 ok($param_names{invalidbughelper_warning_text}, 'warning_text param defined');
 
-# Verify close_as_invalid refuses to act on bugs reported by an editbugs
-# member, regardless of who is performing the close (Bug 1684509).
-
-BEGIN { Bugzilla->extensions }
 Bugzilla->usage_mode(USAGE_MODE_TEST);
 Bugzilla->error_mode(ERROR_MODE_DIE);
 
@@ -100,7 +65,7 @@ sub make_reporter {
 }
 
 sub make_bug_as {
-  my ($reporter) = @_;
+  my ($reporter, %extra) = @_;
   Bugzilla->set_user($reporter);
   return Bugzilla::Bug->create({
     short_desc   => 'Invalid bug helper reporter test ' . $$,
@@ -111,6 +76,7 @@ sub make_bug_as {
     op_sys       => 'Unspecified',
     rep_platform => 'Unspecified',
     version      => $product->versions->[0]->name,
+    %extra,
   });
 }
 
@@ -122,19 +88,86 @@ my $bug_from_plain_reporter    = make_bug_as($plain_reporter);
 
 Bugzilla->set_user($admin);
 
-my $ws = 'Bugzilla::Extension::InvalidBugHelper::WebService';
+# POST /rest/invalid_bug_helper/close/<id> is a native Mojo route.
+my $api_key = issue_api_key($admin->login)->api_key;
+my %auth    = ('X-Bugzilla-API-Key' => $api_key);
+my $t       = Test::Mojo->new('Bugzilla::App');
 
-eval { $ws->close_as_invalid({bug_id => $bug_from_editbugs_reporter->id}) };
-like($@, qr/reported by a member of the 'editbugs' group/,
-  'close_as_invalid refuses a bug reported by an editbugs member');
+my $close_url = '/rest/invalid_bug_helper/close/';
 
-# The real return-value serialization (->type) is only provided by the
-# JSON-RPC/REST server at dispatch time; stub it here so we can exercise
-# close_as_invalid's business logic directly.
-no strict 'refs';
-no warnings 'redefine';
-local *{"${ws}::type"} = sub { return $_[2] };
-use strict 'refs';
+$t->post_ok($close_url . $bug_from_plain_reporter->id)
+  ->status_is(401)
+  ->json_is('/code' => 410, 'anonymous request needs a login');
+
+$t->post_ok($close_url
+    . $bug_from_plain_reporter->id => \%auth => json => {mark_as_spam => 'maybe'})
+  ->status_is(400)
+  ->json_like(
+  '/message' => qr/mark_as_spam must be true or false/,
+  'mark_as_spam must be a boolean'
+  );
+
+$t->post_ok($close_url . $bug_from_editbugs_reporter->id => \%auth)
+  ->status_isnt(200)
+  ->json_like(
+  '/message' => qr/reported by a member of the 'editbugs' group/,
+  'refuses a bug reported by an editbugs member (bug 1684509)'
+  );
+
+# A caller without editbugs is refused.
+my %plain_auth
+  = ('X-Bugzilla-API-Key' => issue_api_key($plain_reporter->login)->api_key);
+$t->post_ok($close_url . $bug_from_plain_reporter->id => \%plain_auth)
+  ->status_isnt(200)
+  ->json_like(
+  '/message' => qr/aren't a member of the 'editbugs' group/,
+  'refuses a caller who is not in editbugs'
+  );
+
+# A bug in a group that is mandatory for its product is refused to an editbugs
+# member outside that group, even when they can see the bug (as a CC). The admin
+# can't be that caller: new groups make the admin group a member of them.
+{
+  # Drop the last request's controller, gone with its transaction.
+  Bugzilla->clear_request_cache;
+  Bugzilla->set_user($admin);
+  my $group = Bugzilla::Group->create({
+    name        => "invalid-bug-helper-$$",
+    description => 'InvalidBugHelper test',
+    isbuggroup  => 1,
+  });
+  my $secure = make_bug_as(
+    $plain_reporter,
+    cc                => [$editbugs_reporter->login],
+    cclist_accessible => 1
+  );
+  $dbh->do('INSERT INTO bug_group_map (bug_id, group_id) VALUES (?, ?)',
+    undef, $secure->id, $group->id);
+
+  # Mandatory only for this request, so other tests can still file bugs here.
+  $dbh->do(
+    'INSERT INTO group_control_map
+       (group_id, product_id, entry, membercontrol, othercontrol, canedit)
+     VALUES (?, ?, 0, ?, ?, 0)', undef, $group->id, $product->id,
+    CONTROLMAPMANDATORY, CONTROLMAPMANDATORY
+  );
+  Bugzilla->clear_request_cache;
+
+  my %editbugs_auth
+    = ('X-Bugzilla-API-Key' => issue_api_key($editbugs_reporter->login)->api_key);
+  $t->post_ok($close_url . $secure->id => \%editbugs_auth)
+    ->status_isnt(200)
+    ->json_like(
+    '/message' => qr/aren't a member of the '\Q${\ $group->name }\E' group/,
+    'refuses a bug in a mandatory group the caller is not in'
+    );
+  is(Bugzilla::Bug->new($secure->id)->product,
+    $product->name, 'and leaves the bug in its product');
+
+  $dbh->do('DELETE FROM group_control_map WHERE group_id = ?', undef, $group->id);
+  Bugzilla->clear_request_cache;
+  Bugzilla->set_user($admin);
+}
 
 # The test data has no Invalid Bugs product, the one close_as_invalid moves
 # bugs to. It needs the version and milestone of the bug it receives.
@@ -157,18 +190,22 @@ if (!Bugzilla::Product->new({name => 'Invalid Bugs'})) {
 }
 
 SKIP: {
-  skip 'Need the Invalid Bugs product to test the non-editbugs-reporter path', 3
+  skip 'Need the Invalid Bugs product to test the non-editbugs-reporter path', 6
     unless Bugzilla::Product->new({name => 'Invalid Bugs'});
 
   # Flag mail is part of bugmail, so closing must send it.
   my @sent;
   local *Bugzilla::BugMail::Send = sub { push @sent, $_[0] };
 
-  my $result = eval { $ws->close_as_invalid({bug_id => $bug_from_plain_reporter->id}) };
-  is($@, '', 'close_as_invalid does not throw for a bug reported by a non-editbugs user');
+  $t->post_ok($close_url
+      . $bug_from_plain_reporter->id => \%auth => json => {mark_as_spam => 0})
+    ->status_is(200)
+    ->json_is('/id' => $bug_from_plain_reporter->id)
+    ->json_is(
+    '/product' => 'Invalid Bugs',
+    'bug from non-editbugs reporter is moved to Invalid Bugs'
+    )->json_is('/status' => 'RESOLVED');
   is_deeply(\@sent, [$bug_from_plain_reporter->id], 'and sends the bugmail');
-  is(ref $result eq 'HASH' ? $result->{product} : undef, 'Invalid Bugs',
-    'bug from non-editbugs reporter is moved to Invalid Bugs');
 }
 
 done_testing();
