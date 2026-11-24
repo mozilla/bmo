@@ -748,14 +748,17 @@ use constant ABSTRACT_SCHEMA => {
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
       },
       # The user who made the change. Not always the setter: redirecting a
-      # request keeps the original setter. Nullable until all pods write it.
-      who          => {
+      # request keeps the original setter.
+      who => {
         TYPE       => 'INT3',
+        NOTNULL    => 1,
         REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
       },
+
+      # Set to NULL when the requestee's account is deleted.
       requestee_id => {
         TYPE       => 'INT3',
-        REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'},
+        REFERENCES => {TABLE => 'profiles', COLUMN => 'userid', DELETE => 'SET NULL'},
       },
       bug_id       => {
         TYPE       => 'INT3',
@@ -776,6 +779,12 @@ use constant ABSTRACT_SCHEMA => {
       flag_activity_who_idx         => ['who', 'flag_when'],
     ],
   },
+
+  # One row, the time checksetup added the flag_activity start rows: flag
+  # changes up to then are to be read from bugs_activity, later ones from
+  # flag_activity.
+  flag_activity_migration =>
+    {FIELDS => [cutoff => {TYPE => 'DATETIME', NOTNULL => 1},],},
 
   # "flagtypes" defines the types of flags that can be set.
   flagtypes => {

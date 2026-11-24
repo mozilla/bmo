@@ -128,11 +128,15 @@ sub user_preferences {
         $params->{url} = $input->{url};
       }
 
-      if ($input->{event}) {
-        $params->{event}
-          = ref($input->{event}) eq 'ARRAY'
-          ? join(',', @{$input->{event}})
-          : $input->{event};
+      my @events = grep {$_}
+        ref($input->{event}) eq 'ARRAY' ? @{$input->{event}} : $input->{event};
+
+      # the needinfo event can't be offered without a needinfo flag type
+      @events = grep { $_ ne 'needinfo' } @events
+        unless Bugzilla::Extension::Webhooks::Webhook->needinfo_available;
+
+      if (@events) {
+        $params->{event} = join(',', @events);
       }
       else {
         ThrowUserError('webhooks_select_event');
@@ -235,6 +239,8 @@ sub user_preferences {
   $vars->{push}           = $push;
   $vars->{connectors}     = $push->connectors;
   $vars->{webhooks_saved} = 1;
+  $vars->{needinfo_available}
+    = Bugzilla::Extension::Webhooks::Webhook->needinfo_available;
 
   ${$args->{handled}} = 1;
 }

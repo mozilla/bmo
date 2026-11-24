@@ -86,10 +86,10 @@ sub new_bug {
 sub add_activity {
   my ($bug, $flag_id, $when, $status, $setter, $requestee, %extra) = @_;
   $dbh->do(
-    'INSERT INTO flag_activity (flag_when, type_id, flag_id, setter_id,
+    'INSERT INTO flag_activity (flag_when, type_id, flag_id, setter_id, who,
                                 requestee_id, bug_id, attachment_id, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)', undef, $when,
-    $extra{type_id} // $type_id, $flag_id, $setter->id,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', undef, $when,
+    $extra{type_id} // $type_id,         $flag_id, $setter->id, $setter->id,
     $requestee ? $requestee->id : undef, $bug->id, $extra{attachment_id}, $status
   );
 }

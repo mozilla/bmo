@@ -186,7 +186,10 @@ my @tests = (
       qa_contact       => $config->{PRIVATE_BUG_USER . '_user_login'},
       status           => 'UNCONFIRMED'
     },
-    test => "Authorized user can file a bug against a group",
+
+    # PRIVATE_BUG_USER has no editbugs, so severity is reset (Bug 2078325).
+    expect => {severity => Bugzilla->params->{defaultseverity}},
+    test   => "Authorized user can file a bug against a group",
   },
   {
     user => PRIVATE_BUG_USER,
@@ -197,7 +200,8 @@ my @tests = (
       qa_contact         => '',
       status             => 'UNCONFIRMED'
     },
-    test => "Insider can create a private description"
+    expect => {severity => Bugzilla->params->{defaultseverity}},
+    test   => "Insider can create a private description"
   },
   {
     user => 'editbugs',
@@ -234,6 +238,7 @@ sub post_success {
   my $bug = $t->tx->res->json->{bugs}->[0];
 
   my $expect = dclone $test->{args};
+  %$expect = (%$expect, %{$test->{expect} || {}});
   my $comment_is_private = delete $expect->{comment_is_private};
   $expect->{creator} = $config->{$test->{user} . '_user_login'};
 
@@ -264,6 +269,58 @@ foreach my $test (@tests) {
       ->status_is(200);
     post_success($test, $t->tx->res->json, $api_key);
   }
+}
+
+# Severity and priority need editbugs, also when filing a bug (Bug 2078325).
+# Without it the requested values are silently reset to the defaults
+# (defaultseverity / defaultpriority), so API clients keep working. canconfirm
+# is not enough. Requested values differ from the QA defaults ('--' / 'Highest')
+# so a reset is observable.
+my %restricted_create = (
+  product     => 'Another Product',
+  component   => 'c1',
+  version     => 'unspecified',
+  summary     => 'Restricted severity/priority on create',
+  description => 'Filed by rest_bug_create.t',
+  type        => 'defect',
+  op_sys      => 'Linux',
+  platform    => 'PC',
+  severity    => 'critical',
+  priority    => 'High',
+);
+my $default_severity = Bugzilla->params->{defaultseverity};
+my $default_priority = Bugzilla->params->{defaultpriority};
+
+my @restricted_tests = (
+  {
+    user     => 'unprivileged',
+    severity => $default_severity,
+    priority => $default_priority
+  },
+  {
+    user     => 'canconfirm',
+    severity => $default_severity,
+    priority => $default_priority
+  },
+  {user => 'editbugs', severity => 'critical', priority => 'High'},
+);
+
+foreach my $test (@restricted_tests) {
+  my $user    = $test->{user};
+  my $headers = api_headers($config->{"${user}_user_api_key"});
+
+  $t->post_ok($url . 'rest/bug' => $headers => json => \%restricted_create)
+    ->status_is(200);
+  my $id = $t->tx->res->json->{id};
+  ok($id, "$user: bug created with id " . ($id // 'undef'));
+
+  $t->get_ok($url . "rest/bug/$id" => $headers)->status_is(200)->json_is(
+    '/bugs/0/severity' => $test->{severity},
+    "$user: severity is $test->{severity}"
+  )->json_is(
+    '/bugs/0/priority' => $test->{priority},
+    "$user: priority is $test->{priority}"
+  )->json_is('/bugs/0/type' => 'defect', "$user: type is kept");
 }
 
 done_testing();

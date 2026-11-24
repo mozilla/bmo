@@ -84,6 +84,11 @@ window.onload = function() {
 <br>
   <input type="checkbox" id="comment_event" name="event" value="comment">
   <label for="comment_event">When a new <b>comment</b> is created</label>
+[% IF needinfo_available %]
+<br>
+  <input type="checkbox" id="needinfo_event" name="event" value="needinfo">
+  <label for="needinfo_event">When <b>needinfo</b> is requested <b>from me</b></label>
+[% END %]
 </p>
 <h4>Filters</h4>
 <p>
