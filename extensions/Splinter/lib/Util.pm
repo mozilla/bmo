@@ -158,10 +158,11 @@ sub add_review_links_to_email {
   my $new_body = 0;
   my $bug;
 
-  if ($email->header('Subject') =~ /^\[Bug\s+(\d+)\]/
-    && Bugzilla->user->can_see_bug($1))
-  {
-    $bug = Bugzilla::Bug->new({id => $1, cache => 1});
+  # The bug ID comes from its header: the subject can lead with a flag
+  # event (bug 2097284).
+  my $bug_id = $email->header('X-Bugzilla-ID');
+  if ($bug_id && Bugzilla->user->can_see_bug($bug_id)) {
+    $bug = Bugzilla::Bug->new({id => $bug_id, cache => 1});
   }
 
   return unless defined $bug;

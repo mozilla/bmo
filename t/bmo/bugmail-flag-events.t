@@ -19,6 +19,7 @@ use strict;
 use warnings;
 use lib qw(. lib local/lib/perl5);
 use Test::More;
+use Email::MIME;
 
 use Bugzilla;
 use Bugzilla::Constants;
@@ -309,6 +310,59 @@ foreach my $later_first (0, 1) {
       "an answer ($status) is named in the requester subject"
     );
   }
+}
+
+# Bug 2097284: mailer_before_send hooks still find the bug when the subject
+# leads with a flag event, here one whose name holds digits.
+{
+  my $esr_type = flag_type('flagmail-esr140', 'b');
+  my $patcher  = create_user('flagmail-patcher@mozilla.example', '*');
+  my $bug      = new_bug();
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10',
+    '?', $patcher, $requestee, type_id => $esr_type);
+
+  my $mail;
+  {
+    no warnings 'redefine';
+    local *Bugzilla::BugMail::MessageToMTA = sub {
+      $mail = $_[0] if ref $_[0] && $_[0]->header('To') eq $requestee->email;
+    };
+    Bugzilla::BugMail::Send($bug->id, {changer => $patcher});
+  }
+  like(
+    $mail->header('Subject'),
+    qr/^flagmail-esr140 requested: \[Bug \d+\]/,
+    'the subject leads with a flag name holding digits'
+  );
+
+  # TagNewUsers marks the changer's first patch from the bug ID.
+  $dbh->do('UPDATE profiles SET first_patch_bug_id = ? WHERE userid = ?',
+    undef, $bug->id, $patcher->id);
+  Bugzilla->memcached->clear({table => 'profiles', id => $patcher->id});
+  $mail->header_set('X-Bugzilla-Changed-Fields' => 'attachments.created');
+  Bugzilla::Extension::TagNewUsers->mailer_before_send({email => $mail});
+  is($mail->header('X-Bugzilla-FirstPatch'),
+    $bug->id, 'TagNewUsers finds the bug, not the digits in the flag name');
+
+  # Splinter adds review links to a plain text mail with that subject.
+  my $text = Email::MIME->create(
+    header_str => [
+      Subject         => $mail->header('Subject'),
+      'X-Bugzilla-ID' => $mail->header('X-Bugzilla-ID'),
+    ],
+    attributes => {
+      content_type => 'text/plain',
+      charset      => 'UTF-8',
+      encoding     => 'quoted-printable',
+    },
+    body_str => "Review of attachment 5:\015\012\015\012Looks good.\015\012",
+  );
+  Bugzilla::Extension::Splinter::Util::add_review_links_to_email($text);
+  like(
+    $text->body_str,
+    qr/bug=@{[$bug->id]}&attachment=5/,
+    'Splinter adds the review link'
+  );
 }
 
 # Send: cancelling your own request doesn't mail you.
