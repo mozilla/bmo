@@ -738,8 +738,9 @@ sub update_table_definitions {
     {TYPE => 'varchar(22)', NOTNULL => 1, PRIMARYKEY => 1});
 
   # 2015-08-20 dylan@mozilla.com - Bug 1196092
-  $dbh->bz_alter_column('logincookies', 'cookie',
-    {TYPE => 'varchar(22)', NOTNULL => 1});
+  # The cookie column used to be set to varchar(22) here. It now holds an
+  # HMAC of the cookie, and _hash_login_cookies() does that conversion.
+  _hash_login_cookies();
   $dbh->bz_add_index('logincookies', 'logincookies_cookie_idx',
     {TYPE => 'UNIQUE', FIELDS => ['cookie']});
   $dbh->bz_add_column('logincookies', 'id',
@@ -4260,6 +4261,34 @@ sub _fix_disable_mail {
 
   # you can no longer have disabled accounts with enabled mail
   Bugzilla->dbh->do("UPDATE profiles SET disable_mail = 1 WHERE is_enabled = 0");
+}
+
+# logincookies.cookie used to hold the raw browser cookie. Store only its
+# HMAC (see Bugzilla::Token::hash_login_cookie) so that a leaked copy of the
+# table cannot be used to log in. Rows are rewritten in place, so existing
+# browser sessions keep working.
+sub _hash_login_cookies {
+  my $dbh = Bugzilla->dbh;
+  require Bugzilla::Token;
+
+  $dbh->bz_alter_column('logincookies', 'cookie',
+    {TYPE => 'varchar(64)', NOTNULL => 1});
+
+  # A hashed cookie is always 64 hex characters and a raw one is 22, so the
+  # length tells them apart. This keeps the conversion safe to re-run if
+  # checksetup.pl was interrupted part way through. Both forms are ASCII, so
+  # LENGTH (bytes, but portable to SQLite) gives the character count.
+  my $raw_cookies = $dbh->selectcol_arrayref(
+    'SELECT cookie FROM logincookies WHERE LENGTH(cookie) != 64');
+  return unless @$raw_cookies;
+
+  print "Hashing stored login cookies...\n";
+  $dbh->bz_start_transaction();
+  my $sth = $dbh->prepare('UPDATE logincookies SET cookie = ? WHERE cookie = ?');
+  foreach my $cookie (@$raw_cookies) {
+    $sth->execute(Bugzilla::Token::hash_login_cookie($cookie), $cookie);
+  }
+  $dbh->bz_commit_transaction();
 }
 
 sub _add_restrict_ipaddr {
