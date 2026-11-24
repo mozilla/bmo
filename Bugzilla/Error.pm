@@ -19,7 +19,6 @@ our @EXPORT
 ## use critic
 
 use Bugzilla::Constants;
-use Bugzilla::WebService::Constants;
 use Bugzilla::Util;
 use Bugzilla::Error::User;
 use Bugzilla::Error::Code;
@@ -84,6 +83,13 @@ sub _throw_error {
     die Template::Exception->new("bugzilla.$type.$error", $vars);
   }
 
+  # Native /rest routes start in USAGE_MODE_REST, and only switch to
+  # USAGE_MODE_MOJO_REST in their handler: an error raised before that is
+  # rendered as JSON by the Mojo error plugin all the same.
+  if (Bugzilla->error_mode == ERROR_MODE_REST) {
+    Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
+  }
+
   if (Bugzilla->error_mode == ERROR_MODE_MOJO) {
     my ($type) = $name =~ /^global\/(user|code)-error/;
     my $c = Bugzilla->request_cache->{mojo_controller};
@@ -103,51 +109,6 @@ sub _throw_error {
   }
   elsif (Bugzilla->error_mode == ERROR_MODE_DIE) {
     die "$message\n";
-  }
-  elsif (Bugzilla->error_mode == ERROR_MODE_JSON_RPC
-    || Bugzilla->error_mode == ERROR_MODE_REST)
-  {
-    # Clone the hash so we aren't modifying the constant.
-    my %error_map = %{WS_ERROR_CODE()};
-    Bugzilla::Hook::process('webservice_error_codes', {error_map => \%error_map});
-    my $code = $error_map{$error};
-    if (!$code) {
-      $code = ERROR_UNKNOWN_FATAL     if $name =~ /code/i;
-      $code = ERROR_UNKNOWN_TRANSIENT if $name =~ /user/i;
-    }
-
-    {
-      my $server = Bugzilla->_json_server;
-
-      my $status_code = 0;
-      if (Bugzilla->error_mode == ERROR_MODE_REST) {
-        my %status_code_map = %{REST_STATUS_CODE_MAP()};
-        $status_code = $status_code_map{$code} || $status_code_map{'_default'};
-        $logfunc->("REST error: $error (HTTP $status_code, internal code $code)");
-      }
-      else {
-        my $fake_code = 100000 + $code;
-        $logfunc->("JSON-RPC error: $error ($fake_code)");
-      }
-
-      # Technically JSON-RPC isn't allowed to have error numbers
-      # higher than 999, but we do this to avoid conflicts with
-      # the internal JSON::RPC error codes.
-      $server->raise_error(
-        code        => 100000 + $code,
-        status_code => $status_code,
-        message     => $message,
-        id          => $server->{_bz_request_id},
-        version     => $server->version
-      );
-
-      # Most JSON-RPC Throw*Error calls happen within an eval inside
-      # of JSON::RPC. So, in that circumstance, instead of exiting,
-      # we die with no message. JSON::RPC checks raise_error before
-      # it checks $@, so it returns the proper error.
-      die if _in_eval();
-      $server->response($server->error_response_header);
-    }
   }
 
   exit;
@@ -259,28 +220,14 @@ sub ThrowErrorPage {
     die("error: $message");
   }
 
-  if (Bugzilla->error_mode == ERROR_MODE_JSON_RPC) {
-    my $code   = ERROR_UNKNOWN_TRANSIENT;
-    my $server = Bugzilla->_json_server;
-    $server->raise_error(
-      code    => 100000 + $code,
-      message => $message,
-      id      => $server->{_bz_request_id},
-      version => $server->version
-    );
-    die if _in_eval();
-    $server->response($server->error_response_header);
-  }
-  else {
-    my $cgi      = Bugzilla->cgi;
-    my $template = Bugzilla->template;
-    my $vars     = {};
-    $vars->{message} = $message;
-    print $cgi->header();
-    $template->process($template_name, $vars)
-      || ThrowTemplateError($template->error());
-    exit;
-  }
+  my $cgi      = Bugzilla->cgi;
+  my $template = Bugzilla->template;
+  my $vars     = {};
+  $vars->{message} = $message;
+  print $cgi->header();
+  $template->process($template_name, $vars)
+    || ThrowTemplateError($template->error());
+  exit;
 }
 
 1;

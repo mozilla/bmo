@@ -102,7 +102,11 @@ sub error_message_and_code {
     {%$vars, error => $error}, \$message)
     || die $template->error();
 
-  my $code = WS_ERROR_CODE->{$error};
+  # Clone the hash so extensions don't modify the constant.
+  my %error_map = %{WS_ERROR_CODE()};
+  require Bugzilla::Hook;
+  Bugzilla::Hook::process('webservice_error_codes', {error_map => \%error_map});
+  my $code = $error_map{$error};
   if (!$code) {
     $code = ERROR_UNKNOWN_FATAL     if $type =~ /code/i;
     $code = ERROR_UNKNOWN_TRANSIENT if $type =~ /user/i;

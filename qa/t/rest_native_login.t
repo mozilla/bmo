@@ -65,9 +65,8 @@ $t->get_ok($url . $endpoint . '&Bugzilla_api_key=' . $api_key)
 #
 # 2c. The header takes precedence over the query parameter: a valid header
 #     plus a bogus ?api_key= still authenticates. If the query parameter won,
-#     the bogus key would be rejected with a 401. This mirrors the header
-#     precedence fix_credentials enforces (t/webservice-fix-credentials.t,
-#     bug 2035598).
+#     the bogus key would be rejected with a 401. This keeps the header
+#     precedence the legacy server's fix_credentials enforced (bug 2035598).
 #
 $t->get_ok($url
     . $endpoint

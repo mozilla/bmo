@@ -150,8 +150,8 @@ $t->post_ok(
   } => $body
 )->status_is(413)->content_like(qr{The request is too large\.});
 
-# /rest/version has no native POST route, so this goes to rest.cgi: the limit
-# must still answer with a REST error there.
+# /rest/version has no native POST route, so this goes to the unknown resource
+# route: the limit must still answer with a REST error there.
 $t->post_ok(
   '/rest/version' => {
     'Content-Length' => length($body),
@@ -163,7 +163,6 @@ $t->post_ok(
   ->header_is('Access-Control-Allow-Origin' => '*')
   ->header_like('Access-Control-Allow-Headers' => qr{\bauthorization\b})
   ->header_like('Access-Control-Allow-Headers' => qr{\bx-bugzilla-api-key\b})
-  ->header_like('Access-Control-Allow-Headers' => qr{\bx-bugzilla-login\b})
   ->json_is('/error'   => 1)
   ->json_is('/code'    => 58)
   ->json_is('/message' => 'The request is too large.');

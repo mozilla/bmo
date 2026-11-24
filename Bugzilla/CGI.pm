@@ -69,7 +69,7 @@ sub new {
   # the rendering of pages.
   my $script = basename($0);
   if (my $path = $self->path_info) {
-    my @whitelist = ("rest.cgi");
+    my @whitelist;
     Bugzilla::Hook::process('path_info_whitelist', {whitelist => \@whitelist});
     if (!grep($_ eq $script, @whitelist)) {
 

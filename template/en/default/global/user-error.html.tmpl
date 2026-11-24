@@ -1188,29 +1188,6 @@
     The cookies or token provide were not valid or have expired.
     You may login again to get new cookies or a new token.
 
-  [% ELSIF error == "json_rpc_get_method_required" %]
-    When using JSON-RPC over GET, you must specify a 'method'
-    parameter.
-
-  [% ELSIF error == "json_rpc_illegal_content_type" %]
-    When using JSON-RPC over POST, you cannot send data as
-    [%+ content_type FILTER html %]. Only application/json and
-    application/json-rpc are allowed.
-
-  [% ELSIF error == "json_rpc_invalid_params" %]
-    Could not parse the 'params' argument as valid JSON.
-    Error: [% err_msg FILTER html %]
-    Value: [% params FILTER html %]
-
-  [% ELSIF error == "json_rpc_invalid_callback" %]
-    You cannot use '[% callback FILTER html %]' as your 'callback' parameter.
-    For security reasons, only letters, numbers, and the following
-    characters are allowed in the 'callback' parameter: <code>[]._</code>
-
-  [% ELSIF error == "json_rpc_post_only" %]
-    For security reasons, you must use HTTP POST to call the
-    '[% method FILTER html %]' method.
-
   [% ELSIF error == "rest_invalid_resource" %]
     A REST API resource was not found for '[% method FILTER html +%] [%+ path FILTER html %]'.
 

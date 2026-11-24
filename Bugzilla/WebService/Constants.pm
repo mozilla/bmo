@@ -29,10 +29,6 @@ our @EXPORT = qw(
   ERROR_UNKNOWN_FATAL
   ERROR_UNKNOWN_TRANSIENT
 
-  REST_CONTENT_TYPE_WHITELIST
-
-  WS_DISPATCH
-
   API_AUTH_HEADERS
 );
 
@@ -238,9 +234,6 @@ use constant WS_ERROR_CODE => {
   # Errors thrown by the WebService itself. The ones that are negative
   # conform to http://xmlrpc-epi.sourceforge.net/specs/rfc.fault_codes.php
   unknown_method                => -32601,
-  json_rpc_post_only            => 32610,
-  json_rpc_invalid_callback     => 32611,
-  json_rpc_illegal_content_type => 32613,
   rest_invalid_resource         => 32614,
 };
 
@@ -297,24 +290,6 @@ use constant ERROR_UNKNOWN_FATAL     => -32000;
 use constant ERROR_UNKNOWN_TRANSIENT => 32000;
 
 use constant ERROR_GENERAL => 999;
-
-# The first content type specified is used as the default.
-use constant REST_CONTENT_TYPE_WHITELIST => qw(
-  application/json
-  application/javascript
-  text/javascript
-);
-
-sub WS_DISPATCH {
-
-  # We "require" here instead of "use" above to avoid a dependency loop.
-  require Bugzilla::Hook;
-  my %hook_dispatch;
-  Bugzilla::Hook::process('webservice', {dispatch => \%hook_dispatch});
-
-  # Only extensions still dispatch here; core resources are native Mojo API.
-  return {%hook_dispatch};
-}
 
 # Custom HTTP headers that can be used for API authentication rather than
 # passing as URL parameters. This is useful if you do not want sensitive
