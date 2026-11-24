@@ -193,9 +193,17 @@ $t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>
   );
 
 # Markdown is only used for comments written in Markdown. The app reads params
-# from the database, so set it there, and put it back afterwards.
+# from the database, so set it there, and put it back afterwards. Only once it
+# was read, as END also runs when the test skips or dies before that.
 my $use_markdown = Bugzilla->params->{use_markdown};
-END { SetParam('use_markdown', $use_markdown); write_params() }
+
+END {
+  if (defined $use_markdown) {
+    SetParam('use_markdown', $use_markdown);
+    write_params();
+  }
+}
+
 SetParam('use_markdown', 1);
 write_params();
 $t->get_ok('/rest/mydashboard/run_last_changes' => \%auth => form =>
