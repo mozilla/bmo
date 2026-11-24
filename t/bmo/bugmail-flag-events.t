@@ -269,6 +269,48 @@ foreach my $later_first (0, 1) {
   is($mail->{bugmailtype}, 'changed request', 'an answer is marked as request mail');
 }
 
+# Bug 2097284: the subject leads with the recipient's own flag event.
+{
+  # The Subject header of each recipient's mail, by login.
+  my $subjects = sub {
+    my ($bug, $changer) = @_;
+    my %subject;
+    no warnings 'redefine';
+    local *Bugzilla::BugMail::MessageToMTA = sub {
+      my ($email) = @_;
+      $subject{$email->header('To')} = $email->header('Subject') if ref $email;
+    };
+    Bugzilla::BugMail::Send($bug->id, {changer => $changer});
+    return \%subject;
+  };
+
+  my $bug = new_bug();
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
+    $requestee);
+  my $subject = $subjects->($bug, $requester);
+  is(
+    $subject->{$requestee->email},
+    'flagmail-test requested: [Bug ' . $bug->id . '] Flag mail test',
+    'a request is named in the requestee subject'
+  );
+  like($subject->{$type_cc->email}, qr/^\[Bug \d+\]/,
+    'but not in the flag type cc_list subject');
+
+  foreach my $answer (['+', 'granted'], ['-', 'denied'], ['X', 'cleared']) {
+    my ($status, $word) = @$answer;
+    $bug = new_bug();
+    my $flag_id = $next_flag_id++;
+    add_activity($bug, $flag_id, '1999-12-31 23:00:00', '?', $requester,
+      $requestee);
+    add_activity($bug, $flag_id, '2000-01-01 00:00:10', $status, $requestee);
+    is(
+      $subjects->($bug, $requestee)->{$requester->email},
+      "flagmail-test $word: [Bug " . $bug->id . '] Flag mail test',
+      "an answer ($status) is named in the requester subject"
+    );
+  }
+}
+
 # Send: cancelling your own request doesn't mail you.
 {
   my $bug     = new_bug();
