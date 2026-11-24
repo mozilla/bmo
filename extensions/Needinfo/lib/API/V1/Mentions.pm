@@ -41,8 +41,8 @@ sub mentions {
   my $user = $self->bugzilla->login;
   $user->id || return $self->user_error('login_required');
 
-  my ($params, $error) = merge_request_params($self, ['groups']);
-  return $self->user_error($error) if $error;
+  my ($params, $error, $vars) = merge_request_params($self, ['groups']);
+  return $self->user_error($error, $vars) if $error;
 
   if ($error = coerce_booleans($params, 'is_private')) {
     return $self->user_error('invalid_params', {type_error => $error});

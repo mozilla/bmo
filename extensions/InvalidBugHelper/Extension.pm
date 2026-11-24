@@ -21,10 +21,4 @@ sub config_add_panels {
     = 'Bugzilla::Extension::InvalidBugHelper::Config';
 }
 
-sub webservice {
-  my ($self, $args) = @_;
-  $args->{dispatch}->{InvalidBugHelper}
-    = 'Bugzilla::Extension::InvalidBugHelper::WebService';
-}
-
 __PACKAGE__->NAME;
