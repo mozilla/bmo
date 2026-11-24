@@ -34,13 +34,12 @@ sub persist_login {
 
   $dbh->bz_start_transaction();
 
-  my $login_cookie
-    = Bugzilla::Token::GenerateUniqueToken('logincookies', 'cookie');
+  my ($login_cookie, $cookie_hash) = issue_login_cookie();
 
   my $ip_addr = remote_ip();
 
   $dbh->do('INSERT INTO logincookies (cookie, userid, ipaddr, lastused, auth_method)
-    VALUES (?, ?, ?, NOW(), ?)', undef, $login_cookie, $user->id, $ip_addr, $user->auth_method);
+    VALUES (?, ?, ?, NOW(), ?)', undef, $cookie_hash, $user->id, $ip_addr, $user->auth_method);
 
   # Issuing a new cookie is a good time to clean up the old
   # cookies.
@@ -143,7 +142,7 @@ sub logout {
   # logged in and got the same cookie, we could be logging the other
   # user out here. Yes, this is very very very unlikely, but why take
   # chances? - bbaetz
-  @login_cookies = map { $dbh->quote($_) } @login_cookies;
+  @login_cookies = map { $dbh->quote(hash_login_cookie($_)) } @login_cookies;
   if ($type == LOGOUT_KEEP_CURRENT) {
     $dbh->do(
       "DELETE FROM logincookies WHERE "

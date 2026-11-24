@@ -150,12 +150,13 @@ sub register {
         }
 
         if ($login_cookie && $login_user_id) {
+          my $cookie_hash = hash_login_cookie($login_cookie);
           my $db_cookie
             = Bugzilla->dbh->selectrow_array(
             'SELECT cookie FROM logincookies WHERE cookie = ? AND userid = ?',
-            undef, ($login_cookie, $login_user_id));
+            undef, ($cookie_hash, $login_user_id));
 
-          if (defined $db_cookie && secure_compare($login_cookie, $db_cookie)) {
+          if (defined $db_cookie && secure_compare($cookie_hash, $db_cookie)) {
             $user_id = $login_user_id;
 
             # If we logged in successfully, then update the lastused
@@ -163,7 +164,7 @@ sub register {
             with_writable_database {
               Bugzilla->dbh->do(
                 q{ UPDATE logincookies SET lastused = NOW() WHERE cookie = ? },
-                undef, $login_cookie);
+                undef, $cookie_hash);
             };
           }
         }

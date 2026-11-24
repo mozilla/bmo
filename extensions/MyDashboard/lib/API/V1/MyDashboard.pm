@@ -4,42 +4,73 @@
 #
 # This Source Code Form is "Incompatible With Secondary Licenses", as
 # defined by the Mozilla Public License, v. 2.0.
-package Bugzilla::Extension::MyDashboard::WebService;
+
+package Bugzilla::Extension::MyDashboard::API::V1::MyDashboard;
 
 use 5.10.1;
-use strict;
-use warnings;
+use Mojo::Base qw( Mojolicious::Controller );
 
-use base qw(Bugzilla::WebService);
-
+use Bugzilla;
 use Bugzilla::API::V1::Bug;
+use Bugzilla::Bug;
 use Bugzilla::Comment;
 use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Template;
-use Bugzilla::Util qw(detaint_natural template_var datetime_from);
-use Bugzilla::API::V1::Util qw(validate);
+use Bugzilla::Util          qw(template_var datetime_from);
+use Bugzilla::API::V1::Util qw(merge_request_params render_options);
 
 use Bugzilla::Extension::MyDashboard::Queries
   qw(QUERY_DEFS query_bugs query_flags);
 use Bugzilla::Extension::MyDashboard::BugInterest;
 
-use constant READ_ONLY => qw(
-  run_bug_query
-  run_flag_query
-);
+sub setup_routes {
+  my ($class, $r) = @_;
+  my $to = 'MyDashboard::API::V1::MyDashboard#';
 
-use constant PUBLIC_METHODS => qw(
-  bug_interest_unmark
-  run_bug_query
-  run_flag_query
-  run_last_changes
-);
+  # bug_interest_unmark is also served without the prefix, for backward
+  # compatibility; the other methods are newer and always had it.
+  $r->put('/bug_interest_unmark')->to($to . 'bug_interest_unmark');
+  $r->put('/mydashboard/bug_interest_unmark')->to($to . 'bug_interest_unmark');
+  $r->get('/mydashboard/run_bug_query')->to($to . 'run_bug_query');
+  $r->get('/mydashboard/run_flag_query')->to($to . 'run_flag_query');
+  $r->get('/mydashboard/run_last_changes')->to($to . 'run_last_changes');
 
+  $r->options($_)->to(cb => \&render_options, allow => 'PUT')
+    foreach qw(/bug_interest_unmark /mydashboard/bug_interest_unmark);
+  $r->options("/mydashboard/$_")->to(cb => \&render_options, allow => 'GET')
+    foreach qw(run_bug_query run_flag_query run_last_changes);
+}
+
+sub type {
+  my ($self, $type, $value) = @_;
+  return Bugzilla::API::V1::Util->type($type, $value);
+}
+
+# The logged-in user and the request params, or nothing after rendering an
+# error.
+sub _login {
+  my ($self, $lists) = @_;
+  Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
+  my $user = $self->bugzilla->login;
+  if (!$user->id) {
+    $self->user_error('login_required');
+    return;
+  }
+  my ($params, $error, $vars) = merge_request_params($self, $lists);
+  if ($error) {
+    $self->user_error($error, $vars);
+    return;
+  }
+  return ($user, $params);
+}
+
+# GET /mydashboard/run_last_changes?bug_id=<id>&changeddate_api=<date>
+#
+# The last change and the last comment made to the bug after the date.
 sub run_last_changes {
-  my ($self, $params) = @_;
-
-  my $user = Bugzilla->login(LOGIN_REQUIRED);
+  my ($self) = @_;
+  my ($user, $params) = $self->_login or return;
 
   # Only reads from here, as Bug.history did.
   my $dbh = Bugzilla->switch_to_shadow_db();
@@ -51,11 +82,11 @@ sub run_last_changes {
   if (!$user->is_insider) {
     $last_comment_sql .= " AND isprivate = 0";
   }
-  $last_comment_sql .= " LIMIT 1";
+  $last_comment_sql .= " ORDER BY bug_when DESC, comment_id DESC LIMIT 1";
   my $last_comment_sth = $dbh->prepare($last_comment_sql);
 
   my $last_changes = {};
-  my $bug = Bugzilla::Bug->check($params->{bug_id});
+  my $bug          = Bugzilla::Bug->check($params->{bug_id});
   my ($activity)
     = Bugzilla::Bug::GetBugActivity($bug->id, undef, $params->{changeddate_api},
     1);
@@ -71,8 +102,7 @@ sub run_last_changes {
     $datetime->set_time_zone($user->timezone);
     $last_changes->{when} = $datetime->strftime('%Y-%m-%d %T %Z');
   }
-  my $last_comment_id
-    = $dbh->selectrow_array($last_comment_sth, undef, $params->{bug_id},
+  my $last_comment_id = $dbh->selectrow_array($last_comment_sth, undef, $bug->id,
     $params->{changeddate_api});
   if ($last_comment_id) {
 
@@ -80,24 +110,27 @@ sub run_last_changes {
     my $comment = Bugzilla::Comment->new($last_comment_id);
     my $text    = $comment->body_full;
     my $html
-      = Bugzilla->params->{use_markdown}
+      = $comment->is_markdown && Bugzilla->params->{use_markdown}
       ? Bugzilla->markdown->render_html($text, $bug)
       : Bugzilla::Template::quoteUrls($text, $bug);
     $last_changes->{comment_html} = $html;
-    $last_changes->{email} = $self->type('email', $comment->author->login)
+    $last_changes->{email}        = $self->type('email', $comment->author->login)
       if !$last_changes->{email};
     my $datetime = datetime_from($comment->creation_ts);
     $datetime->set_time_zone($user->timezone);
     $last_changes->{when} = $datetime->strftime('%Y-%m-%d %T %Z');
   }
 
-  return {results => [{last_changes => $last_changes}]};
+  return $self->render(json => {results => [{last_changes => $last_changes}]});
 }
 
+# GET /mydashboard/run_bug_query?query=<name>
+#
+# The bugs of one of the dashboard's queries (QUERY_DEFS).
 sub run_bug_query {
-  my ($self, $params) = @_;
-  my $dbh  = Bugzilla->dbh;
-  my $user = Bugzilla->login(LOGIN_REQUIRED);
+  my ($self) = @_;
+  my ($user, $params) = $self->_login or return;
+  Bugzilla->switch_to_shadow_db();
 
   defined $params->{query}
     || ThrowCodeError('param_required',
@@ -123,12 +156,16 @@ sub run_bug_query {
     last;
   }
 
-  return {result => $result};
+  return $self->render(json => {result => $result});
 }
 
+# GET /mydashboard/run_flag_query?type=<requestee|requester>
+#
+# The flags requested from or by the user.
 sub run_flag_query {
-  my ($self, $params) = @_;
-  my $user = Bugzilla->login(LOGIN_REQUIRED);
+  my ($self) = @_;
+  my ($user, $params) = $self->_login or return;
+  Bugzilla->switch_to_shadow_db();
 
   my $type = $params->{type};
   $type
@@ -146,12 +183,15 @@ sub run_flag_query {
     $flag->{is_patch}  = $self->type('boolean', $flag->{is_patch});
   }
 
-  return {result => {$type => $results}};
+  return $self->render(json => {result => {$type => $results}});
 }
 
+# PUT /mydashboard/bug_interest_unmark (or /bug_interest_unmark)
+#
+# Removes the bugs (bug_ids, one ID or a list) from the user's interest list.
 sub bug_interest_unmark {
-  my ($self, $params) = @_;
-  my $user = Bugzilla->login(LOGIN_REQUIRED);
+  my ($self) = @_;
+  my ($user, $params) = $self->_login(['bug_ids']) or return;
 
   ThrowCodeError('param_required',
     {function => 'MyDashboard.bug_interest_unmark', param => 'bug_ids'})
@@ -165,32 +205,9 @@ sub bug_interest_unmark {
     Bugzilla::Extension::MyDashboard::BugInterest->unmark($user->id, $bug_id);
   }
   Bugzilla->dbh->bz_commit_transaction();
-}
 
-sub rest_resources {
-  return [
-    # REST API v1: Expose `bug_interest_unmark` method without prefix for backward compatibility
-    qr{^/(mydashboard/)?bug_interest_unmark$}, {PUT => {method => 'bug_interest_unmark'}},
-    # Other methods are new, so require the prefix
-    qr{^/mydashboard/run_bug_query$}, {GET => {method => 'run_bug_query'}},
-    qr{^/mydashboard/run_flag_query$}, {GET => {method => 'run_flag_query'}},
-    qr{^/mydashboard/run_last_changes$}, {GET => {method => 'run_last_changes'}},
-  ];
+  # The legacy method returned what bz_commit_transaction() did, i.e. 0.
+  return $self->render(json => 0);
 }
 
 1;
-
-__END__
-
-=head1 NAME
-
-Bugzilla::Extension::MyDashboard::Webservice - The MyDashboard WebServices API
-
-=head1 DESCRIPTION
-
-This module contains API methods that are useful to user's of bugzilla.mozilla.org.
-
-=head1 METHODS
-
-See L<Bugzilla::WebService> for a description of how parameters are passed,
-and what B<STABLE>, B<UNSTABLE>, and B<EXPERIMENTAL> mean.

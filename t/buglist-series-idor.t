@@ -45,6 +45,7 @@ use Bugzilla;
 use Bugzilla::App ();
 use Bugzilla::Constants;
 use Bugzilla::Group;
+use Bugzilla::Token qw(hash_login_cookie);
 use Bugzilla::Util qw(generate_random_password);
 
 use Mojo::Cookie::Response;
@@ -108,7 +109,7 @@ sub login_as {
   my $cookie = generate_random_password(16);
   $dbh->do(
     'INSERT INTO logincookies (cookie, userid, lastused) VALUES (?, ?, NOW())',
-    undef, $cookie, $user->id);
+    undef, hash_login_cookie($cookie), $user->id);
   my $jar = $ua->cookie_jar;
   $jar->empty;
   $jar->add(

@@ -31,9 +31,9 @@ sub setup_routes {
 #   component   component name and
 #   groups      bug group names for the new bug
 #   is_private  whether the comment is private
-# Returns {mentions => [{nick, name, needinfo}]}; see
-# Bugzilla::Extension::Needinfo::mention_effects. For a new bug the list is
-# empty until saving a new bug processes its mentions (bug 2087012).
+# Returns {mentions => [{nick, name, needinfo}], no_access => [{nick, name}]};
+# see Bugzilla::Extension::Needinfo::mention_effects. For a new bug both lists
+# are empty until saving a new bug processes its mentions (bug 2087012).
 sub mentions {
   my ($self) = @_;
   Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
@@ -41,8 +41,8 @@ sub mentions {
   my $user = $self->bugzilla->login;
   $user->id || return $self->user_error('login_required');
 
-  my ($params, $error) = merge_request_params($self, ['groups']);
-  return $self->user_error($error) if $error;
+  my ($params, $error, $vars) = merge_request_params($self, ['groups']);
+  return $self->user_error($error, $vars) if $error;
 
   if ($error = coerce_booleans($params, 'is_private')) {
     return $self->user_error('invalid_params', {type_error => $error});
@@ -73,7 +73,8 @@ sub mentions {
   my $comment = {thetext => $params->{text}, isprivate => $params->{is_private}};
 
   # Nothing to look up without an @, the common case while typing.
-  return $self->render(json => {mentions => []}) unless $params->{text} =~ /@/;
+  return $self->render(json => {mentions => [], no_access => []})
+    unless $params->{text} =~ /@/;
 
   Bugzilla->switch_to_shadow_db();
 
@@ -92,10 +93,7 @@ sub mentions {
   }
 
   return $self->render(
-    json => {
-      mentions => Bugzilla::Extension::Needinfo::mention_effects($comment, $target)
-    }
-  );
+    json => Bugzilla::Extension::Needinfo::mention_effects($comment, $target));
 }
 
 1;

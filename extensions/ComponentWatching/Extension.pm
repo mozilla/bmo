@@ -297,7 +297,7 @@ sub user_preferences {
       my $productName = $input->{'add_product'};
       my $product = Bugzilla::Product->new({name => $productName, cache => 1});
       unless ($product && $user->can_access_product($product)) {
-        ThrowUserError('product_access_denied', {product => $productName});
+        ThrowUserError('product_access_denied', {name => $productName});
       }
 
       # starting-with
@@ -323,7 +323,7 @@ sub user_preferences {
               name => $componentName, product => $product, cache => 1
               });
             unless ($component) {
-              ThrowUserError('product_access_denied', {product => $productName});
+              ThrowUserError('product_access_denied', {name => $productName});
             }
             _addComponentWatch($user, $component);
           }
@@ -707,16 +707,6 @@ sub db_sanitize {
   my $dbh = Bugzilla->dbh;
   print "Deleting component watchers...\n";
   $dbh->do('TRUNCATE TABLE component_watch');
-}
-
-#
-# webservice
-#
-
-sub webservice {
-  my ($self, $args) = @_;
-  $args->{dispatch}->{ComponentWatching}
-    = "Bugzilla::Extension::ComponentWatching::WebService";
 }
 
 __PACKAGE__->NAME;

@@ -883,7 +883,7 @@ sub SaveSessions {
       = $user->authorizer && $user->authorizer->successful_info_getter();
     if ($info_getter->cookie) {
       $dbh->do("DELETE FROM logincookies WHERE userid = ? AND cookie != ?",
-        undef, $user->id, $info_getter->cookie);
+        undef, $user->id, hash_login_cookie($info_getter->cookie));
     }
   }
   else {
@@ -905,9 +905,10 @@ sub DoSessions {
   my $info_getter
     = $user->authorizer && $user->authorizer->successful_info_getter();
 
-  if ($info_getter && $info_getter->can('cookie')) {
+  if ($info_getter && $info_getter->can('cookie') && $info_getter->cookie) {
+    my $current_hash = hash_login_cookie($info_getter->cookie);
     foreach my $session (@$sessions) {
-      $session->{current} = $info_getter->cookie eq $session->{cookie};
+      $session->{current} = $current_hash eq $session->{cookie};
     }
   }
   my ($count)

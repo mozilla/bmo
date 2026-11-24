@@ -69,4 +69,29 @@ Bugzilla::Template::quoteUrls(
   }
 );
 
+# A URL without "//" after the scheme would be resolved by browsers as a
+# relative path on the current site, so it must not be linkified.
+my $single_slash
+  = Bugzilla::Template::quoteUrls('https:/bugzilla.mozilla.org/home');
+unlike($single_slash, qr/<a\b/, 'single-slash https URL is not linkified');
+is($single_slash, 'https:/bugzilla.mozilla.org/home',
+  'single-slash https URL is left as plain text');
+
+my $no_slash = Bugzilla::Template::quoteUrls('https:bugzilla.mozilla.org/home');
+unlike($no_slash, qr/<a\b/, 'no-slash https URL is not linkified');
+is($no_slash, 'https:bugzilla.mozilla.org/home',
+  'no-slash https URL is left as plain text');
+
+like(
+  Bugzilla::Template::quoteUrls('https://bugzilla.mozilla.org/home'),
+  qr{<a [^>]*href="https://bugzilla\.mozilla\.org/home"},
+  'double-slash https URL is still linkified'
+);
+
+like(
+  Bugzilla::Template::quoteUrls('news:comp.lang.perl'),
+  qr{<a [^>]*href="news:comp\.lang\.perl"},
+  'non-hierarchical scheme without slashes is still linkified'
+);
+
 done_testing;

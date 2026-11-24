@@ -129,8 +129,8 @@ sub suggest {
 
   my $user = $self->bugzilla->login;
 
-  my ($params, $error) = $self->_request_params;
-  return $self->user_error($error) if $error;
+  my ($params, $error, $vars) = $self->_request_params;
+  return $self->user_error($error, $vars) if $error;
 
   Bugzilla->switch_to_shadow_db();
 
@@ -224,9 +224,9 @@ sub get {
 
   my $api_user = $self->bugzilla->login;
 
-  my ($params, $error)
+  my ($params, $error, $vars)
     = $self->_request_params(qw(names ids match group_ids groups ldap_emails));
-  return $self->user_error($error) if $error;
+  return $self->user_error($error, $vars) if $error;
 
   if (defined(my $id_or_name = $self->stash('id_or_name'))) {
     $params->{$id_or_name =~ /^\d+$/ ? 'ids' : 'names'} = [$id_or_name];
@@ -444,8 +444,8 @@ sub update {
     || return $self->user_error('auth_failure',
     {group => 'editusers', action => 'edit', object => 'users'});
 
-  my ($params, $error) = $self->_request_params(qw(names ids));
-  return $self->user_error($error) if $error;
+  my ($params, $error, $vars) = $self->_request_params(qw(names ids));
+  return $self->user_error($error, $vars) if $error;
 
   if (defined(my $id_or_name = $self->stash('id_or_name'))) {
     $params
@@ -542,8 +542,8 @@ sub whoami {
       || return $self->user_error($self->_api_key_error // 'login_required');
   }
 
-  my ($params, $error) = $self->_request_params;
-  return $self->user_error($error) if $error;
+  my ($params, $error, $vars) = $self->_request_params;
+  return $self->user_error($error, $vars) if $error;
 
   # Generate a deterministic ID from the site-wide-secret and user-id.
   # This can be used for user tracking in other systems without the
@@ -572,8 +572,8 @@ sub _request_params {
   my ($self, @list_params) = @_;
   push @list_params, qw(include_fields exclude_fields);
 
-  my ($params, $error) = merge_request_params($self, \@list_params);
-  return (undef, $error) if $error;
+  my ($params, $error, $vars) = merge_request_params($self, \@list_params);
+  return (undef, $error, $vars) if $error;
 
   # A JSON body is merged in as-is, so a single value there is not yet a list;
   # legacy validate() coerced it the same way.

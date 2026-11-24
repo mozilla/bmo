@@ -900,10 +900,10 @@ Bugzilla.CommentEditor = class CommentEditor extends Bugzilla.TextEditor {
     }
 
     try {
-      const { mentions } = await Bugzilla.API.post('needinfo/mentions', params);
+      const { mentions, no_access } = await Bugzilla.API.post('needinfo/mentions', params);
 
       if (requestCount === this.mentionRequestCount) {
-        this.showMentionWarning(mentions ?? []);
+        this.showMentionWarning(mentions ?? [], no_access ?? []);
       }
     } catch {
       if (requestCount === this.mentionRequestCount) {
@@ -915,11 +915,14 @@ Bugzilla.CommentEditor = class CommentEditor extends Bugzilla.TextEditor {
   }
 
   /**
-   * Show who saving the comment will needinfo and CC, or hide the warning if nobody.
+   * Show who saving the comment will needinfo and CC, and who it won't reach because they can't
+   * see the bug, or hide the warning if nobody.
    * @param {{ nick: string, name: string, needinfo: number | boolean }[]} mentions Users the
    * comment mentions, as returned by the API.
+   * @param {{ nick: string, name: string }[]} [noAccess] Users the comment mentions who can't see
+   * the bug, as returned by the API.
    */
-  showMentionWarning(mentions) {
+  showMentionWarning(mentions, noAccess = []) {
     /** @param {{ nick: string, name: string }} user */
     const label = ({ nick, name }) => (name ? `${name} (@${nick})` : `@${nick}`).htmlEncode();
     const needinfo = mentions.filter((user) => user.needinfo).map(label);
@@ -934,6 +937,10 @@ Bugzilla.CommentEditor = class CommentEditor extends Bugzilla.TextEditor {
 
     if (ccOnly.length) {
       lines.push(`${this.str.mention_cc_only.htmlEncode()} ${ccOnly.join(', ')}`);
+    }
+
+    if (noAccess.length) {
+      lines.push(`${this.str.mention_no_access.htmlEncode()} ${noAccess.map(label).join(', ')}`);
     }
 
     const html = lines.map((line) => `<p>${line}</p>`).join('');
