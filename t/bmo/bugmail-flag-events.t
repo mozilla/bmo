@@ -310,6 +310,20 @@ foreach my $later_first (0, 1) {
       "an answer ($status) is named in the requester subject"
     );
   }
+
+  # The requestees above have the default 'on'; one who turned the
+  # bugmail_flag_prefix setting off gets the plain subject.
+  my $no_prefix = create_user('flagmail-noprefix@mozilla.example', '*');
+  $no_prefix->settings->{bugmail_flag_prefix}->set('off');
+  Bugzilla::User::Setting::clear_settings_cache($no_prefix->id);
+  $bug = new_bug();
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
+    $no_prefix);
+  is(
+    $subjects->($bug, $requester)->{$no_prefix->email},
+    '[Bug ' . $bug->id . '] Flag mail test',
+    'a requestee who turned the setting off gets the plain subject'
+  );
 }
 
 # Bug 2097284: mailer_before_send hooks still find the bug when the subject
