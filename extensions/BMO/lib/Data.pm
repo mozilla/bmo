@@ -107,7 +107,7 @@ tie(
     "Infrastructure & Operations" => ["RelOps", "RelOps: Puppet", "DCOps",],
   },
   qr/^cf_office$/ => {"mozilla.org" => ["Server Operations: Desktop Issues"],},
-  qr/^cf_crash_signature$/ => {
+  qr/^cf_crash_(?:signature|data_url)$/ => {
     "Add-on SDK"                                    => [],
     "addons.mozilla.org"                            => [],
     "Android Background Services"                   => [],

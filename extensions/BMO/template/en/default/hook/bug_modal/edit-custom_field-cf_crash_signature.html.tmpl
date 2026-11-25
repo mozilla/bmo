@@ -27,14 +27,46 @@
         [% END %]
       </div>
     [% END %]
-    [%# socorro_lens_url() is defined in Bugzilla/Template.pm %]
-    [% SET lens_url = socorro_lens_url(split_cf_crash_signature) %]
-    [% IF lens_url %]
-      <iframe src="[% lens_url FILTER html %]" style="border:0; width:300px; height:200px; max-width:600px; max-height:300px; float:left;" id="chart" scrolling="no"></iframe>
-    [% END %]
   [% ELSIF value %]
     <span class="multiline-value">[% value FILTER html FILTER html_line_break %]</span>
   [% ELSE%]
     <em>None</em>
+  [% END %]
+[% END %]
+
+[%
+  rendered_custom_fields.push('cf_crash_data_url');
+  WRAPPER bug_modal/field.html.tmpl
+    label = "URL"
+    help = "https://wiki.mozilla.org/BMO/UserGuide/BugFields#crash_data_url"
+    field = bug_fields.cf_crash_data_url
+    field_type = constants.FIELD_TYPE_FREETEXT
+    hide_on_view = bug.cf_crash_data_url == ""
+    default_value = "https://crash-stats.mozilla.org/search/?…"
+%]
+  [%# firefox-crash-table.js reads this attribute independently of the link. %]
+  <span data-crash-data-url="[% bug.cf_crash_data_url FILTER html %]">
+    [%# is_safe_url() rejects valid URLs ending in ")". %]
+    [% IF bug.cf_crash_data_url.match('^https://crash-stats\.mozilla\.org/search/\?') %]
+      <a href="[% bug.cf_crash_data_url FILTER html %]" target="_blank" rel="nofollow noreferrer"
+        title="[% bug.cf_crash_data_url FILTER truncate(256) FILTER html %]">
+        [%~ bug.cf_crash_data_url FILTER pretty_url FILTER truncate(40) FILTER html ~%]
+      </a>
+    [% ELSE %]
+      [% bug.cf_crash_data_url FILTER html %]
+    [% END %]
+  </span>
+[% END %]
+
+[% IF split_cf_crash_signature.size %]
+  [%# socorro_lens_url() is defined in Bugzilla/Template.pm %]
+  [% SET lens_url = socorro_lens_url(split_cf_crash_signature, bug.cf_crash_data_url) %]
+  [% IF lens_url %]
+    <div class="field edit-hide" id="field-crash-graph">
+      <div class="name"></div>
+      <div class="value">
+        <iframe src="[% lens_url FILTER html %]" style="border:0; width:300px; height:200px; max-width:600px; max-height:300px; display:block;" id="chart" scrolling="no"></iframe>
+      </div>
+    </div>
   [% END %]
 [% END %]

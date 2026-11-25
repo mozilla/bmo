@@ -1255,7 +1255,7 @@
   [%
     FOREACH field IN custom_fields;
       NEXT IF field.type != constants.FIELD_TYPE_TEXTAREA;
-      NEXT IF field.name == "cf_crash_signature"; # Rendered below
+      NEXT IF field.name == "cf_crash_signature" || field.name == "cf_crash_data_url"; # Rendered below
       Hook.process('custom_field-' _ field.name);
       NEXT IF rendered_custom_fields.exists(field.name);
       INCLUDE bug_modal/field.html.tmpl
