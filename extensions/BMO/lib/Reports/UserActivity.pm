@@ -322,6 +322,8 @@ sub report {
     $vars->{'incomplete_data'} = $incomplete_data;
     $vars->{'operations'}      = \@operations;
 
+    $vars->{user} = Bugzilla::User->new({ name => $input->{who}, cached => 1 });
+
     my @bug_ids = sort { $a <=> $b } keys %bug_ids;
     $vars->{'bug_ids'} = \@bug_ids;
   }
