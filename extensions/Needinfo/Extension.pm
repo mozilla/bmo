@@ -30,7 +30,11 @@ use constant MAX_MENTIONS => 10;
 # block_needinfo values that only accept needinfo requests from members of a
 # group (directly or through a group nested in it), keyed to that group.
 use constant NEEDINFO_ALLOWED_GROUPS =>
-  {editbugs => 'editbugs', hackbot_needinfo => 'hackbot_needinfo_allowed'};
+  {editbugs => 'editbugs', hackbot_needinfo => 'hackbot-users'};
+
+# Name the hackbot group was first created under, renamed in place by
+# _setup_hackbot_users_group so its members and nested groups carry over.
+use constant OLD_HACKBOT_GROUP => 'hackbot_needinfo_allowed';
 
 BEGIN {
   *Bugzilla::User::needinfo_blocked = \&_user_needinfo_blocked;
@@ -83,25 +87,49 @@ sub install_update_db {
 # Users who set block_needinfo to 'hackbot_needinfo' only accept needinfo
 # requests from members of this group. Admins add groups (such as
 # mozilla-employee-confidential) to it rather than individual users.
+# It is a bug group in no products: PhabBugz syncs every active bug group to
+# a Phabricator project, so Hackbot can see the same membership there, while
+# no product offers it for restricting bugs.
 # Called from install_before_final_checks rather than install_update_db:
 # other extensions (e.g. SecureMail) add group columns in their own
 # install_update_db, and Group->create needs those on a fresh database.
-sub _create_hackbot_needinfo_group {
+sub _setup_hackbot_users_group {
   my $name = NEEDINFO_ALLOWED_GROUPS->{hackbot_needinfo};
   return if Bugzilla::Group->new({name => $name});
+
+  if (my $group = Bugzilla::Group->new({name => OLD_HACKBOT_GROUP})) {
+    print 'Renaming ' . OLD_HACKBOT_GROUP . " group to $name ...\n";
+    _migrate_old_hackbot_group($group, $name);
+    return;
+  }
 
   print "Creating $name group ...\n";
   Bugzilla::Group->create({
     name        => $name,
     description => 'Users who may needinfo people that only accept '
       . 'needinfo requests from hackbot-permitted users',
-    isbuggroup => 0,
+    isbuggroup => 1,
   });
+}
+
+# Renames the group in place and makes it a bug group. isbuggroup is not
+# among Bugzilla::Group's UPDATE_COLUMNS, so that flag is set directly.
+sub _migrate_old_hackbot_group {
+  my ($group, $name) = @_;
+  my $dbh    = Bugzilla->dbh;
+  my $groups = $dbh->quote_identifier('groups');
+
+  $dbh->bz_start_transaction();
+  $group->set_name($name);
+  $group->update();
+  $dbh->do("UPDATE $groups SET isbuggroup = 1 WHERE id = ?", undef, $group->id);
+  $dbh->bz_commit_transaction();
+  Bugzilla->memcached->clear_config();
 }
 
 sub install_before_final_checks {
   my ($self, $args) = @_;
-  _create_hackbot_needinfo_group();
+  _setup_hackbot_users_group();
   add_setting({
     name        => 'block_needinfo',
     options     => ['on', 'editbugs', 'hackbot_needinfo', 'off'],

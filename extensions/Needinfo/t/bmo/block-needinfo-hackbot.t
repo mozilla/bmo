@@ -7,7 +7,7 @@
 # defined by the Mozilla Public License, v. 2.0.
 
 # A user whose block_needinfo setting is 'hackbot_needinfo' only accepts
-# needinfo requests from members of the hackbot_needinfo_allowed group,
+# needinfo requests from members of the hackbot-users group,
 # whether they are in it directly or through a group nested in it.
 
 use strict;
@@ -36,10 +36,28 @@ my $dbh    = Bugzilla->dbh;
 Bugzilla->error_mode(ERROR_MODE_DIE);
 Bugzilla->set_user(Bugzilla::User->super_user);
 
-my $hackbot_group = Bugzilla::Group->new({name => 'hackbot_needinfo_allowed'});
-ok($hackbot_group, 'checksetup created hackbot_needinfo_allowed');
+my $hackbot_group = Bugzilla::Group->new({name => 'hackbot-users'});
+ok($hackbot_group, 'checksetup created hackbot-users');
+ok($hackbot_group->is_bug_group, 'hackbot-users is a bug group');
+ok($hackbot_group->is_active, 'hackbot-users is active, so PhabBugz syncs it');
+is(
+  $dbh->selectrow_array(
+    'SELECT COUNT(*) FROM group_control_map WHERE group_id = ?', undef,
+    $hackbot_group->id
+  ),
+  0,
+  'hackbot-users is in no products'
+);
 
-# A group nested in hackbot_needinfo_allowed, standing in for groups such as
+# The migration renames an existing non-bug group in place, keeping its id.
+my $old_group = create_group("$prefix-old", isbuggroup => 0);
+Bugzilla::Extension::Needinfo::_migrate_old_hackbot_group($old_group,
+  "$prefix-new");
+my $migrated = Bugzilla::Group->new({name => "$prefix-new"});
+is($migrated && $migrated->id, $old_group->id, 'migration renames in place');
+ok($migrated && $migrated->is_bug_group, 'migration makes it a bug group');
+
+# A group nested in hackbot-users, standing in for groups such as
 # mozilla-employee-confidential.
 my $nested_group = create_group("$prefix-staff", isbuggroup => 0);
 $dbh->do(
@@ -85,7 +103,7 @@ ok(blocked_for($users{outsider}), 'blocked from a non-member');
 
 Bugzilla->set_user($users{outsider});
 eval { Bugzilla::Extension::Needinfo::_check_requestee($requestee) };
-like($@, qr/hackbot_needinfo_allowed/, 'non-member gets the hackbot error');
+like($@, qr/hackbot-users/, 'non-member gets the hackbot error');
 
 Bugzilla->set_user($users{direct});
 eval { Bugzilla::Extension::Needinfo::_check_requestee($requestee) };

@@ -23,5 +23,5 @@
 [% ELSIF error == "needinfo_blocked_hackbot" %]
   [% title = "Needinfo Request Blocked" %]
   [% requestee.identity FILTER html %] only accepts "needinfo" requests from
-  users in the <em>hackbot_needinfo_allowed</em> group.
+  users in the <em>hackbot-users</em> group.
 [% END %]
