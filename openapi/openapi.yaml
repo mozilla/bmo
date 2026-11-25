@@ -1,0 +1,216 @@
+openapi: 3.1.0
+info:
+  title: WebService API Reference
+  description:
+    $ref: docs/general.md
+  license:
+    name: MPL-2.0
+    url: https://github.com/mozilla-bteam/bmo/blob/master/LICENSE
+  version: 1.0.0
+servers:
+  - url: https://bugzilla.mozilla.org/rest
+    description: Production issue tracker for Firefox and other Mozilla products.
+  - url: https://bugzilla-dev.allizom.org/rest
+    description: Test instance for Bugzilla.
+paths:
+  /bug/{bug_id}/attachment:
+    $ref: paths/bug_{bug_id}_attachment.yaml
+  /bug/attachment/{attachment_id}:
+    $ref: paths/bug_attachment_{attachment_id}.yaml
+  /bug/{id_or_alias}:
+    $ref: paths/bug_{id_or_alias}.yaml
+  /bug/{id_or_alias}/history:
+    $ref: paths/bug_{id_or_alias}_history.yaml
+  /bug:
+    $ref: paths/bug.yaml
+  /bug/{bug_id}/graph:
+    $ref: paths/bug_{bug_id}_graph.yaml
+  /bug/possible_duplicates:
+    $ref: paths/bug_possible_duplicates.yaml
+  /bug/{id_or_alias}/comment:
+    $ref: paths/bug_{id_or_alias}_comment.yaml
+  /bug/comment/{comment_id}:
+    $ref: paths/bug_comment_{comment_id}.yaml
+  /bug/comment/tags/{query}:
+    $ref: paths/bug_comment_tags_{query}.yaml
+  /bug/comment/{comment_id}/tags:
+    $ref: paths/bug_comment_{comment_id}_tags.yaml
+  /bug/comment/render:
+    $ref: paths/bug_comment_render.yaml
+  /rest/bug_user_last_visit/{id}:
+    $ref: paths/bug_user_last_visit_{id}.yaml
+components:
+  securitySchemes:
+    X-BUGZILLA-API-KEY:
+      type: apiKey
+      description: >
+        You can specify 'X-BUGZILLA-API-KEY' header with the API key as a value
+        to any request, and you will be authenticated as that user if the key is
+        correct and has not been revoked.
+
+
+        You can set up an API key by using the [API Keys
+        tab](https://bmo.readthedocs.io/en/latest/using/preferences.html#api-keys)
+        in the Preferences pages.
+      in: header
+      name: X-BUGZILLA-API-KEY
+    Bugzilla_api_key:
+      type: apiKey
+      description: >
+        You can specify an API key via the `Bugzilla_api_key` query parameter,
+        and you will be authenticated as that user if the key is correct and has
+        not been revoked.
+
+
+        > [!WARNING]
+
+        It should be noted that this authentication method is not recommended
+        for use and it is likely to be deprecated in future versions of BMO, due
+        to security concerns.
+      in: query
+      name: Bugzilla_api_key
+    api_key:
+      type: apiKey
+      description: >
+        You can specify an API key via the `api_key` query parameter, and you
+        will be authenticated as that user if the key is correct and has not
+        been revoked.
+
+
+        > [!WARNING]
+
+        It should be noted that this authentication method is not recommended
+        for use and it is likely to be deprecated in future versions of BMO, due
+        to security concerns.
+      in: query
+      name: api_key
+tags:
+  - name: Attachments
+    description: >-
+      The Bugzilla API for creating, changing, and getting the details of
+      attachments.
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/attachment.html
+  - name: Bugs
+    description: >-
+      This part of the Bugzilla REST API allows you to file new bugs in Bugzilla
+      and to get information about existing bugs.
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/bug.html
+  - name: Bug User Last Visited
+    description: Update the last-visited time for the specified bug and current user.
+    externalDocs:
+      url: >-
+        https://bmo.readthedocs.io/en/latest/api/core/v1/bug-user-last-visit.html
+  - name: Bugzilla Information
+    description: >-
+      These methods are used to get general configuration information about this
+      Bugzilla instance.
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/bugzilla.html
+  - name: Classifications
+    description: >-
+      This part of the Bugzilla API allows you to deal with the available
+      classifications. You will be able to get information about them as well as
+      manipulate them.
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/classification.html
+  - name: Comments
+    description: This allows you to get data about comments, given a bug ID or comment ID.
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/comment.html
+  - name: Components
+    description: >-
+      This part of the Bugzilla API looks at individual components and also
+      allows updating their information.
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/component.html
+  - name: Bug Fields
+    description: The Bugzilla API for getting details about bug fields.
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/field.html
+  - name: Flag Activity
+    description: >-
+      This API provides information about activity relating to bug and
+      attachment flags.
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/flag-activity.html
+  - name: General
+    description: >-
+      This is the standard REST API for external programs that want to interact
+      with Bugzilla. It provides a REST interface to various Bugzilla functions.
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/general.html
+  - name: Github
+    description: >
+      This API endpoint is for creating attachments in a bug that are redirect
+      links to a
+
+      specific Github pull request. This allows a bug viewer to click on the
+      Github link
+
+      and be automatically redirected to the pull request.
+
+
+      **Github Setup Instructions**
+
+
+      * From the repository main page, click on the Settings tab.
+
+      * Click on Webhooks from the left side menu.
+
+      * Click on the Add Webhook button near the top right.
+
+      * For the payload url, enter
+      ``https://bugzilla.mozilla.org/rest/github/pull_request``.
+
+      * Choose ``application/json`` for the content type.
+
+      * You will need to enter the signature secret obtained from a BMO admin
+      (DO NOT SHARE).
+
+      * Make sure Enable SSL is turned on.
+
+      * Select "Let me select individual events" and only enable changes for
+      "Pull Requests".
+
+      * Make sure at the bottom that "Active" is checked on.
+
+      * Save the webhook.
+
+
+      > **Note:**
+        Past pull requests will not automatically get a link created in the bug. New pull
+        requests should get the link automatically when the pull request is first created.
+
+      > **Note:** 
+        The API endpoint looks at the pull request title for the bug id so
+        make sure the title is formatted correctly to allow the bug id to be determined.
+        Examples are: ``Bug 1234:``, ``Bug - 1234``, ``bug 1234``, or ``Bug 1234 -``.
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/github.html
+  - name: Groups
+    description: The API for creating, changing, and getting information about groups.
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/group.html
+  - name: Products
+    description: >-
+      This part of the Bugzilla API allows you to list the available products
+      and get information about them.
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/product.html
+  - name: Users
+    description:
+      $ref: docs/users.md
+    externalDocs:
+      url: https://bmo.readthedocs.io/en/latest/api/core/v1/user.html
+  - name: Webhooks
+    description: >-
+      These methods are used to access information about and update your
+      configured webhooks.
+    externalDocs:
+      url: >-
+        https://bmo.readthedocs.io/en/latest/extensions/Webhooks/api/v1/webhooks.html#list
+externalDocs:
+  description: Sphinx WebService API Reference
+  url: https://bugzilla.readthedocs.io/en/latest/api/

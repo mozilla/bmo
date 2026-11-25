@@ -1,0 +1,71 @@
+get:
+  summary: Gets a list of possible duplicate bugs
+  description: >
+    Gets a list of possible duplicate bugs based on a given bug ID or bug
+    summary.
+  operationId: get_duplicate_bugs
+  parameters:
+    - name: id
+      in: query
+      description: The ID of a bug to find duplicates of.
+      schema:
+        type: integer
+    - name: summary
+      in: query
+      description: A summary to search for duplicates of, only used if no bug ID is given.
+      schema:
+        type: string
+    - name: product
+      in: query
+      description: A product group to limit the search in.
+      schema:
+        type: string
+    - name: limit
+      in: query
+      description: >
+        Limit the number of results returned. If the value is unset, zero, or
+        greater than the maximum value set by the administrator (default:
+        10,000), the maximum value will be used instead. This is a preventive
+        measure against DoS-like attacks on Bugzilla.
+      schema:
+        type: integer
+  responses:
+    '200':
+      description: A list of possible duplicate bugs
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              bugs:
+                type: array
+                items:
+                  $ref: ../components/schemas/BugWithHistory.yaml
+            example:
+              bugs:
+                - id: 35
+                  alias: null
+                  history:
+                    - when: '2014-09-23T19:12:17Z'
+                      who: user@bugzilla.org
+                      changes:
+                        - field_name: priority
+                          added: P1
+                          removed: P2
+                        - field_name: severity
+                          added: critical
+                          removed: blocker
+                    - when: '2014-09-28T21:03:47Z'
+                      who: user@bugzilla.org
+                      changes:
+                        - field_name: flagtypes.name
+                          added: blocker?
+                          removed: ''
+    default:
+      description: Various error responses
+      content:
+        application/json:
+          schema:
+            $ref: ../components/schemas/Error.yaml
+  tags:
+    - Bugs

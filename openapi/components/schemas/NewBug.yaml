@@ -1,0 +1,129 @@
+type: object
+properties:
+  product:
+    description: The name of the product the bug is being filed against.
+    type: string
+  component:
+    description: The name of a component in the product above.
+    type: string
+  summary:
+    description: A brief description of the bug being filed.
+    type: string
+  version:
+    description: A version of the product above; the version the bug was found in.
+    type: string
+  description:
+    description: >-
+      (defaulted) The description (initial comment) of the bug. Some Bugzilla
+      installations require this to not be blank.
+    type: string
+  filed_via:
+    description: >-
+      (defaulted) How the bug is being filed. It will be ``api`` by default when
+      filing through the API.
+    type: string
+  op_sys:
+    description: (defaulted) The operating system the bug was discovered on.
+    type: string
+  platform:
+    description: (defaulted) What type of hardware the bug was experienced on.
+    type: string
+  priority:
+    description: >-
+      (defaulted) What order the bug will be fixed in by the developer, compared
+      to the developer's other bugs.
+    type: string
+  severity:
+    description: (defaulted) How severe the bug is.
+    type: string
+  type:
+    description: >-
+      The basic category of the bug. Some Bugzilla installations require this to
+      be specified.
+    type: string
+  alias:
+    description: >-
+      The alias for the bug that can be used instead of a bug number when
+      accessing this bug. Must be unique in all of this Bugzilla.
+    type: string
+  assigned_to:
+    description: >-
+      A user to assign this bug to, if you don't want it to be assigned to the
+      component owner.
+    type: string
+  cc:
+    description: An array of usernames to CC on this bug.
+    type: array
+    items:
+      type: string
+  comment_is_private:
+    description: >-
+      If set to true, the description is private, otherwise it is assumed to be
+      public.
+    type: boolean
+  groups:
+    description: >-
+      An array of group names to put this bug into. You can see valid group
+      names on the Permissions tab of the Preferences screen, or, if you are an
+      administrator, in the Groups control panel. If you don't specify this
+      argument, then the bug will be added into all the groups that are set as
+      being "Default" for this product. (If you want to avoid that, you should
+      specify ``groups`` as an empty array.)
+    type: array
+    items:
+      type: string
+  qa_contact:
+    description: >-
+      If this installation has QA Contacts enabled, you can set the QA Contact
+      here if you don't want to use the component's default QA Contact.
+    type: string
+  status:
+    description: >-
+      The status that this bug should start out as. Note that only certain
+      statuses can be set on bug creation.
+    type: string
+  resolution:
+    description: >-
+      If you are filing a closed bug, then you will have to specify a
+      resolution. You cannot currently specify a resolution of ``DUPLICATE``  
+      for new bugs, though. That must be done with [Get
+      History](#tag/Comments/paths/~1bug~1comment~1{comment_id}/get).
+    type: string
+  target_milestone:
+    description: A valid target milestone for this product.
+    type: string
+  flags:
+    type: array
+    items:
+      $ref: ./NewFlag.yaml
+  keywords:
+    description: One or more valid keywords to add to this bug.
+    type: array
+    items:
+      type: string
+  dependson:
+    description: One or more valid bug ids that this bug depends on.
+    type: array
+    items:
+      type: integer
+  blocked:
+    description: One or more valid bug ids that this bug blocks.
+    type: array
+    items:
+      type: integer
+  regressed_by:
+    description: One or more valid bug ids that introduced this bug.
+    type: array
+    items:
+      type: integer
+additionalProperties:
+  description: >-
+    In addition to the above parameters, if your installation has any custom
+    fields, you can set them just by passing in the name of the field and its
+    value as a string.
+required:
+  - product
+  - component
+  - summary
+  - version
+  - type
