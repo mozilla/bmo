@@ -391,9 +391,13 @@ elsif ($action eq 'del') {
     undef, $otherUserID);
   $vars->{'cc'} = $dbh->selectrow_array('SELECT COUNT(*) FROM cc WHERE who = ?',
     undef, $otherUserID);
-  $vars->{'bugs_activity'}
-    = $dbh->selectrow_array('SELECT COUNT(*) FROM bugs_activity WHERE who = ?',
-    undef, $otherUserID);
+
+  # Flag changes are in flag_activity, not bugs_activity.
+  $vars->{'bugs_activity'} = $dbh->selectrow_array(
+    'SELECT (SELECT COUNT(*) FROM bugs_activity WHERE who = ?)
+          + (SELECT COUNT(*) FROM flag_activity WHERE who = ? OR setter_id = ?)',
+    undef, ($otherUserID) x 3
+  );
   $vars->{'component_cc'}
     = $dbh->selectrow_array('SELECT COUNT(*) FROM component_cc WHERE user_id = ?',
     undef, $otherUserID);
@@ -522,16 +526,7 @@ elsif ($action eq 'delete') {
   push(@{$bugs{$_->bug_id}->{$_->attach_id || 0}}, $_) foreach @$flags;
   foreach my $bug_id (keys %bugs) {
     foreach my $attach_id (keys %{$bugs{$bug_id}}) {
-      my @old_summaries = Bugzilla::Flag->snapshot($bugs{$bug_id}->{$attach_id});
       $_->_set_requestee() foreach @{$bugs{$bug_id}->{$attach_id}};
-      my @new_summaries = Bugzilla::Flag->snapshot($bugs{$bug_id}->{$attach_id});
-      my ($removed, $added)
-        = Bugzilla::Flag->update_activity(\@old_summaries, \@new_summaries);
-      LogActivityEntry($bug_id, 'flagtypes.name', $removed, $added, $userid,
-        $timestamp, undef, $attach_id || undef);
-
-      # Logged in both tables, like every other flag change, until history
-      # and bugmail read flag changes after the cutoff from flag_activity.
       foreach my $flag (@{$bugs{$bug_id}->{$attach_id}}) {
         Bugzilla::FlagActivity->create({
           flag_when     => $timestamp,

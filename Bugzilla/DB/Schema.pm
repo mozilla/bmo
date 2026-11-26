@@ -780,9 +780,9 @@ use constant ABSTRACT_SCHEMA => {
     ],
   },
 
-  # One row, the time checksetup added the flag_activity start rows: flag
-  # changes up to then are to be read from bugs_activity, later ones from
-  # flag_activity.
+  # One row: flag changes up to this time are read from bugs_activity, later
+  # ones from flag_activity.
+  # See Bugzilla::FlagActivity->cutoff.
   flag_activity_migration =>
     {FIELDS => [cutoff => {TYPE => 'DATETIME', NOTNULL => 1},],},
 

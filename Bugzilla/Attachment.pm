@@ -855,8 +855,9 @@ sub update {
   # Record changes in the activity table.
   require Bugzilla::Bug;
   foreach my $field (keys %$changes) {
+    next if $field eq 'flagtypes.name';    # now tracked in flag_activity
     my $change = $changes->{$field};
-    $field = "attachments.$field" unless $field eq "flagtypes.name";
+    $field = "attachments.$field";
     Bugzilla::Bug::LogActivityEntry($self->bug_id, $field, $change->[0],
       $change->[1], $user->id, $timestamp, undef, $self->id);
   }

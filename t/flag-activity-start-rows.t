@@ -18,7 +18,7 @@ BEGIN {
 use Bugzilla::Test::MockLocalconfig (urlbase => 'http://bmo.test');
 use Bugzilla::Test::MockDB;
 use Bugzilla::Test::MockParams (mail_delivery_method => 'None');
-use Bugzilla::Test::Util qw(create_bug create_user);
+use Bugzilla::Test::Util qw(create_bug create_user set_flag_activity_cutoff);
 use Bugzilla::Attachment;
 use Bugzilla::Bug;
 use Bugzilla::Install::DB;
@@ -36,6 +36,9 @@ my $setter = create_user('setter@bmo.test', '*');
 create_user('bob@bmo.test', '*');
 my ($needinfo_id)
   = $dbh->selectrow_array("SELECT id FROM flagtypes WHERE name = 'needinfo'");
+my ($fieldid)
+  = $dbh->selectrow_array(
+  "SELECT id FROM fielddefs WHERE name = 'flagtypes.name'");
 
 my $bug_id = create_bug(
   short_desc  => 'Flag activity start rows test bug',
@@ -54,6 +57,11 @@ my ($flag) = @{Bugzilla::Bug->new($bug_id)->flags};
 
 # As if it had been set before flag_activity logged it.
 $dbh->do('DELETE FROM flag_activity WHERE bug_id = ?', undef, $bug_id);
+$dbh->do(
+  'INSERT INTO bugs_activity (bug_id, who, bug_when, fieldid, removed, added)
+   VALUES (?, ?, ?, ?, ?, ?)', undef, $bug_id, $setter->id,
+  '2099-01-01 10:00:00', $fieldid, '', 'needinfo?(bob@bmo.test)'
+);
 
 # checksetup already ran on this database: forget it, so that it walks the
 # flags again.
@@ -64,6 +72,8 @@ sub add_start_rows {
 
 add_start_rows() for 1 .. 2;
 
+# The flag was set before checksetup ran, the next change comes after.
+set_flag_activity_cutoff('2099-01-01 10:30:00');
 is(
   scalar $dbh->selectrow_array(
     'SELECT COUNT(*) FROM flag_activity WHERE flag_id = ?',
@@ -71,6 +81,36 @@ is(
   ),
   1,
   'one starting row, however many times checksetup runs'
+);
+
+sub flag_history {
+  my ($activity) = Bugzilla::Bug::GetBugActivity($bug_id);
+  my @history;
+  foreach my $operation (@$activity) {
+    push @history,
+      map {"$operation->{when}: $_->{removed} -> $_->{added}"}
+      grep { $_->{fieldname} eq 'flagtypes.name' } @{$operation->{changes}};
+  }
+  return \@history;
+}
+
+is(
+  flag_history(),
+  ['2099-01-01 10:00:00:  -> needinfo?(bob@bmo.test)'],
+  'the starting row is not shown in the history'
+);
+
+$bug = Bugzilla::Bug->new($bug_id);
+$bug->set_flags([{id => $flag->id, status => 'X'}], []);
+$bug->update('2099-01-01 11:00:00');
+
+is(
+  flag_history(),
+  [
+    '2099-01-01 10:00:00:  -> needinfo?(bob@bmo.test)',
+    '2099-01-01 11:00:00: needinfo?(bob@bmo.test) -> '
+  ],
+  'the next change shows the previous value'
 );
 
 # flags.modification_date can be NULL, flag_activity.flag_when can't.

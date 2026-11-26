@@ -203,13 +203,12 @@ is_deeply(
 is_deeply(cc_list($bug_id), [$alice->login, $bob->login], '... and CC them');
 
 my ($creation_ts, $flag_when) = $dbh->selectrow_array(
-  "SELECT bugs.creation_ts, bugs_activity.bug_when
+  "SELECT bugs.creation_ts, flag_activity.flag_when
      FROM bugs
-          INNER JOIN bugs_activity ON bugs_activity.bug_id = bugs.bug_id
-          INNER JOIN fielddefs ON fielddefs.id = bugs_activity.fieldid
-    WHERE bugs.bug_id = ? AND fielddefs.name = 'flagtypes.name'
-          AND bugs_activity.added LIKE 'needinfo?%' " . $dbh->sql_limit(1),
-  undef, $bug_id
+          INNER JOIN flag_activity ON flag_activity.bug_id = bugs.bug_id
+    WHERE bugs.bug_id = ? AND flag_activity.type_id = ?
+          AND flag_activity.status = ? " . $dbh->sql_limit(1), undef, $bug_id,
+  $needinfo->id, '?'
 );
 ok($flag_when, 'the needinfo requests are in the bug activity');
 is($flag_when, $creation_ts, '... at the creation time, like form flags');
