@@ -18,8 +18,10 @@ use Bugzilla::Error;
 use Bugzilla::Logging;
 use Bugzilla::Util qw(datetime_from email_filter truncate_string);
 use Bugzilla::WebService::Constants;
+use Bugzilla::WebService::Wants;
 
 use MIME::Base64 qw(encode_base64);
+use PerlX::Maybe qw(maybe);
 use Storable qw(dclone);
 use Try::Tiny;
 use Types::Standard -all;
@@ -31,6 +33,7 @@ use base qw(Exporter);
 # Bugzilla::API::V1::Util->method instead.
 our @EXPORT_OK = qw(
   coerce_booleans
+  datetime_format_inbound
   extract_flags
   filter
   filter_wants
@@ -41,6 +44,7 @@ our @EXPORT_OK = qw(
   strip_request_params
   translate
   validate
+  wants_object
 );
 
 # Parameters that describe the request rather than the object it acts on:
@@ -297,9 +301,8 @@ sub merge_request_params {
   # application/x-www-form-urlencoded or multipart body. Layer a JSON body
   # underneath that, so params work from either the query string or a JSON
   # request body. Query-string/form-body values win on a key collision,
-  # matching the legacy REST layer (see fix_credentials/_retrieve_json_params
-  # in Bugzilla::WebService::Server::REST) and the documented behavior in
-  # docs/en/md/api/core/v1/general.md.
+  # matching the legacy REST server (its _retrieve_json_params) and the
+  # documented behavior in docs/en/md/api/core/v1/general.md.
   #
   # A param's type must not depend on how many times it was sent: ->to_hash
   # returns a scalar for one occurrence and an arrayref for two. Callers
@@ -365,6 +368,28 @@ sub coerce_booleans {
     $params->{$field} = ($value eq 'true' || $value eq '1') ? 1 : 0;
   }
   return undef;
+}
+
+# Converts a date sent by a client to the database timezone.
+sub datetime_format_inbound {
+  my ($time) = @_;
+  my $converted = datetime_from($time, Bugzilla->local_timezone);
+  ThrowUserError('illegal_date', {date => $time}) if !defined $converted;
+  return $converted->ymd() . ' ' . $converted->hms();
+}
+
+# The include_fields/exclude_fields of the request as a
+# Bugzilla::WebService::Wants object, built once per request.
+sub wants_object {
+  my $cache = Bugzilla->request_cache;
+  return $cache->{filter_wants_object} //= do {
+    my $params = Bugzilla->input_params;
+    Bugzilla::WebService::Wants->new(
+      cache                => $cache->{filter_wants} ||= {},
+      maybe include_fields => $params->{include_fields},
+      maybe exclude_fields => $params->{exclude_fields},
+    );
+  };
 }
 
 
@@ -712,3 +737,14 @@ C<coerce_booleans($params, qw(is_open has_unconfirmed))>. Each one that is set
 to the string C<true>, C<false>, C<1> or C<0> (any case) becomes C<1> or C<0>;
 a JSON boolean is left as is. Returns an error message for the first one that
 is set to anything else, including an array or a hash, or C<undef>.
+
+=head2 datetime_format_inbound
+
+Takes a date or datetime sent by a client and returns it as
+C<YYYY-MM-DD HH:MM:SS> in the database timezone. Throws C<illegal_date> if it
+can't be parsed.
+
+=head2 wants_object
+
+Returns a L<Bugzilla::WebService::Wants> object for the C<include_fields> and
+C<exclude_fields> of the current request, built once per request.

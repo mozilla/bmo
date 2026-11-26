@@ -67,6 +67,21 @@ sub setup_routes {
       }
     }
   }
+
+  # Any other path under /rest (or the old /rest.cgi) is not a resource.
+  # Registered last so every API route above matches first.
+  foreach
+    my $base ($rest_routes, $r->under('/rest.cgi' => \&_prepare_rest_request))
+  {
+    $base->any('/*resource' => {resource => ''})->to(cb => \&_invalid_resource);
+  }
+}
+
+sub _invalid_resource {
+  my ($c) = @_;
+  Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
+  return $c->user_error('rest_invalid_resource',
+    {path => '/' . $c->stash('resource'), method => $c->req->method});
 }
 
 sub _prepare_rest_request {

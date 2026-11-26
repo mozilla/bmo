@@ -20,7 +20,7 @@ use Bugzilla::User;
 use Date::Format;
 use Date::Parse;
 use File::Basename;
-use Digest::SHA qw(hmac_sha256_base64);
+use Digest::SHA qw(hmac_sha256_base64 hmac_sha256_hex);
 use Encode;
 use JSON qw(encode_json decode_json);
 
@@ -31,6 +31,7 @@ use base qw(Exporter);
   check_token_data delete_token
   issue_hash_token check_hash_token hash_token_time
   issue_hash_sig   check_hash_sig
+  issue_login_cookie hash_login_cookie
   set_token_extra_data get_token_extra_data);
 
 # 128 bits password:
@@ -344,6 +345,24 @@ sub GenerateUniqueToken {
     $duplicate = $sth->fetchrow_array;
   }
   return $token;
+}
+
+# The logincookies table only ever holds a keyed hash of each login cookie,
+# so a copy of the table cannot be replayed as a browser session. The UNIQUE
+# index on logincookies.cookie enforces uniqueness. With 128 bits of
+# randomness a collision is not a practical concern.
+sub issue_login_cookie {
+  my $cookie = generate_random_password(TOKEN_LENGTH);
+  return ($cookie, hash_login_cookie($cookie));
+}
+
+sub hash_login_cookie {
+  my ($cookie) = @_;
+  my $data = 'login_cookie:' . ($cookie // '');
+
+  # The cookie comes from the browser, so it may hold any characters.
+  utf8::encode($data) if utf8::is_utf8($data);
+  return hmac_sha256_hex($data, Bugzilla->localconfig->site_wide_secret);
 }
 
 # Cancels a previously issued token and notifies the user.
@@ -676,6 +695,26 @@ Bugzilla::Token - Provides different routines to manage tokens.
               $column (optional): The column to look at for uniqueness (default: token).
 
  Returns:     A token which is unique in $column.
+
+=item C<issue_login_cookie()>
+
+ Description: Generates a new random login cookie for a browser session.
+
+ Params:      None.
+
+ Returns:     A list of the raw cookie, to send to the browser, and its
+              hash, to store in the logincookies table. The raw cookie
+              must never be written to the database.
+
+=item C<hash_login_cookie($cookie)>
+
+ Description: Computes the value stored in logincookies.cookie for a raw
+              login cookie: a hex HMAC-SHA256 keyed with site_wide_secret.
+              Changing site_wide_secret therefore logs out every session.
+
+ Params:      $cookie - The raw login cookie, as sent by the browser.
+
+ Returns:     A 64 character lowercase hex string.
 
 =item C<Cancel($token, $cancelaction, $vars)>
 

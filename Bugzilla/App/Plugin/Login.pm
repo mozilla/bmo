@@ -150,12 +150,13 @@ sub register {
         }
 
         if ($login_cookie && $login_user_id) {
+          my $cookie_hash = hash_login_cookie($login_cookie);
           my $db_cookie
             = Bugzilla->dbh->selectrow_array(
             'SELECT cookie FROM logincookies WHERE cookie = ? AND userid = ?',
-            undef, ($login_cookie, $login_user_id));
+            undef, ($cookie_hash, $login_user_id));
 
-          if (defined $db_cookie && secure_compare($login_cookie, $db_cookie)) {
+          if (defined $db_cookie && secure_compare($cookie_hash, $db_cookie)) {
             $user_id = $login_user_id;
 
             # If we logged in successfully, then update the lastused
@@ -163,7 +164,7 @@ sub register {
             with_writable_database {
               Bugzilla->dbh->do(
                 q{ UPDATE logincookies SET lastused = NOW() WHERE cookie = ? },
-                undef, $login_cookie);
+                undef, $cookie_hash);
             };
           }
         }
@@ -175,8 +176,8 @@ sub register {
         # Deprecated fallback for the legacy ?Bugzilla_api_key=<key> and
         # ?api_key=<key> query parameters, with the same precedence as the
         # legacy WebService dispatcher (header, then Bugzilla_api_key, then
-        # api_key; see Bugzilla::WebService::Util::fix_credentials). This is
-        # a deprecation-pending stopgap, not a first-class supported method.
+        # api_key, as its fix_credentials did). This is a deprecation-pending
+        # stopgap, not a first-class supported method.
         # Only the query string is read, not urlencoded/multipart body params,
         # to keep the reopened deprecated surface minimal.
         my $query_params = $c->req->query_params;
@@ -227,8 +228,8 @@ sub register {
         # Native /rest routes start in USAGE_MODE_REST (see
         # Bugzilla::App::Controller::API::_prepare_rest_request) and only some
         # handlers switch to USAGE_MODE_MOJO_REST before authenticating. The
-        # legacy REST error path needs Bugzilla->_json_server, which only
-        # rest.cgi ever creates, so normalize before raising anything below.
+        # Mojo error plugin only renders JSON in USAGE_MODE_MOJO_REST, so
+        # normalize before raising anything below.
         if ($usage_mode == USAGE_MODE_REST) {
           Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
           $usage_mode = USAGE_MODE_MOJO_REST;

@@ -28,7 +28,6 @@ use Bugzilla::Util qw(trim);
 use Cwd qw(realpath);
 use List::Util qw(any);
 use MojoX::Log::Log4perl;
-use Bugzilla::WebService::Server::REST;
 use Try::Tiny;
 
 has 'static' => sub { Bugzilla::App::Static->new };
@@ -201,7 +200,6 @@ sub startup {
       }
     }
   });
-  Bugzilla::WebService::Server::REST->preload;
 
   $self->setup_routes;
 

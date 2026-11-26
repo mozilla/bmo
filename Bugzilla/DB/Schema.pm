@@ -1275,7 +1275,9 @@ use constant ABSTRACT_SCHEMA => {
 
   logincookies => {
     FIELDS => [
-      cookie => {TYPE => 'varchar(22)', NOTNULL => 1},
+      # HMAC of the browser cookie, never the cookie itself. See
+      # Bugzilla::Token::hash_login_cookie.
+      cookie => {TYPE => 'varchar(64)', NOTNULL => 1},
       userid => {
         TYPE       => 'INT3',
         NOTNULL    => 1,

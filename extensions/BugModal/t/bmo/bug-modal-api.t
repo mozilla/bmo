@@ -97,6 +97,9 @@ $t->get_ok('/rest/bug_modal/product_info' => form => {product => $name})
 $t->get_ok('/rest/bug_modal/product_info?product=No.Such%20Product')
   ->json_is('/error' => 1)
   ->json_like('/message' => qr/No\.Such Product/, 'unknown product');
+$t->get_ok(
+  '/rest/bug_modal/product_info' => form => {product => [$name, $name]})
+  ->json_is('/code' => 50, 'product_info refuses more than one product');
 
 # edit, cc
 $t->get_ok("/rest/bug_modal/edit/$bug_id" => \%auth)
@@ -174,6 +177,9 @@ $t->get_ok(
   ->json_has('/groups', 'fields for the same product');
 $t->get_ok("/rest/bug_modal/new_product/$bug_id" => \%auth)
   ->json_is('/error' => 1, 'product is required');
+$t->get_ok("/rest/bug_modal/new_product/$bug_id" => \%auth => form =>
+    {product => [$name, $name]})
+  ->json_is('/code' => 50, 'new_product refuses more than one product');
 
 # edit, cc and new_product on a bug the caller can't see
 foreach my $path (qw(edit cc new_product)) {

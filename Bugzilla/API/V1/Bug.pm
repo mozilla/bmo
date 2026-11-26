@@ -26,10 +26,8 @@ use Bugzilla::Search;
 use Bugzilla::Search::Quicksearch;
 use Bugzilla::Token qw(issue_hash_token);
 use Bugzilla::Util qw(remote_ip trim);
-use Bugzilla::WebService;
-use Bugzilla::WebService::Server;
-use Bugzilla::API::V1::Util qw(extract_flags filter filter_wants
-  merge_request_params strip_request_params validate);
+use Bugzilla::API::V1::Util qw(datetime_format_inbound extract_flags filter
+  filter_wants merge_request_params strip_request_params validate wants_object);
 
 our %api_field_names = reverse %{Bugzilla::Bug::FIELD_MAP()};
 
@@ -628,14 +626,12 @@ sub _request_params {
 # server did for the fields listed in DATE_FIELDS.
 sub _convert_dates {
   my ($params, @fields) = @_;
-  my $server = 'Bugzilla::WebService::Server';
-
   foreach my $field (@fields) {
     my $value = $params->{$field} // next;
     $params->{$field}
       = ref $value
-      ? [map { $server->datetime_format_inbound($_) } @$value]
-      : $server->datetime_format_inbound($value);
+      ? [map { datetime_format_inbound($_) } @$value]
+      : datetime_format_inbound($value);
   }
 }
 
@@ -878,7 +874,7 @@ sub _bug_to_hash {
       component => $bug->component_obj,
       bug_id    => $bug->id
     },
-    Bugzilla::WebService->wants_object,
+    wants_object(),
   );
   foreach my $field (@custom_fields) {
     my $name = $field->name;

@@ -21,10 +21,8 @@ use Bugzilla::Constants qw(
   bz_locations
   USAGE_MODE_BROWSER
   USAGE_MODE_MOJO
-  USAGE_MODE_MOJO_REST
 );
 use Bugzilla::Logging;
-use Bugzilla::API::V1::Util qw(set_rest_cors_headers);
 
 my %SEEN;
 use constant REQUEST_TOO_LARGE_ERROR => 'request_too_large';
@@ -41,10 +39,6 @@ sub setup_routes {
 
   $r->any('/bug/<id:num>')->to('CGI#show_bug_cgi');
   $r->any('/<id:num>')->to('CGI#show_bug_cgi');
-
-  $r->any('/rest')->to('CGI#rest_cgi');
-  $r->any('/rest.cgi/*PATH_INFO')->to('CGI#rest_cgi' => {PATH_INFO => ''});
-  $r->any('/rest/*PATH_INFO')->to('CGI#rest_cgi' => {PATH_INFO => ''});
 
   $r->get('/__heartbeat__')->to('CGI#heartbeat_cgi');
   $r->get('/robots.txt')->to('CGI#robots_cgi');
@@ -112,12 +106,6 @@ sub load_one {
 sub _render_request_too_large {
   my ($c, $file) = @_;
 
-  if (path($file)->basename eq 'rest.cgi') {
-    set_rest_cors_headers($c->res->headers);
-    Bugzilla->usage_mode(USAGE_MODE_MOJO_REST);
-    return $c->user_error(REQUEST_TOO_LARGE_ERROR);
-  }
-
   Bugzilla->usage_mode(USAGE_MODE_MOJO);
   return $c->user_error(
     REQUEST_TOO_LARGE_ERROR,
@@ -151,14 +139,9 @@ sub _ENV {
     $remote_user = $authenticate =~ /Basic\s+(.*)/ ? b64_decode $1 : '';
     $remote_user = $remote_user =~ /([^:]+)/       ? $1            : '';
   }
-  my $path_info = $c->stash->{'mojo.captures'}{'PATH_INFO'};
   my %captures = %{$c->stash->{'mojo.captures'} // {}};
   foreach my $key (keys %captures) {
-    if ( $key eq 'controller'
-      || $key eq 'action'
-      || $key eq 'PATH_INFO'
-      || $key =~ /^REWRITE_/)
-    {
+    if ($key eq 'controller' || $key eq 'action' || $key =~ /^REWRITE_/) {
       delete $captures{$key};
     }
   }
@@ -173,7 +156,7 @@ sub _ENV {
     HTTPS             => $req->is_secure ? 'on' : 'off',
     %env_headers,
     QUERY_STRING   => $cgi_query->to_string,
-    PATH_INFO      => $path_info ? "/$path_info" : '',
+    PATH_INFO      => '',
     REQUEST_URI    => $tx->req->url->path,
     REMOTE_ADDR    => $tx->original_remote_address,
     REMOTE_HOST    => $tx->original_remote_address,
