@@ -177,7 +177,7 @@ sub SETTINGS {
     {
       name     => 'bugmail_flag_prefix',
       options  => ['on', 'off'],
-      default  => 'on',
+      default  => 'off',
       category => 'Email Notifications'
     },
 

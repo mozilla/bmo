@@ -424,6 +424,7 @@ foreach my $later_first (0, 1) {
     );
   }
 }
+
 # Send: cancelling your own request doesn't mail you.
 {
   my $bug     = new_bug();
