@@ -25,10 +25,28 @@
 [% isnew = bug.lastdiffed ? 0 : 1 %]
 [% show_new = isnew
               && (to_user.settings.bugmail_new_prefix.value == 'on') %]
+[%# Bug 2097284: lead the subject with the recipient's own flag event, so a
+  # request from them or an answer to their request stands out. flag_events
+  # is already filtered per recipient; only 'requested' and 'answered' are
+  # about them (others are generic 'set' events). The first one wins. The
+  # recipient can turn this off with the bugmail_flag_prefix setting. %]
+[% flag_prefix = '' %]
+[% IF to_user.settings.bugmail_flag_prefix.value == 'on' %]
+  [% FOREACH event = flag_events %]
+    [% IF event.action == 'requested' %]
+      [% flag_prefix = "${event.type.name} requested: " %]
+    [% ELSIF event.action == 'answered' %]
+      [% status_word = event.status == '+' ? 'granted'
+                     : event.status == '-' ? 'denied' : 'cleared' %]
+      [% flag_prefix = "${event.type.name} ${status_word}: " %]
+    [% END %]
+    [% LAST IF flag_prefix %]
+  [% END %]
+[% END %]
 
 From: [% Param('mailfrom') %]
 To: [% to_user.email %]
-Subject: [[% terms.Bug %] [%+ bug.id %]] [% 'New: ' IF show_new %][%+ bug.short_desc %]
+Subject: [% flag_prefix %][[% terms.Bug %] [%+ bug.id %]] [% 'New: ' IF show_new %][%+ bug.short_desc %]
 Date: [% date %]
 X-Bugzilla-Reason: [% reasonsheader %]
 X-Bugzilla-Type: [% bugmailtype %]

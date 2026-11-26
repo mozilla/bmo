@@ -232,7 +232,9 @@ sub mailer_before_send {
   my ($self, $args) = @_;
   my $email = $args->{email};
 
-  my ($bug_id)       = ($email->header('Subject') =~ /^[^\d]+(\d+)/);
+  # The bug ID comes from its header: the subject can lead with a flag
+  # event, whose name can hold digits (bug 2097284).
+  my $bug_id         = $email->header('X-Bugzilla-ID');
   my $changer_login  = $email->header('X-Bugzilla-Who');
   my $changed_fields = $email->header('X-Bugzilla-Changed-Fields');
 

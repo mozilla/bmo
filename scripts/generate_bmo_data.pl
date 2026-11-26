@@ -43,6 +43,7 @@ Bugzilla->usage_mode(USAGE_MODE_CMDLINE);
 my %user_prefs = (
   post_bug_submit_action => 'nothing',
   bugmail_new_prefix     => 'on',
+  bugmail_flag_prefix    => 'on',
   comment_box_position   => 'after_comments',
   comment_sort_order     => 'oldest_to_newest',
   csv_colsepchar         => ',',
