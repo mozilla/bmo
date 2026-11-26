@@ -139,7 +139,6 @@ use Memoize;
   USAGE_MODE_BROWSER
   USAGE_MODE_CMDLINE
   USAGE_MODE_EMAIL
-  USAGE_MODE_JSON
   USAGE_MODE_TEST
   USAGE_MODE_REST
   USAGE_MODE_MOJO
@@ -147,7 +146,6 @@ use Memoize;
 
   ERROR_MODE_WEBPAGE
   ERROR_MODE_DIE
-  ERROR_MODE_JSON_RPC
   ERROR_MODE_TEST
   ERROR_MODE_REST
   ERROR_MODE_MOJO
@@ -529,7 +527,6 @@ use constant contenttypes => {
 use constant USAGE_MODE_BROWSER   => 0;
 use constant USAGE_MODE_CMDLINE   => 1;
 use constant USAGE_MODE_EMAIL     => 3;
-use constant USAGE_MODE_JSON      => 4;
 use constant USAGE_MODE_TEST      => 5;
 use constant USAGE_MODE_REST      => 6;
 use constant USAGE_MODE_MOJO      => 7;
@@ -539,7 +536,6 @@ use constant USAGE_MODE_MOJO_REST => 8;
 # usually). Use with Bugzilla->error_mode.
 use constant ERROR_MODE_WEBPAGE        => 0;
 use constant ERROR_MODE_DIE            => 1;
-use constant ERROR_MODE_JSON_RPC       => 3;
 use constant ERROR_MODE_TEST           => 4;
 use constant ERROR_MODE_REST           => 5;
 use constant ERROR_MODE_MOJO           => 6;
@@ -936,8 +932,7 @@ use constant CSP_DOCUMENT_TYPES =>
 # family as executable. One rule covers application/xhtml+xml, image/svg+xml
 # (attachment.cgi serves SVG inline), application/rdf+xml (buglist.cgi
 # ctype=rdf), application/atom+xml (ctype=atom) and any XML attachment
-# displayed inline. REST is unaffected: REST_CONTENT_TYPE_WHITELIST in
-# Bugzilla::WebService::Constants is JSON and JavaScript only.
+# displayed inline. REST is unaffected: the API only returns JSON.
 use constant CSP_DOCUMENT_TYPE_RE => qr{\+xml\z};
 
 

@@ -25,6 +25,7 @@ use Bugzilla::Extension::Push::Connector::Webhook;
   sub can_see_bug     { return 1 }
   sub can_see_product { return 1 }
   sub is_insider      { return 1 }
+  sub login           { return 'bot@example.com' }
 }
 
 {
@@ -146,6 +147,72 @@ sub should_send {
       changes => \@product_change
     ),
     'attachment_change does not select a bug moved out of the configured product'
+  );
+
+  my $needinfo_available = 1;
+  local *Bugzilla::Extension::Webhooks::Webhook::needinfo_available
+    = sub { return $needinfo_available };
+
+  my $ni = sub {
+    my (%change) = @_;
+    return (changes => [{field => 'flag.needinfo', removed => '', %change}]);
+  };
+
+  ok(
+    should_send(
+      'needinfo', 'bug.modify:flag.needinfo', $ni->(added => '? (bot@example.com)')
+    ),
+    'needinfo selects a needinfo request from the owner'
+  );
+  ok(
+    !should_send(
+      'needinfo', 'bug.modify:flag.needinfo',
+      $ni->(added => '? (other@example.com)')
+    ),
+    'needinfo ignores a needinfo request from someone else'
+  );
+  ok(
+    should_send(
+      'needinfo',
+      'bug.modify:flag.needinfo',
+      changes => [
+        {field => 'flag.needinfo', removed => '', added => '? (a@example.com)'},
+        {field => 'flag.needinfo', removed => '', added => '? (bot@example.com)'},
+      ]
+    ),
+    'needinfo selects the owner among several requestees'
+  );
+  ok(
+    !should_send(
+      'needinfo', 'bug.modify:flag.needinfo',
+      $ni->(removed => '? (bot@example.com)', added => '')
+    ),
+    'needinfo ignores a cleared needinfo'
+  );
+  ok(
+    should_send(
+      'needinfo', 'bug.modify:flag.needinfo',
+      $ni->(removed => '? (a@example.com)', added => '? (bot@example.com)')
+    ),
+    'needinfo selects a needinfo redirected to the owner'
+  );
+  ok(
+    !should_send(
+      'needinfo',
+      'bug.modify:is_private',
+      changes => [{field => 'is_private', removed => '0', added => '1'}]
+    ),
+    'needinfo ignores a bug becoming private'
+  );
+  ok(!should_send('needinfo', 'bug.create'), 'needinfo ignores bug creation');
+  ok(!should_send('needinfo', 'comment.create'), 'needinfo ignores comments');
+
+  $needinfo_available = 0;
+  ok(
+    !should_send(
+      'needinfo', 'bug.modify:flag.needinfo', $ni->(added => '? (bot@example.com)')
+    ),
+    'needinfo is skipped when the needinfo flag type does not exist'
   );
 }
 

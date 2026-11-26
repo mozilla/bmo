@@ -59,11 +59,6 @@ sub config_add_panels {
   $modules->{PhabBugz} = "Bugzilla::Extension::PhabBugz::Config";
 }
 
-sub webservice {
-  my ($self, $args) = @_;
-  $args->{dispatch}->{PhabBugz} = "Bugzilla::Extension::PhabBugz::WebService";
-}
-
 sub object_end_of_update {
   my ($self,   $args)    = @_;
   my ($object, $changes) = @$args{qw(object changes)};

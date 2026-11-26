@@ -143,8 +143,8 @@ sub add_attachment {
   my $user = $self->bugzilla->login;
   $user->id || return $self->user_error('login_required');
 
-  my ($params, $error) = $self->_request_params;
-  return $self->user_error($error) if $error;
+  my ($params, $error, $vars) = $self->_request_params;
+  return $self->user_error($error, $vars) if $error;
 
   defined $params->{data}
     || return $self->code_error('param_required', {param => 'data'});
@@ -231,8 +231,8 @@ sub update_attachment {
   my $user = $self->bugzilla->login;
   $user->id || return $self->user_error('login_required');
 
-  my ($params, $error) = $self->_request_params;
-  return $self->user_error($error) if $error;
+  my ($params, $error, $vars) = $self->_request_params;
+  return $self->user_error($error, $vars) if $error;
 
   my $dbh = Bugzilla->dbh;
   my $ids = delete $params->{ids};
@@ -369,9 +369,9 @@ sub update_attachment {
 sub _request_params {
   my ($self) = @_;
 
-  my ($params, $error)
+  my ($params, $error, $vars)
     = merge_request_params($self, [qw(ids include_fields exclude_fields)]);
-  return (undef, $error) if $error;
+  return (undef, $error, $vars) if $error;
 
   # As legacy validate(@_, 'ids'): a single id becomes a list, and anything
   # but a list of plain values (e.g. a hash of conditions) is invalid_params.

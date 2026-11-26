@@ -57,6 +57,39 @@ $t->post_ok($endpoint => $admin => json =>
   'the mentioned user would be needinfod, the commenter is skipped'
   );
 
+# A restricted bug the mentioned user can't see: listed separately, since a
+# mention never CCs anyone onto a bug they can't already see (bug 2085143).
+# private_bug can't be used: the QA user who can see it lacks editbugs, so
+# their mentions are ignored. File one in a group admin is in instead.
+$t->post_ok(
+  $url
+    . 'rest/bug' => $admin => json => {
+    product     => 'Firefox',
+    component   => 'General',
+    summary     => 'Hidden bug for mention tests',
+    type        => 'defect',
+    version     => 'unspecified',
+    severity    => 'normal',
+    description => 'Not visible to the mentioned user',
+    groups      => ['Master'],
+    }
+)->status_is(200)->json_has('/id');
+my $hidden_bug_id = $t->tx->res->json->{id};
+
+$t->post_ok($endpoint => $admin => json =>
+    {text => "\@$nick can you look?", id => $hidden_bug_id})
+  ->status_is(200)
+  ->json_is('/mentions' => [], 'nobody is notified on a bug they cannot see')
+  ->json_is(
+  '/no_access' => [{nick => $nick, name => "Mention Target [:$nick]"}],
+  '... and they are listed as no_access'
+  );
+
+$t->post_ok($endpoint => $admin => json =>
+    {text => "\@$nick can you look?", id => 'public_bug'})
+  ->status_is(200)
+  ->json_is('/no_access' => [], 'no_access is empty when everyone can see');
+
 $t->post_ok($endpoint => $admin => json =>
     {text => "`\@$nick`\n> \@$nick\nfoo\@$nick.test", id => 'public_bug'})
   ->status_is(200)

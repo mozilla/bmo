@@ -16,6 +16,7 @@ use Bugzilla::Constants;
 use Bugzilla::Error;
 use Bugzilla::Flag;
 use Bugzilla::FlagType;
+use Bugzilla::Group;
 use Bugzilla::Logging;
 use Bugzilla::User;
 use Bugzilla::User::Setting;
@@ -26,6 +27,11 @@ our $VERSION = '0.01';
 
 use constant MAX_MENTIONS => 10;
 
+# block_needinfo values that only accept needinfo requests from members of a
+# group (directly or through a group nested in it), keyed to that group.
+use constant NEEDINFO_ALLOWED_GROUPS =>
+  {editbugs => 'editbugs', hackbot_needinfo => 'hackbot_needinfo_allowed'};
+
 BEGIN {
   *Bugzilla::User::needinfo_blocked = \&_user_needinfo_blocked;
 }
@@ -35,12 +41,12 @@ sub _user_needinfo_blocked {
   my $setting = $requestee->settings->{block_needinfo} or return 0;
 
   return 1 if $setting->{value} eq 'on';
-  return 0 unless $setting->{value} eq 'editbugs';
+  my $group = NEEDINFO_ALLOWED_GROUPS->{$setting->{value}} or return 0;
 
   # Never block someone from needinfo'ing themselves.
   return 0 if Bugzilla->user->id == $requestee->id;
 
-  return Bugzilla->user->in_group('editbugs') ? 0 : 1;
+  return Bugzilla->user->in_group($group) ? 0 : 1;
 }
 
 sub install_update_db {
@@ -74,17 +80,37 @@ sub install_update_db {
   });
 }
 
+# Users who set block_needinfo to 'hackbot_needinfo' only accept needinfo
+# requests from members of this group. Admins add groups (such as
+# mozilla-employee-confidential) to it rather than individual users.
+# Called from install_before_final_checks rather than install_update_db:
+# other extensions (e.g. SecureMail) add group columns in their own
+# install_update_db, and Group->create needs those on a fresh database.
+sub _create_hackbot_needinfo_group {
+  my $name = NEEDINFO_ALLOWED_GROUPS->{hackbot_needinfo};
+  return if Bugzilla::Group->new({name => $name});
+
+  print "Creating $name group ...\n";
+  Bugzilla::Group->create({
+    name        => $name,
+    description => 'Users who may needinfo people that only accept '
+      . 'needinfo requests from hackbot-permitted users',
+    isbuggroup => 0,
+  });
+}
+
 sub install_before_final_checks {
   my ($self, $args) = @_;
+  _create_hackbot_needinfo_group();
   add_setting({
     name        => 'block_needinfo',
-    options     => ['on', 'editbugs', 'off'],
+    options     => ['on', 'editbugs', 'hackbot_needinfo', 'off'],
     default     => 'off',
     category    => 'Reviews and Needinfo',
 
-    # The setting predates the 'editbugs' option, so force add_setting to
-    # rebuild it. remove_setting only drops user choices outside the new
-    # option list, so existing 'on'/'off' preferences survive.
+    # The setting predates the 'editbugs' and 'hackbot_needinfo' options, so
+    # force add_setting to rebuild it. remove_setting only drops user choices
+    # outside the new option list, so existing preferences survive.
     force_check => 1,
   });
 }
@@ -309,11 +335,13 @@ sub _users_for_mentions {
   return @{Bugzilla::User->new_from_list(\@ids)};
 }
 
-# Returns the users a set of new comments ({thetext, isprivate} hashes) on
-# $bug would CC and needinfo, applying the safeguards described above
-# _process_mentions. Shared by saving, the comment preview and the live
-# mention warning so they can't disagree with what actually happens. $old_bug
-# is only passed when saving, to account for groups added in the same update.
+# Sorts the users @mentioned in a set of new comments ({thetext, isprivate}
+# hashes) on $bug, applying the safeguards described above _process_mentions.
+# Returns {notify => [users saving would CC and needinfo], no_access => [users
+# skipped only because they can't see the bug]}. Shared by saving, the comment
+# preview and the live mention warning so they can't disagree with what
+# actually happens. $old_bug is only passed when saving, to account for groups
+# added in the same update.
 sub _mentioned_users {
   my ($bug, $comments, $old_bug) = @_;
 
@@ -328,7 +356,7 @@ sub _mentioned_users {
     return all { $mentioned->in_group($_) } @$added_groups;
   };
 
-  return _filter_mentioned_users($bug->product_id, $comments, $can_see);
+  return _sort_mentioned_users($bug->product_id, $comments, $can_see);
 }
 
 # Like _mentioned_users, for a bug that is still being filed in $product with
@@ -349,7 +377,7 @@ sub _mentioned_users_for_new_bug {
       && all { $mentioned->in_group($_) } keys %groups;
   };
 
-  return _filter_mentioned_users($product->id, $comments, $can_see);
+  return _sort_mentioned_users($product->id, $comments, $can_see);
 }
 
 sub _added_groups {
@@ -359,13 +387,20 @@ sub _added_groups {
   return [map { $_->name } grep { !$old_groups{$_->id} } @{$bug->groups_in}];
 }
 
-# The checks shared by _mentioned_users and _mentioned_users_for_new_bug.
-# $can_see is called with each mentioned user and returns whether they can see
-# the bug. With strict_isolation on, users who can't edit the product are
-# skipped, since add_cc would reject them.
-sub _filter_mentioned_users {
+# The checks shared by _mentioned_users and _mentioned_users_for_new_bug,
+# returning the {notify, no_access} hash described there. $can_see is called
+# with each mentioned user and returns whether they can see the bug. With
+# strict_isolation on, users who can't edit the product are skipped, since
+# add_cc would reject them.
+#
+# Visibility is checked last, so no_access only lists users who would
+# otherwise have been notified: the commenter can be told their mention did
+# nothing (bug 2085143) without learning anything about users a private
+# comment couldn't have reached anyway.
+sub _sort_mentioned_users {
   my ($product_id, $comments, $can_see) = @_;
-  return () unless Bugzilla->params->{needinfo_mentions_enabled};
+  my %sorted = (notify => [], no_access => []);
+  return \%sorted unless Bugzilla->params->{needinfo_mentions_enabled};
 
   # Lowercased nick => true if mentioned in at least one public comment.
   my %public;
@@ -379,20 +414,21 @@ sub _filter_mentioned_users {
       $public{$nick} ||= !$comment->{isprivate};
     }
   }
-  return () unless @nicks;
+  return \%sorted unless @nicks;
 
   # Checked after parsing so updates without mentions skip the group lookup.
   my $user = Bugzilla->user;
-  return () unless $user->in_group('editbugs', $product_id);
+  return \%sorted unless $user->in_group('editbugs', $product_id);
   my $strict_isolation = Bugzilla->params->{strict_isolation};
 
-  return grep {
-    my $mentioned = $_;
-         $mentioned->id != $user->id
-      && ($public{lc $mentioned->nick} || $mentioned->is_insider)
-      && (!$strict_isolation || $mentioned->can_edit_product($product_id))
-      && $can_see->($mentioned)
-  } _users_for_mentions(@nicks);
+  foreach my $mentioned (_users_for_mentions(@nicks)) {
+    next if $mentioned->id == $user->id;
+    next unless $public{lc $mentioned->nick} || $mentioned->is_insider;
+    next if $strict_isolation && !$mentioned->can_edit_product($product_id);
+    my $list = $can_see->($mentioned) ? 'notify' : 'no_access';
+    push @{$sorted{$list}}, $mentioned;
+  }
+  return \%sorted;
 }
 
 # GitHub-style mentions: each @nickname in a new comment, or in the description
@@ -424,7 +460,7 @@ sub _process_mentions {
   return if _is_mass_edit();
 
   my @comments  = (($description // ()), @{$bug->{added_comments} || []});
-  my @mentioned = _mentioned_users($bug, \@comments, $old_bug);
+  my @mentioned = @{_mentioned_users($bug, \@comments, $old_bug)->{notify}};
   return unless @mentioned;
 
   my $type = _needinfo_type($bug);
@@ -576,19 +612,23 @@ sub _cc_and_needinfo {
 # is a {thetext, isprivate} hash. $target is either {bug => $bug} for a comment
 # on an existing bug, or {product => $product, component => $component,
 # groups => [group names]} for the initial comment of a bug being filed.
-# Returns an array ref of {nick, name, needinfo} hashes, one per user that
-# would be CC'd; needinfo is true if they would also get a needinfo request.
+# Returns a hash ref with
+#   mentions   {nick, name, needinfo} hashes, one per user that would be CC'd;
+#              needinfo is true if they would also get a needinfo request
+#   no_access  {nick, name} hashes for users who were mentioned but can't see
+#              the bug, so get neither (a mention never grants access)
 sub mention_effects {
   my ($comment, $target) = @_;
 
   # Saving a new bug doesn't process the mentions in its initial comment yet
   # (bug 2087012), so predict nothing rather than promise notifications that
   # won't be sent. Once it does, return new_bug_mention_effects here.
-  my $bug = $target->{bug} or return [];
+  my $bug = $target->{bug} or return {mentions => [], no_access => []};
 
-  my @mentioned = _mentioned_users($bug, [$comment]);
-  return [] unless @mentioned;
-  return _describe_mentions(_needinfo_type($bug), \@mentioned);
+  # The needinfo type is only looked up if someone would be notified.
+  my $mentioned = _mentioned_users($bug, [$comment]);
+  my $type      = @{$mentioned->{notify}} ? _needinfo_type($bug) : undef;
+  return _describe_mentions($type, $mentioned);
 }
 
 # mention_effects for the initial comment of a bug being filed, with $target
@@ -597,9 +637,9 @@ sub mention_effects {
 sub new_bug_mention_effects {
   my ($comment, $target) = @_;
   my $product = $target->{product};
-  my @mentioned
+  my $mentioned
     = _mentioned_users_for_new_bug($product, $target->{groups}, [$comment]);
-  return [] unless @mentioned;
+  return _describe_mentions(undef, $mentioned) unless @{$mentioned->{notify}};
 
   # A new bug has no flags yet, and the needinfo type is checked against the
   # product (and component) the bug is being filed in.
@@ -613,27 +653,32 @@ sub new_bug_mention_effects {
       component_id => $component ? $component->id : undef,
     })
   };
-  return _describe_mentions($type, \@mentioned);
+  return _describe_mentions($type, $mentioned);
 }
 
-# The {nick, name, needinfo} hashes for mention_effects. Saving requests
-# needinfo one user at a time, so each predicted request is counted before
-# the next user is checked (e.g. only the first user mentioned gets a
-# non-multiplicable needinfo). The bug's actual flags are left alone.
+# The mention_effects hash for the {notify, no_access} users from
+# _mentioned_users. Saving requests needinfo one user at a time, so each
+# predicted request is counted before the next user is checked (e.g. only the
+# first user mentioned gets a non-multiplicable needinfo). The bug's actual
+# flags are left alone.
 sub _describe_mentions {
   my ($type, $mentioned) = @_;
   my $state = _needinfo_state($type);
 
-  return [
-    map {
-      my $needinfo = _can_needinfo($type, $_, $state);
-      if ($needinfo) {
-        $state->{count}++;
-        $state->{pending}{$_->id} = 1;
-      }
-      +{nick => $_->nick, name => $_->name, needinfo => $needinfo};
-    } @$mentioned
-  ];
+  my @mentions = map {
+    my $needinfo = _can_needinfo($type, $_, $state);
+    if ($needinfo) {
+      $state->{count}++;
+      $state->{pending}{$_->id} = 1;
+    }
+    +{nick => $_->nick, name => $_->name, needinfo => $needinfo};
+  } @{$mentioned->{notify}};
+
+  return {
+    mentions  => \@mentions,
+    no_access =>
+      [map { +{nick => $_->nick, name => $_->name} } @{$mentioned->{no_access}}],
+  };
 }
 
 # Lets the comment preview list who saving the comment would CC and needinfo,
@@ -651,7 +696,7 @@ sub webservice_bug_render_comment {
   $args->{result}->{mentions} = mention_effects(
     {thetext => $params->{text}, isprivate => $params->{mention_is_private}},
     {bug     => $bug}
-  );
+  )->{mentions};
 }
 
 sub _check_requestee {
@@ -662,11 +707,12 @@ sub _check_requestee {
     : Bugzilla::User->new({name => $requestee, cache => 1});
   return unless $user->needinfo_blocked;
 
-  my $blocked_editbugs
-    = $user->settings->{block_needinfo}->{value} eq 'editbugs';
-  ThrowUserError(
-    $blocked_editbugs ? 'needinfo_blocked_editbugs' : 'needinfo_blocked',
-    {requestee => $user});
+  my %errors = (
+    editbugs         => 'needinfo_blocked_editbugs',
+    hackbot_needinfo => 'needinfo_blocked_hackbot',
+  );
+  my $value = $user->settings->{block_needinfo}->{value};
+  ThrowUserError($errors{$value} // 'needinfo_blocked', {requestee => $user});
 }
 
 sub config_add_panels {

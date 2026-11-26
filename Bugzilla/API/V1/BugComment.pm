@@ -409,9 +409,9 @@ sub search_comment_tags {
 sub _request_params {
   my ($self) = @_;
 
-  my ($params, $error)
+  my ($params, $error, $vars)
     = merge_request_params($self, [qw(add remove comment_tags)]);
-  return (undef, $error) if $error;
+  return (undef, $error, $vars) if $error;
 
   $params->{$_} //= $self->stash($_) for qw(id comment_id);
 

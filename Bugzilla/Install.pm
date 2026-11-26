@@ -173,6 +173,14 @@ sub SETTINGS {
       category => 'Email Notifications'
     },
 
+    # 2026-11-25 dkl@mozilla.com -- Bug 2097284
+    {
+      name     => 'bugmail_flag_prefix',
+      options  => ['on', 'off'],
+      default  => 'off',
+      category => 'Email Notifications'
+    },
+
     # 2013-07-26 joshi_sunil@in.com -- Bug 669535
     {
       name     => 'possible_duplicates',

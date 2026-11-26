@@ -44,8 +44,8 @@ sub get {
   my $user = $self->bugzilla->login;
   $user->id || return $self->user_error('login_required');
 
-  my ($params, $params_error) = $self->_request_params;
-  return $self->user_error($params_error) if $params_error;
+  my ($params, $params_error, $params_vars) = $self->_request_params;
+  return $self->user_error($params_error, $params_vars) if $params_error;
 
   my ($ids, $error, $vars) = $self->_ids_from_request($params);
   return $self->user_error($error, $vars) if $error;
@@ -82,8 +82,8 @@ sub update {
   my $user = $self->bugzilla->login;
   $user->id || return $self->user_error('login_required');
 
-  my ($params, $params_error) = $self->_request_params;
-  return $self->user_error($params_error) if $params_error;
+  my ($params, $params_error, $params_vars) = $self->_request_params;
+  return $self->user_error($params_error, $params_vars) if $params_error;
 
   my ($ids, $error, $vars) = $self->_ids_from_request($params);
   return $self->user_error($error, $vars) if $error;
@@ -120,10 +120,9 @@ sub _ids_from_request {
 
   my $path_id = $self->stash('id');
 
-  # Legacy REST layer (_retrieve_json_params in
-  # Bugzilla::WebService::Server::REST): for GET, the path id wins over any
-  # query-string ids. For POST, request-body/query-string params are merged
-  # in *after* the path-derived params, so they win instead.
+  # As in the legacy REST server (its _retrieve_json_params): for GET, the
+  # path id wins over any query-string ids. For POST, request-body/query-string
+  # params are merged in *after* the path-derived params, so they win instead.
   if (defined $path_id && $self->req->method ne 'POST') {
     return [$path_id];
   }
@@ -141,8 +140,8 @@ sub _ids_from_request {
 sub _request_params {
   my ($self) = @_;
 
-  my ($params, $error) = merge_request_params($self, ['ids']);
-  return (undef, $error) if $error;
+  my ($params, $error, $vars) = merge_request_params($self, ['ids']);
+  return (undef, $error, $vars) if $error;
 
   for my $field (qw(include_fields exclude_fields)) {
     $params->{$field} = [split(/[\s,]+/, $params->{$field})]

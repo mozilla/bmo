@@ -307,12 +307,6 @@ sub bug_start_of_set_all {
   }
 }
 
-sub webservice {
-  my ($self, $args) = @_;
-  my $dispatch = $args->{dispatch};
-  $dispatch->{bug_modal} = 'Bugzilla::Extension::BugModal::WebService';
-}
-
 sub install_before_final_checks {
   my ($self, $args) = @_;
   remove_setting('ui_experiments');

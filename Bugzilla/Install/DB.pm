@@ -738,8 +738,9 @@ sub update_table_definitions {
     {TYPE => 'varchar(22)', NOTNULL => 1, PRIMARYKEY => 1});
 
   # 2015-08-20 dylan@mozilla.com - Bug 1196092
-  $dbh->bz_alter_column('logincookies', 'cookie',
-    {TYPE => 'varchar(22)', NOTNULL => 1});
+  # The cookie column used to be set to varchar(22) here. It now holds an
+  # HMAC of the cookie, and _hash_login_cookies() does that conversion.
+  _hash_login_cookies();
   $dbh->bz_add_index('logincookies', 'logincookies_cookie_idx',
     {TYPE => 'UNIQUE', FIELDS => ['cookie']});
   $dbh->bz_add_column('logincookies', 'id',
@@ -754,7 +755,8 @@ sub update_table_definitions {
   $dbh->bz_add_column('profiles', 'password_change_reason',
     {TYPE => 'varchar(64)'});
 
-  $dbh->bz_add_column('profiles', 'mfa', {TYPE => 'varchar(8)', DEFAULT => "''"});
+  $dbh->bz_add_column('profiles', 'mfa',
+    {TYPE => 'varchar(8)',, DEFAULT => "''"});
 
   $dbh->bz_add_column('profiles', 'mfa_required_date', {TYPE => 'DATETIME'});
 
@@ -854,6 +856,9 @@ sub update_table_definitions {
   # Bug 2085398 - xavier.lhour@gmail.com
   # After _add_flag_activity_who, which fills the rows without it.
   _set_flag_activity_who_not_null();
+
+  # Bug 2085398 - xavier.lhour@gmail.com
+  _set_flag_activity_requestee_fk_set_null();
 
   # Bug 1806896 - xavier.lhour@gmail.com
   _migrate_flag_state_activity();
@@ -4258,6 +4263,34 @@ sub _fix_disable_mail {
   Bugzilla->dbh->do("UPDATE profiles SET disable_mail = 1 WHERE is_enabled = 0");
 }
 
+# logincookies.cookie used to hold the raw browser cookie. Store only its
+# HMAC (see Bugzilla::Token::hash_login_cookie) so that a leaked copy of the
+# table cannot be used to log in. Rows are rewritten in place, so existing
+# browser sessions keep working.
+sub _hash_login_cookies {
+  my $dbh = Bugzilla->dbh;
+  require Bugzilla::Token;
+
+  $dbh->bz_alter_column('logincookies', 'cookie',
+    {TYPE => 'varchar(64)', NOTNULL => 1});
+
+  # A hashed cookie is always 64 hex characters and a raw one is 22, so the
+  # length tells them apart. This keeps the conversion safe to re-run if
+  # checksetup.pl was interrupted part way through. Both forms are ASCII, so
+  # LENGTH (bytes, but portable to SQLite) gives the character count.
+  my $raw_cookies = $dbh->selectcol_arrayref(
+    'SELECT cookie FROM logincookies WHERE LENGTH(cookie) != 64');
+  return unless @$raw_cookies;
+
+  print "Hashing stored login cookies...\n";
+  $dbh->bz_start_transaction();
+  my $sth = $dbh->prepare('UPDATE logincookies SET cookie = ? WHERE cookie = ?');
+  foreach my $cookie (@$raw_cookies) {
+    $sth->execute(Bugzilla::Token::hash_login_cookie($cookie), $cookie);
+  }
+  $dbh->bz_commit_transaction();
+}
+
 sub _add_restrict_ipaddr {
   my $dbh = Bugzilla->dbh;
   return if $dbh->bz_column_info('logincookies', 'restrict_ipaddr');
@@ -4340,11 +4373,14 @@ sub _populate_oauth2_scopes {
   # if there are no scopes, then we're creating a database from scratch
   my ($scope_count) = $dbh->selectrow_array('SELECT COUNT(*) FROM oauth2_scope');
   if (!$scope_count) {
-    $dbh->do("INSERT INTO oauth2_scope (id, name, description) VALUES "
-        . "(1, 'user:read', 'View basic account information such as email address.')"
+    $dbh->do(
+      "INSERT INTO oauth2_scope (id, name, description) VALUES " .
+      "(1, 'user:read', 'View basic account information such as email address.')"
     );
-    $dbh->do("INSERT INTO oauth2_scope (id, name, description) VALUES "
-        . "(2, 'api:modify', 'Read and modify data in Bugzilla using the Web API.')");
+    $dbh->do(
+      "INSERT INTO oauth2_scope (id, name, description) VALUES " .
+      "(2, 'api:modify', 'Read and modify data in Bugzilla using the Web API.')"
+    );
   }
 
   # Bug 1658317 - dkl@mozilla - Update column names if this is an existing DB
@@ -4645,9 +4681,20 @@ sub _set_flag_activity_who_not_null {
   my $dbh = Bugzilla->dbh;
   return if $dbh->bz_column_info('flag_activity', 'who')->{NOTNULL};
 
-  # MySQL can't make a column of a foreign key NOT NULL. Drop the key:
-  # bz_setup_foreign_keys adds it back at the end of checksetup.
+  my $mysql = $dbh->isa('Bugzilla::DB::Mysql');
+
+  # MySQL can't make a column of a foreign key NOT NULL. Drop the key and add
+  # it back right after.
   $dbh->bz_drop_fk('flag_activity', 'who');
+
+  # Without strict mode, which Bugzilla::DB::Mysql turns off, MySQL copies the
+  # whole table to make the column NOT NULL, blocking flag changes on live pods
+  # meanwhile. _add_flag_activity_who just filled every who, so strict mode has
+  # nothing to refuse.
+  my $sql_mode = $mysql && $dbh->selectrow_array('SELECT @@SESSION.sql_mode');
+  $dbh->do('SET SESSION sql_mode = ?',
+    undef, join(',', grep {length} $sql_mode, 'STRICT_TRANS_TABLES'))
+    if $mysql;
   $dbh->bz_alter_column(
     'flag_activity',
     'who',
@@ -4657,6 +4704,30 @@ sub _set_flag_activity_who_not_null {
       REFERENCES => {TABLE => 'profiles', COLUMN => 'userid'}
     }
   );
+  $dbh->do('SET SESSION sql_mode = ?', undef, $sql_mode) if $mysql;
+
+  # Likewise with foreign_key_checks on to add the key. The values don't need
+  # the check: they were written under this key or copied from setter_id, which
+  # has its own.
+  $dbh->do('SET foreign_key_checks = 0') if $mysql;
+  $dbh->bz_add_fk('flag_activity', 'who',
+    $dbh->bz_fk_info('flag_activity', 'who'));
+  $dbh->do('SET foreign_key_checks = 1') if $mysql;
+}
+
+# The start rows name the requestees of older pending requests. Without this,
+# their accounts couldn't be deleted any more.
+sub _set_flag_activity_requestee_fk_set_null {
+  my $dbh = Bugzilla->dbh;
+  my $fk  = $dbh->bz_fk_info('flag_activity', 'requestee_id');
+  return if !$fk || defined $fk->{DELETE};
+  $fk->{DELETE} = 'SET NULL';
+
+  # As for who above: the values were written under this key already.
+  my $mysql = $dbh->isa('Bugzilla::DB::Mysql');
+  $dbh->do('SET foreign_key_checks = 0') if $mysql;
+  $dbh->bz_alter_fk('flag_activity', 'requestee_id', $fk);
+  $dbh->do('SET foreign_key_checks = 1') if $mysql;
 }
 
 sub _remove_duo_recovery_codes {

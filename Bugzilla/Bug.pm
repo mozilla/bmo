@@ -652,6 +652,10 @@ sub possible_duplicates {
   my $product_ids = join(',', map { $_->id } @$products);
   my $product_sql = $product_ids ? "AND product_id IN ($product_ids)" : "";
 
+  # Exclude bugs the user cannot see *before* ranking, so restricted bugs
+  # can't take result slots and leak summary matches.
+  my $security_sql = 'AND ' . $user->visible_bugs_sql('bugs');
+
   # Because we collapse duplicates, we want to get slightly more bugs
   # than were actually asked for.
   my $sql_limit = $limit + 5;
@@ -661,7 +665,7 @@ sub possible_duplicates {
                 ($relevance_sql) AS relevance
            FROM bugs
                 INNER JOIN bugs_fulltext ON bugs.bug_id = bugs_fulltext.bug_id
-          WHERE ($where_sql) $product_sql
+          WHERE ($where_sql) $product_sql $security_sql
        ORDER BY relevance DESC, bug_id DESC " . $dbh->sql_limit($sql_limit),
     {Slice => {}}
   );
@@ -677,11 +681,12 @@ sub possible_duplicates {
     push(@actual_dupe_ids, $push_id);
   }
   @actual_dupe_ids = uniq @actual_dupe_ids;
-  if (scalar @actual_dupe_ids > $limit) {
-    @actual_dupe_ids = @actual_dupe_ids[0 .. ($limit - 1)];
-  }
 
+  # Duplicate targets may still be restricted, so filter before truncating.
   my $visible = $user->visible_bugs(\@actual_dupe_ids);
+  if (scalar @$visible > $limit) {
+    $visible = [@$visible[0 .. ($limit - 1)]];
+  }
   return $class->new_from_list($visible);
 }
 

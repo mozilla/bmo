@@ -1660,13 +1660,6 @@ sub _last_closed_date {
   return $self->{'last_closed_date'};
 }
 
-sub webservice {
-  my ($self, $args) = @_;
-
-  my $dispatch = $args->{dispatch};
-  $dispatch->{BMO} = "Bugzilla::Extension::BMO::WebService";
-}
-
 our $search_content_matches;
 
 BEGIN {
@@ -2026,6 +2019,8 @@ sub _post_employee_incident_bug {
       $vars, \$comment)
       || ThrowTemplateError($template->error());
 
+    # Values below are set by this code, not the user (see MozChangeField).
+    local Bugzilla->request_cache->{mozchangefield_trusted_create} = 1;
     $ssh_key_bug = Bugzilla::Bug->create({
       short_desc   => 'Disable/Regenerate SSH Key',
       product      => $bug->product,
@@ -2202,6 +2197,8 @@ sub _file_child_bug {
     Bugzilla->template->process($full_template, $template_vars, \$comment)
       || ThrowTemplateError(Bugzilla->template->error());
     $bug_data->{'comment'} = $comment;
+    # Values below are set by this code, not the user (see MozChangeField).
+    local Bugzilla->request_cache->{mozchangefield_trusted_create} = 1;
     if ($new_bug = Bugzilla::Bug->create($bug_data)) {
       my $set_all = {dependson => {add => [$new_bug->bug_id]}};
       $parent_bug->set_all($set_all);

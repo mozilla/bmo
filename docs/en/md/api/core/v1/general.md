@@ -7,11 +7,8 @@ Bugzilla. It provides a REST interface to various Bugzilla functions.
 
 **Data Format**
 
-The REST API only supports JSON input, and either JSON or JSONP output. So
-objects sent and received must be in JSON format.
-
-If you need JSONP output, you must set the `Accept: application/javascript`
-HTTP header and add a `callback` parameter to name your callback.
+The REST API only supports JSON input and output. So objects sent and
+received must be in JSON format.
 
 Parameters may also be passed in as part of the query string for non-GET
 requests and will override any matching parameters in the request body.
@@ -105,25 +102,11 @@ Preferences pages.
 Send only one authentication method with each request. BMO does not combine
 credentials or choose the strongest method when more than one is supplied.
 
-Most resources have been migrated off the legacy authentication path onto BMO's
-native REST framework, which accepts a cookie, an `X-Bugzilla-API-Key`
-header, or an OAuth2 bearer token (plus the deprecated `Bugzilla_api_key`
-and `api_key` query parameters described in the warning below, kept only as
-a stopgap for undiscovered callers). Legacy `Bugzilla_login` and
-`Bugzilla_password` credentials are **not** accepted on these resources, even
-though the old WebService dispatcher underneath BMO still supports them for
-resources not yet migrated (currently `Bugzilla`). On those
-not-yet-migrated resources, if a request supplies both
-`Bugzilla_login`/`Bugzilla_password` and an API key, BMO does not combine
-them or choose the strongest method: the legacy credentials take precedence,
-and BMO does not fall back to the API key if password authentication fails.
-
-If the account has the **Require API key authentication for API requests**
-preference enabled, a request to one of those not-yet-migrated resources
-containing both valid username/password credentials and a valid API key fails
-with an `API key authentication is required` error because BMO selected the
-username/password credentials first. Remove the username/password credentials
-and send only the API key; do not disable the preference.
+The REST API accepts a cookie, an `X-Bugzilla-API-Key` header, or an OAuth2
+bearer token (plus the deprecated `Bugzilla_api_key` and `api_key` query
+parameters described in the warning below, kept only as a stopgap for
+undiscovered callers). `Bugzilla_login` and `Bugzilla_password` credentials
+are **not** accepted.
 
 **WARNING**: It should be noted that additional authentication methods exist,
 but they are **not recommended** for use and are likely to be deprecated in

@@ -13,7 +13,7 @@ use warnings;
 
 use Bugzilla::Logging;
 
-our $VERSION = '20261112.1';
+our $VERSION = '20261124.1';
 
 use Bugzilla::Auth;
 use Bugzilla::Auth::Persist::Cookie;
@@ -496,15 +496,6 @@ sub error_mode {
     || (i_am_cgi() ? ERROR_MODE_WEBPAGE : ERROR_MODE_DIE);
 }
 
-# This is used only by Bugzilla::Error to throw errors.
-sub _json_server {
-  my (undef, $newval) = @_;
-  if (defined $newval) {
-    request_cache->{_json_server} = $newval;
-  }
-  return request_cache->{_json_server};
-}
-
 sub usage_mode {
   my ($class, $newval) = @_;
   if (defined $newval) {
@@ -513,9 +504,6 @@ sub usage_mode {
     }
     elsif ($newval == USAGE_MODE_CMDLINE) {
       $class->error_mode(ERROR_MODE_DIE);
-    }
-    elsif ($newval == USAGE_MODE_JSON) {
-      $class->error_mode(ERROR_MODE_JSON_RPC);
     }
     elsif ($newval == USAGE_MODE_EMAIL) {
       $class->error_mode(ERROR_MODE_DIE);

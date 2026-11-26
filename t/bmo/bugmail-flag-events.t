@@ -19,6 +19,7 @@ use strict;
 use warnings;
 use lib qw(. lib local/lib/perl5);
 use Test::More;
+use Email::MIME;
 
 use Bugzilla;
 use Bugzilla::Constants;
@@ -268,6 +269,161 @@ foreach my $later_first (0, 1) {
   ($mail) = grep { $_->{to_user}->id == $requester->id }
     sent_mails($bug, $requestee);
   is($mail->{bugmailtype}, 'changed request', 'an answer is marked as request mail');
+}
+
+# Bug 2097284: the subject leads with the recipient's own flag event.
+{
+  # The Subject header of each recipient's mail, by login.
+  my $subjects = sub {
+    my ($bug, $changer) = @_;
+    my %subject;
+    no warnings 'redefine';
+    local *Bugzilla::BugMail::MessageToMTA = sub {
+      my ($email) = @_;
+      $subject{$email->header('To')} = $email->header('Subject') if ref $email;
+    };
+    Bugzilla::BugMail::Send($bug->id, {changer => $changer});
+    return \%subject;
+  };
+
+  my $bug = new_bug();
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
+    $requestee);
+  my $subject = $subjects->($bug, $requester);
+  is(
+    $subject->{$requestee->email},
+    'flagmail-test requested: [Bug ' . $bug->id . '] Flag mail test',
+    'a request is named in the requestee subject'
+  );
+  like($subject->{$type_cc->email}, qr/^\[Bug \d+\]/,
+    'but not in the flag type cc_list subject');
+
+  foreach my $answer (['+', 'granted'], ['-', 'denied'], ['X', 'cleared']) {
+    my ($status, $word) = @$answer;
+    $bug = new_bug();
+    my $flag_id = $next_flag_id++;
+    add_activity($bug, $flag_id, '1999-12-31 23:00:00', '?', $requester,
+      $requestee);
+    add_activity($bug, $flag_id, '2000-01-01 00:00:10', $status, $requestee);
+    is(
+      $subjects->($bug, $requestee)->{$requester->email},
+      "flagmail-test $word: [Bug " . $bug->id . '] Flag mail test',
+      "an answer ($status) is named in the requester subject"
+    );
+  }
+
+  # The requestees above have the default 'on'; one who turned the
+  # bugmail_flag_prefix setting off gets the plain subject.
+  my $no_prefix = create_user('flagmail-noprefix@mozilla.example', '*');
+  $no_prefix->settings->{bugmail_flag_prefix}->set('off');
+  Bugzilla::User::Setting::clear_settings_cache($no_prefix->id);
+  $bug = new_bug();
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10', '?', $requester,
+    $no_prefix);
+  is(
+    $subjects->($bug, $requester)->{$no_prefix->email},
+    '[Bug ' . $bug->id . '] Flag mail test',
+    'a requestee who turned the setting off gets the plain subject'
+  );
+}
+
+# Bug 2097284: mailer_before_send hooks still find the bug when the subject
+# leads with a flag event, here one whose name holds digits.
+{
+  my $esr_type = flag_type('flagmail-esr140', 'b');
+  my $patcher  = create_user('flagmail-patcher@mozilla.example', '*');
+  my $bug      = new_bug();
+  add_activity($bug, $next_flag_id++, '2000-01-01 00:00:10',
+    '?', $patcher, $requestee, type_id => $esr_type);
+
+  my $mail;
+  {
+    no warnings 'redefine';
+    local *Bugzilla::BugMail::MessageToMTA = sub {
+      $mail = $_[0] if ref $_[0] && $_[0]->header('To') eq $requestee->email;
+    };
+    Bugzilla::BugMail::Send($bug->id, {changer => $patcher});
+  }
+  like(
+    $mail->header('Subject'),
+    qr/^flagmail-esr140 requested: \[Bug \d+\]/,
+    'the subject leads with a flag name holding digits'
+  );
+
+  # TagNewUsers marks the changer's first patch from the bug ID.
+  $dbh->do('UPDATE profiles SET first_patch_bug_id = ? WHERE userid = ?',
+    undef, $bug->id, $patcher->id);
+  Bugzilla->memcached->clear({table => 'profiles', id => $patcher->id});
+  $mail->header_set('X-Bugzilla-Changed-Fields' => 'attachments.created');
+  Bugzilla::Extension::TagNewUsers->mailer_before_send({email => $mail});
+  is($mail->header('X-Bugzilla-FirstPatch'),
+    $bug->id, 'TagNewUsers finds the bug, not the digits in the flag name');
+
+  # Splinter adds review links to a plain text mail with that subject.
+  my $text = Email::MIME->create(
+    header_str => [
+      Subject         => $mail->header('Subject'),
+      'X-Bugzilla-ID' => $mail->header('X-Bugzilla-ID'),
+    ],
+    attributes => {
+      content_type => 'text/plain',
+      charset      => 'UTF-8',
+      encoding     => 'quoted-printable',
+    },
+    body_str => "Review of attachment 5:\015\012\015\012Looks good.\015\012",
+  );
+  Bugzilla::Extension::Splinter::Util::add_review_links_to_email($text);
+  like(
+    $text->body_str,
+    qr/bug=@{[$bug->id]}&attachment=5/,
+    'Splinter adds the review link'
+  );
+}
+
+# Bug 2097284: SecureMail finds the bug from its header, not from a leading
+# flag name holding brackets and digits, so a secure bug's mail is secured
+# and its rewritten subject keeps the '[Bug N]' token.
+{
+  my $reader = create_user('flagmail-securereader@mozilla.example', '*');
+  my $group  = group_with('flagmail-securemail', $reader);
+  $dbh->do('UPDATE `groups` SET secure_mail = 1 WHERE id = ?', undef, $group->id);
+  Bugzilla->memcached->clear({table => 'groups', id => $group->id});
+
+  my $public = new_bug();
+  my $secure = new_bug();
+  $dbh->do('INSERT INTO bug_group_map (bug_id, group_id) VALUES (?, ?)',
+    undef, $secure->id, $group->id);
+  my $id = $secure->id;
+
+  # The flag name holds the public bug's ID, then the secure bug's own.
+  foreach my $flag_id ($public->id, $id) {
+    my $mail = Email::MIME->create(
+      header_str => [
+        To              => $reader->email,
+        Subject         => "flagmail[esr$flag_id] requested: [Bug $id] Flag mail test",
+        'X-Bugzilla-ID' => $id,
+        'X-Bugzilla-Status'    => 'NEW',
+        'X-Bugzilla-Type'      => 'changed',
+        'X-Bugzilla-Product'   => 'Firefox',
+        'X-Bugzilla-Component' => 'General',
+      ],
+      attributes => {
+        content_type => 'text/plain',
+        charset      => 'UTF-8',
+        encoding     => 'quoted-printable',
+      },
+      body_str => "Flag mail test\015\012",
+    );
+    Bugzilla::Extension::SecureMail->mailer_before_send({email => $mail});
+    is($mail->header('X-Bugzilla-Secure-Email'),
+      'Yes', "flag name holding bug $flag_id: the secure bug's mail is secured");
+    is(
+      $mail->header('Subject'),
+      "flagmail[esr$flag_id] requested: [Bug $id]"
+        . " (Secure bug $id in Firefox :: General)",
+      "flag name holding bug $flag_id: the subject keeps the bug token"
+    );
+  }
 }
 
 # Send: cancelling your own request doesn't mail you.

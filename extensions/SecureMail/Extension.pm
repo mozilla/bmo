@@ -289,9 +289,9 @@ sub mailer_before_send {
 
     if ($is_bugmail) {
 
-      # This is also a bit of a hack, but there's no header with the
-      # bug ID in. So we take the first number in the subject.
-      my ($bug_id) = ($email->header('Subject') =~ /\[\D+(\d+)\]/);
+      # The bug ID comes from its header: the subject can lead with a flag
+      # event, whose name can hold brackets and digits (bug 2097284).
+      my $bug_id = $email->header('X-Bugzilla-ID');
       my $bug = new Bugzilla::Bug($bug_id);
       if (!_should_secure_bug($bug)) {
         $make_secure = SECURE_NONE;
@@ -442,7 +442,7 @@ sub _make_secure {
   $email->header_set('X-Bugzilla-Secure-Email', 'Yes');
 
   my $subject = $email->header('Subject');
-  my ($bug_id) = $subject =~ /\[\D+(\d+)\]/;
+  my $bug_id  = $email->header('X-Bugzilla-ID');
 
   my $key_type = 0;
   if ($key && $key =~ /PUBLIC KEY/) {
@@ -583,9 +583,10 @@ sub _make_secure {
     my $component = $email->header('X-Bugzilla-Component');
 
     # Note: the $bug_id is required within the parentheses in order to keep
-    # Gmail's threading algorithm happy.
+    # Gmail's threading algorithm happy. The '[Bug N]' token is matched by
+    # the space before the ID, which a leading flag name can't hold.
     $subject
-      =~ s/($bug_id\])\s+(.*)$/$1$new (Secure bug $bug_id in $product :: $component)/;
+      =~ s/(\[\D*\s$bug_id\])\s+(.*)$/$1$new (Secure bug $bug_id in $product :: $component)/;
     {
       # avoid excessive line wrapping done by Encode.
       local $Encode::Encoding{'MIME-Q'}->{'bpl'} = 998;

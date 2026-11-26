@@ -18,8 +18,10 @@ use Bugzilla::Error;
 use Bugzilla::Logging;
 use Bugzilla::Util qw(datetime_from email_filter truncate_string);
 use Bugzilla::WebService::Constants;
+use Bugzilla::WebService::Wants;
 
 use MIME::Base64 qw(encode_base64);
+use PerlX::Maybe qw(maybe);
 use Storable qw(dclone);
 use Try::Tiny;
 use Types::Standard -all;
@@ -31,15 +33,18 @@ use base qw(Exporter);
 # Bugzilla::API::V1::Util->method instead.
 our @EXPORT_OK = qw(
   coerce_booleans
+  datetime_format_inbound
   extract_flags
   filter
   filter_wants
   merge_request_params
   params_to_objects
+  render_options
   set_rest_cors_headers
   strip_request_params
   translate
   validate
+  wants_object
 );
 
 # Parameters that describe the request rather than the object it acts on:
@@ -68,6 +73,15 @@ sub set_rest_cors_headers {
   $headers->header('Access-Control-Allow-Origin' => '*');
   $headers->header(
     'Access-Control-Allow-Headers' => join(', ', @$allowed_headers));
+}
+
+# Answers a CORS preflight request with the methods in the route's "allow".
+sub render_options {
+  my ($c) = @_;
+  my $allow = $c->stash('allow');
+  $c->res->headers->header('Allow'                        => $allow);
+  $c->res->headers->header('Access-Control-Allow-Methods' => $allow);
+  return $c->rendered(200);
 }
 
 sub extract_flags {
@@ -287,9 +301,8 @@ sub merge_request_params {
   # application/x-www-form-urlencoded or multipart body. Layer a JSON body
   # underneath that, so params work from either the query string or a JSON
   # request body. Query-string/form-body values win on a key collision,
-  # matching the legacy REST layer (see fix_credentials/_retrieve_json_params
-  # in Bugzilla::WebService::Server::REST) and the documented behavior in
-  # docs/en/md/api/core/v1/general.md.
+  # matching the legacy REST server (its _retrieve_json_params) and the
+  # documented behavior in docs/en/md/api/core/v1/general.md.
   #
   # A param's type must not depend on how many times it was sent: ->to_hash
   # returns a scalar for one occurrence and an arrayref for two. Callers
@@ -318,6 +331,17 @@ sub merge_request_params {
     $params = {%$body_params, %$params} if ref $body_params eq 'HASH';
   }
 
+  # A list param sent as a single value in a JSON body is a list of one, and
+  # anything else that isn't a list of plain values, such as a hash or a
+  # nested list, is refused, as the legacy server's validate() did.
+  foreach my $name (sort keys %is_list) {
+    my $value = $params->{$name} // next;
+    $value = $params->{$name} = [$value] if !ref $value;
+    next if ref $value eq 'ARRAY' && !grep {ref} @$value;
+    return (undef, 'invalid_params',
+      {type_error => "$name must be a value or a list of values"});
+  }
+
   return ($params, undef);
 }
 
@@ -331,16 +355,41 @@ sub strip_request_params {
 # A JSON body sends booleans as real booleans, but the query string and a form
 # body send the literal string "true" or "false", which Perl treats as true
 # either way. Turns each of the given params that is set into 1 or 0, and
-# returns the error for the first one that isn't a boolean, if any.
+# returns the error for the first one that isn't a boolean, if any. A JSON
+# boolean is left as is; any other reference, such as [] or {}, is refused.
 sub coerce_booleans {
   my ($params, @fields) = @_;
   foreach my $field (@fields) {
-    next if !defined $params->{$field} || ref $params->{$field};
+    next if !defined $params->{$field};
+    next if ref $params->{$field} eq 'JSON::PP::Boolean';
+    return "$field must be true or false" if ref $params->{$field};
     my $value = lc $params->{$field};
     return "$field must be true or false" if $value !~ /^(?:true|false|1|0)$/;
     $params->{$field} = ($value eq 'true' || $value eq '1') ? 1 : 0;
   }
   return undef;
+}
+
+# Converts a date sent by a client to the database timezone.
+sub datetime_format_inbound {
+  my ($time) = @_;
+  my $converted = datetime_from($time, Bugzilla->local_timezone);
+  ThrowUserError('illegal_date', {date => $time}) if !defined $converted;
+  return $converted->ymd() . ' ' . $converted->hms();
+}
+
+# The include_fields/exclude_fields of the request as a
+# Bugzilla::WebService::Wants object, built once per request.
+sub wants_object {
+  my $cache = Bugzilla->request_cache;
+  return $cache->{filter_wants_object} //= do {
+    my $params = Bugzilla->input_params;
+    Bugzilla::WebService::Wants->new(
+      cache                => $cache->{filter_wants} ||= {},
+      maybe include_fields => $params->{include_fields},
+      maybe exclude_fields => $params->{exclude_fields},
+    );
+  };
 }
 
 
@@ -601,6 +650,12 @@ Bugzilla::API::V1::Util - Helpers shared by the native API modules.
 
 =head1 FUNCTIONS
 
+=head2 render_options
+
+Route callback answering an C<OPTIONS> (CORS preflight) request with the
+methods given in the route's C<allow> stash value, e.g.
+C<< $r->options('/foo')->to(cb => \&render_options, allow => 'GET, PUT') >>.
+
 =head2 filter
 
 This helps implement the C<include_fields> and C<exclude_fields> arguments
@@ -637,9 +692,9 @@ by both "ids" and "names". Returns an arrayref of objects.
 
 =head2 merge_request_params
 
-Takes a Mojolicious controller and returns a two-element list
-C<($params, $error)>, merging its query string/form-body params with a
-decoded JSON request body, if any. Query-string/form-body values win on a
+Takes a Mojolicious controller and returns C<($params, $error, $vars)>,
+merging its query string/form-body params with a decoded JSON request body,
+if any. Query-string/form-body values win on a
 key collision. For use by native Mojo REST controllers that need to accept
 parameters from either the query string or a JSON body on non-GET
 requests.
@@ -650,9 +705,15 @@ as arrayrefs, however many times they appear in the request; every other
 parameter is always returned as a scalar. Declaring them is required because
 a parameter's type must not depend on the number of occurrences sent.
 
-If the request has a non-empty body that fails to decode as JSON, C<$params>
-is C<undef> and C<$error> is set to C<rest_malformed_json>; callers should
-pass it to C<user_error>. Otherwise C<$error> is C<undef>.
+A list parameter sent as a single value in a JSON body is wrapped into a list
+of one. One sent as anything else that is not a list of plain values, such as
+a hash or a nested list, is refused.
+
+On an error, C<$params> is C<undef>, C<$error> is the error and a third
+element holds its variables; callers should pass both to C<user_error>.
+C<$error> is C<rest_malformed_json> if the request has a non-empty body that
+fails to decode as JSON, and C<invalid_params> if a list parameter is refused.
+Otherwise C<$error> is C<undef>.
 
 =head2 strip_request_params
 
@@ -675,4 +736,15 @@ Takes a params hashref and the names of boolean params, e.g.
 C<coerce_booleans($params, qw(is_open has_unconfirmed))>. Each one that is set
 to the string C<true>, C<false>, C<1> or C<0> (any case) becomes C<1> or C<0>;
 a JSON boolean is left as is. Returns an error message for the first one that
-is set to anything else, or C<undef>.
+is set to anything else, including an array or a hash, or C<undef>.
+
+=head2 datetime_format_inbound
+
+Takes a date or datetime sent by a client and returns it as
+C<YYYY-MM-DD HH:MM:SS> in the database timezone. Throws C<illegal_date> if it
+can't be parsed.
+
+=head2 wants_object
+
+Returns a L<Bugzilla::WebService::Wants> object for the C<include_fields> and
+C<exclude_fields> of the current request, built once per request.

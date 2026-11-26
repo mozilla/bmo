@@ -15,6 +15,7 @@ use Bugzilla;
 use Bugzilla::Bug;
 use Bugzilla::CGI;
 use Bugzilla::Constants;
+use Bugzilla::Error;
 use Bugzilla::Search;
 use Bugzilla::Flag;
 use Bugzilla::Status qw(is_open_state);
@@ -260,8 +261,9 @@ sub query_flags {
   my $dbh    = Bugzilla->dbh;
   my $datetime_now = DateTime->now(time_zone => $user->timezone);
 
-  ($type ne 'requestee' || $type ne 'requester')
-    || ThrowCodeError('param_required', {param => 'type'});
+  ($type eq 'requestee' || $type eq 'requester')
+    || ThrowCodeError('param_invalid',
+    {function => 'MyDashboard.run_flag_query', param => 'type'});
 
   my $match_params = {status => '?'};
 

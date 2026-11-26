@@ -132,7 +132,7 @@ $group->update();
 my @usernames = (
   'admin',       'unprivileged',     'QA_Selenium_TEST', 'canconfirm',
   'tweakparams', 'permanent',        'editbugs',         'disabled',
-  'editusers',   'editusers_target', 'creategroups',
+  'editusers',   'editusers_target', 'creategroups',     'hackbot',
 );
 
 print "creating user accounts...\n";
