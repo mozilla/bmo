@@ -68,6 +68,7 @@ my %requires = (
   'HTML::Escape'                        => '1.10',
   'IO::Async'                           => '0.71',
   'IPC::System::Simple'                 => 0,
+  'JSON'                                => 0,
   'JSON::MaybeXS'                       => '1.003008',
   'JSON::Validator'                     => '3.05',
   'JSON::XS'                            => '2.01',

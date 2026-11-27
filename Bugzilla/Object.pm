@@ -48,7 +48,7 @@ use constant IS_CONFIG => 0;
 # When DYNAMIC_COLUMNS is true, _get_db_columns() will use the information schema.
 use constant DYNAMIC_COLUMNS => 0;
 
-# This allows the JSON-RPC interface to return Bugzilla::Object instances
+# This allows the API to return Bugzilla::Object instances
 # as though they were hashes. In the future, this may be modified to return
 # less information.
 sub TO_JSON { return {%{$_[0]}}; }

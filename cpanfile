@@ -62,6 +62,7 @@ requires 'IO::Async', '0.71';
 requires 'IO::Compress::Gzip';
 requires 'IO::Scalar';
 requires 'IPC::System::Simple';
+requires 'JSON';
 requires 'JSON::MaybeXS', '1.003008';
 requires 'JSON::Validator', '3.05';
 requires 'JSON::XS', '2.0';

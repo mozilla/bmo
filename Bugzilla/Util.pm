@@ -1259,7 +1259,7 @@ in a command-line script.
 =item C<i_am_webservice()>
 
 Tells you whether or not the current usage mode is WebServices related
-such as JSON-RPC or REST.
+such as the REST API.
 
 =item C<is_webserver_group()>
 
