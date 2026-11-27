@@ -3835,38 +3835,6 @@ DISTRIBUTIONS
       JSON::PP 2.27300
       Scalar::Util 0
       perl 5.006
-  JSON-RPC-1.01
-    pathname: D/DM/DMAKI/JSON-RPC-1.01.tar.gz
-    provides:
-      JSON::RPC 1.01
-      JSON::RPC::Constants undef
-      JSON::RPC::Dispatch undef
-      JSON::RPC::Legacy undef
-      JSON::RPC::Legacy::Client 0.93
-      JSON::RPC::Legacy::Procedure 0.90
-      JSON::RPC::Legacy::ReturnObject 0.93
-      JSON::RPC::Legacy::Server 0.92
-      JSON::RPC::Legacy::Server::Apache2 0.05
-      JSON::RPC::Legacy::Server::CGI 0.92
-      JSON::RPC::Legacy::Server::Daemon 0.03
-      JSON::RPC::Legacy::Server::system 0.92
-      JSON::RPC::Legacy::ServiceObject 0.93
-      JSON::RPC::Parser undef
-      JSON::RPC::Procedure undef
-    requirements:
-      CGI 0
-      Class::Accessor::Lite 0
-      ExtUtils::MakeMaker 6.42
-      HTTP::Request 0
-      HTTP::Response 0
-      JSON 0
-      LWP::UserAgent 0
-      Plack 0
-      Plack::Request 0
-      Plack::Test 0
-      Router::Simple 0
-      Test::More 0
-      parent 0
   JSON-Validator-5.19
     pathname: J/JH/JHTHORSEN/JSON-Validator-5.19.tar.gz
     provides:
@@ -6632,20 +6600,6 @@ DISTRIBUTIONS
     requirements:
       Exporter 0
       perl 5.006
-  Router-Simple-0.17
-    pathname: T/TO/TOKUHIROM/Router-Simple-0.17.tar.gz
-    provides:
-      Router::Simple 0.17
-      Router::Simple::Declare undef
-      Router::Simple::Route undef
-      Router::Simple::SubMapper undef
-    requirements:
-      Class::Accessor::Lite 0.05
-      List::Util 0
-      Module::Build 0.38
-      Scalar::Util 0
-      parent 0
-      perl 5.008_001
   SOAP-Lite-1.27
     pathname: P/PH/PHRED/SOAP-Lite-1.27.tar.gz
     provides:
@@ -7477,19 +7431,6 @@ DISTRIBUTIONS
       Test::SharedFork 0.29
       Time::HiRes 0
       perl 5.008001
-  Test-Taint-1.08
-    pathname: P/PE/PETDANCE/Test-Taint-1.08.tar.gz
-    provides:
-      Test::Taint 1.08
-    requirements:
-      ExtUtils::MakeMaker 0
-      Scalar::Util 0
-      Test::Builder 0
-      Test::More 0
-      Tie::Array 0
-      Tie::Hash 0
-      Tie::Scalar 0
-      overload 0
   Test-WWW-Selenium-1.36
     pathname: M/MA/MATTP/Test-WWW-Selenium-1.36.tar.gz
     provides:

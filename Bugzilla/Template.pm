@@ -872,7 +872,7 @@ sub create {
         # And if we're not in the WebService, wrap the message.
         # (Wrapping the message in the WebService is unnecessary
         # and causes awkward things like \n's appearing in error
-        # messages in JSON-RPC.)
+        # API error messages.)
         unless (i_am_webservice()) {
           $var = wrap_comment($var, 72);
         }
