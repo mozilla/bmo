@@ -531,7 +531,7 @@ TUI_hide_default('expert_fields');
     </td>
   </tr>
 
-  [% IF feature_enabled('jsonrpc') AND !cloned_bug_id
+  [% IF !cloned_bug_id
         AND user.settings.possible_duplicates.value == 'on' %]
     <tr id="possible_duplicates_container" class="bz_default_hidden">
       <th>Possible<br>Duplicates:</th>

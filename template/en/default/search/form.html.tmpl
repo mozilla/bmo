@@ -355,7 +355,7 @@ TUI_hide_default('custom_search_query');
       </select>
       <input
         name="email[% n %]"
-        class="email [% "bz_autocomplete_user" IF feature_enabled('jsonrpc') && Param('ajax_user_autocompletion') %]"
+        class="email [% "bz_autocomplete_user" IF Param('ajax_user_autocompletion') %]"
         id="email[% n %]"
         value="[% default.email.$n FILTER html %]">
     </div>

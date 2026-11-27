@@ -82,7 +82,7 @@
 </select>
 [% ELSE %]
   [%
-    IF id && feature_enabled('jsonrpc') && Param('ajax_user_autocompletion');
+    IF id && Param('ajax_user_autocompletion');
       IF !classes.defined;
         classes = [];
       END;

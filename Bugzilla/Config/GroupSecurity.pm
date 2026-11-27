@@ -67,7 +67,7 @@ sub get_param_list {
       type    => 's',
       choices => \&get_all_group_names,
       default => 'editbugs',
-      checker => \&check_comment_taggers_group
+      checker => \&check_group
     },
 
     {

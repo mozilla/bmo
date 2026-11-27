@@ -230,13 +230,6 @@ my %optional_features = (
     description => 'MySQL database support',
     prereqs     => {runtime => {requires => {'DBD::mysql' => '== 4.051', 'DateTime::Format::MySQL' => '0.06'}}}
   },
-  jsonrpc => {
-    description => 'JSON-RPC Interface',
-    prereqs     => {
-      runtime =>
-        {requires => {'JSON::RPC' => '== 1.01', 'Test::Taint' => '1.06'}}
-    }
-  },
   graphical_reports => {
     description => 'Graphical Reports',
     prereqs     => {
@@ -271,13 +264,6 @@ my %optional_features = (
   patch_viewer => {
     description => 'Patch Viewer',
     prereqs     => {runtime => {requires => {PatchReader => '0.9.6'}}}
-  },
-  rest => {
-    description => 'REST Interface',
-    prereqs     => {
-      runtime =>
-        {requires => {'Test::Taint' => '1.06', 'JSON::RPC' => '==1.01',}}
-    }
   },
   linux_pid => {
     description => 'Linux::PID',

@@ -31,7 +31,6 @@ use base qw(Exporter);
   check_mail_delivery_method check_notification check_utf8
   check_bug_status check_smtp_auth check_theschwartz_available
   check_maxattachmentsize check_email
-  check_comment_taggers_group
   get_all_group_names
 );
 
@@ -325,14 +324,6 @@ sub check_theschwartz_available {
   return "";
 }
 
-sub check_comment_taggers_group {
-  my $group_name = shift;
-  if ($group_name && !Bugzilla->feature('jsonrpc')) {
-    return "Comment tagging requires installation of the JSON-RPC feature";
-  }
-  return check_group($group_name);
-}
-
 sub get_all_group_names {
   my $group_names = [''];
   try {
@@ -442,10 +433,5 @@ Checks that the value is a valid number
 =item C<check_regexp>
 
 Checks that the value is a valid regexp
-
-=item C<check_comment_taggers_group>
-
-Checks that the required modules for comment tagging are installed, and that a
-valid group is provided.
 
 =back
